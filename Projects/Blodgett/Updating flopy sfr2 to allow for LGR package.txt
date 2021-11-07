@@ -1,0 +1,38 @@
+# Updating sfr2 to allow for LGR package 
+## need to add 'LGRGRID' and 'LGRSEG'
+def _write_segment_data(self, i,j,f_sfr):
+	cols = [
+        "nseg",
+        "icalc",
+        "outseg",
+        "iupseg",
+        "iprior",
+        "nstrpts",
+        "flow",
+        "runoff",
+        "etsw",
+        "pptsw",
+        "roughch",
+        "roughbk",
+        "cdpth",
+        "fdpth",
+        "awdth",
+        "bwdth",
+    ]
+
+# add LGRGRID, LGRSEG to ( ... ) = [v in seg_dat]
+# add if statement
+if lgr = True 
+
+# output is done in write_file()
+# references back to _write_segement_data()
+
+# add if model.version == 'mflgr':
+before writing extra variables
+
+# need to update package loading
+updated _parse_6a to include lgrgrid and lgrseg as an option when model.version == 'mflgr'
+Added lgrgrid, lgrseg to return list before xyz,
+
+# Changed mf.py
+Added mflgr as a version_type line 130
