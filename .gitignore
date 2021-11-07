@@ -1,0 +1,3 @@
+# .gitignore removes files from GitHub syncing
+# blank line = no files, can be used to keep the file looking clean
+# the slash / is used as the directory separator
