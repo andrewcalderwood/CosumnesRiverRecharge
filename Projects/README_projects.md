@@ -1,0 +1,4 @@
+# Projects Directory README
+The goal of the Projects directory is to hold subfolders dedicated to different research projects related to measuring and managing recharge in the Cosumnes River corridor. The subfolders under projects will primary contain scripts and analysis while the data for these projects is maintained in the dedicated Box folder. The scripts in these subfolders may build on or utilize the scripts, modules and packages contained in the other directories such as *01_python_scripts* and *modflow_development* or *ucode2014_development*.
+
+Example: **Blodgett** is a folder for all scripts relevant to the Blodgett Dam Recharge Estimates Project such as the jupyter notebook to create the localized groundwater model with LGR and scripts to create a series of steady state models testing different scenarios and finally scripts for results analysis.

@@ -1,0 +1,89 @@
+Notes on SFR package editing for final project HYD269/274
+
+Definitions:
+flobot is the lekage
+flowc is channel flow
+flowot is flow out
+flowin is flow in
+hstr is head in the stream
+cstr is conductance for each reach
+cstrsmooth
+hstrave
+strleak is stream leakage
+
+######################################
+actually setting cstr
+line 2273 cstr = STRM(16,1)
+line 3313 STRM(16,1) = cstr
+line 3817 cstr = STRM(16,1)
+C28-----COMPUTE FLOW AT MIDPOINT OF REACH IGNORING STREAMBED LEAKAGE
+line 2371 for icalc.eq.1 cstr = = (avhc*width*strlen)/sbdthk
+C29 CALCULATE AN INITIAL ESTIMATE OF FLOW IN CHANNEL.
+line 2408 cstr = (avhc*wetperm*strlen)/sbdthk
+C46-----CALCULATE DERIVATIVES FOR DEPTH DEPENDENT VARIABLES FOR ICALC
+line 2757 cstr1 = ((wetperm1+dlwp1*dlh)*strleak)/sbdthk
+line 2758 cstr2 = ((wetperm2+dlwp2*dlh)*strleak)/sbdthk
+C49 -----USE BISECTION WHEN LEAKAGE IS LIMITED BY FLOW IN CHANNEL.
+Line 2808  cstr1 = wetpermp*strleak/sbdthk
+C64-----DEFINE HSTR, CSTR, WIDTH, AND FLOWOT.
+Line 3121 cstr = (avhc*wetperm*strlen)/sbdthk
+C66-----COMPUTE STREAM LEAKAGE IF STREAM DEPTH WAS NOT COMPUTED
+C         USING EITHER BISECTION OR NEWTON METHOD. revised dep
+cstr = strleak*width/sbdthk
+
+#####################################
+Edits to code
+C29 IF ( icalc.EQ.5) THEN
+                CALL GWF2SFR7SAFE(Istsg, wetpermp, strlen, avthk,
+     +                                avhc, IRCH, JRCH, cstr1)
+Line 1452 changed the stop if icalc >4 to > 5
+
+Line 2978
+IF ( icalc.EQ.5 ) THEN
+                          CALL GWF2SFR7SAFE(Istsg, wetpermp, strlen, 
+     +                                    avthk, avhc, IRCH, JRCH,
+     +                                    cstr) 
+                        flobotp = (cstr*(strtop+depthp-h))
+                        END IF
+################################
+line 1430-1447 Definition of STRM(16, irch)
+Depends on icalc = 0,1,2
+Unsaturated flow is simulated for ISFROPT ≥ 2; unsaturated flow is not simulated for ISFROPT = 0 or 1.
+ICALC - is a flag, which when positive, specifies that stream stages in reaches are to be calculated.
+
+Line 2487 - Estimate leakage through streambed when icalc greater than or equal to 2
+
+Only two references to conductance
+
+Graham Ntes 5/19/2020
+Should be able to compare to regular GHB
+The actual code in SFR should only be a few loops
+Because of the vertical anisotropy the SAFE method might perform better than the traditional GHB
+If I add the clogging layer in the SAFE method then I can implement it in MODFLOW as well
+
+Line 653 Calculate Residual water content from saturated water content and specific yield when unsaturated flow is active
+
+Line 1012 Initialize variables for stream depth, leakage, and prevous head beneath stream - need to change for SAFE
+
+Line 1033 SUBROUTINE SGWF2SFR7UHC(Iunitlpf, Iunithuf) SETS UNSATURATED VERTICAL HYDRAULIC CONDUCTIVITY TO VERTICAL
+C     HYDRAULIC CONDUCTIVITY IN THE LAYER-PROPERTY FLOW PACKAGE.
+
+Line 1373 Compute variables needed for stream leakage
+
+Line 2347 Begin computation of stream depth for active cell
+
+Line 2487 Estimate Leakage through streambed when ICALC greater than or equal to 2
+
+Line 2776 Determine if leakage limited by flow in channel
+
+Line 2842 Calculate leakage from Newton method when not limited by flow
+
+Line 3116 End of Newton Loop
+
+Line 3190 Compute stream leakage if stream depth was not computed using either bisection or newton method
+
+Line 3463 SUBROUTINE GWF2SFR7BD
+CALCULATE VOLUMETRIC GROUND-WATER BUDGET FOR STREAMS AND SUM
+C     STREAMFLOWS IN MODELED AREA
+
+
