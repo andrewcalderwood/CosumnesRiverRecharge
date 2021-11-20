@@ -1,0 +1,11 @@
+BEGIN Derived_Parameters Table
+# not currently needed for Cosumnes
+NROW=6 NCOL=2 COLUMNLABELS
+  DerParName DerParEqn
+  GHB_K      Kx_4
+  Kx_2       Kx_4
+  Sy_7       Sy_4
+  Sy_2       Sy_4
+  Ss_2       Ss_4
+  Ss_7       Ss_4
+END Derived_Parameters Table

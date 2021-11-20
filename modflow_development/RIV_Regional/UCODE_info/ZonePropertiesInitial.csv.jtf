@@ -1,0 +1,8 @@
+jtf @
+Lithology,Zone,K_m_s,Ss,Sy
+Gravel,1,@Kx_1            @,@Ss_1            @,@Sy_1            @
+Sand,2,@Kx_2            @,@Ss_2            @,@Sy_2            @
+Sandy Mud,3,@Kx_3            @,@Ss_3            @,@Sy_3            @
+Mud,4,@Kx_4            @,@Ss_4            @,@Sy_4            @
+Laguna,5,@Kx_L            @,@Ss_L            @,@Sy_L            @
+Mehrten,6,@Kx_M            @,@Ss_M            @,@Sy_M            @

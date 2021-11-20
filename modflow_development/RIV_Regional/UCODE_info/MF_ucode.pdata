@@ -1,0 +1,28 @@
+BEGIN Parameter_Data Table
+NROW=24 NCOL=8 COLUMNLABELS
+ParamName GroupName StartValue LowerValue UpperValue Constrain LowerConstraint UpperConstraint
+Kx_1          Kx_1    4E-3    10.0E-5         1       Yes        1E-5            1
+Kx_2          Kx_2    1.5E-3  10.0E-5         1       Yes        1E-5            1
+Kx_3          Kx_3    2.5E-4  10.0E-6         1       Yes        1E-7            1
+Kx_4          Kx_4    6.5E-6  10.0E-8         1       Yes        1E-7            1
+Kx_L          Kx_L    1E-4    10.0E-8         1       Yes        1E-7            1
+Kx_M          Kx_M    1E-5    10.0E-8         1       Yes        1E-7            1
+Ss_1          Ss_1    2E-5    10.0E-5         1       Yes        1E-9            5E-3
+Ss_2          Ss_2    8E-5    10.0E-5         1       Yes        1E-9            5E-3
+Ss_3          Ss_3    2E-4    10.0E-10        1       Yes        1E-9            5E-3
+Ss_4          Ss_4    5E-4    10.0E-10        1       Yes        1E-9            5E-3
+Ss_L          Ss_L    1E-5    10.0E-10        1       Yes        1E-9            5E-3
+Ss_M          Ss_M    1E-4    10.0E-10        1       Yes        1E-9            5E-3
+Sy_1          Sy_1    0.25    10.0E-5         1       Yes        0.001           0.3
+Sy_2          Sy_2    0.2     10.0E-5         1       Yes        0.001           0.3
+Sy_3          Sy_3    0.15    10.0E-10        1       Yes        0.001           0.3
+Sy_4          Sy_4    0.1     10.0E-10        1       Yes        0.001           0.3
+Sy_L          Sy_L    0.15    10.0E-10        1       Yes        0.001           0.3
+Sy_M          Sy_M    0.1     10.0E-10        1       Yes        0.001           0.3
+WEL_s         WEL     1       0               2       No         0               2  
+GHB_1         GHB_1   1E-5    10.0E-8         1       Yes        1E-6            1
+GHB_2         GHB_2   1E-4    10.0E-8         1       Yes        1E-6            1
+GHB_3         GHB_3   1E-4    10.0E-8         1       Yes        1E-6            1
+UZF           UZF     1       0               2       Yes        0               2
+RIV_S         RIV_S   1       0               2       Yes        0               2
+END Parameter_Data Table

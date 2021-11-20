@@ -1,0 +1,28 @@
+BEGIN Parameter_Groups Table
+NROW=24 NCOL=6 COLUMNLABELS
+GroupName Adjustable Transform MaxChange SenMethod  PerturbAmt 
+Kx_1          no       Log        0.8         1       0.01
+Kx_2          no       Log        0.8         1       0.01
+Kx_3          no       Log        0.8         1       0.01
+Kx_4          no       Log        0.4         1       0.01
+Kx_L          yes      Log        0.4         1       0.01
+Kx_M          yes      Log        0.4         1       0.01
+Sy_1          no       No         2.0         1       0.01
+Sy_2          no       No         2.0         1       0.01
+Sy_3          no       No         0.8         1       0.01
+Sy_4          no       No         0.8         1       0.01
+Sy_L          no       No         0.8         1       0.01
+Sy_M          no       No         0.8         1       0.01
+Ss_1          no       No         0.8         1       0.01
+Ss_2          no       No         0.8         1       0.01
+Ss_3          no       No         0.8         1       0.01
+Ss_4          no       No         0.8         1       0.01
+Ss_L          no       No         0.8         1       0.01
+Ss_M          no       No         0.8         1       0.01
+GHB_1         yes      Log        0.8         1       0.01
+GHB_2         yes      Log        0.8         1       0.01
+GHB_3         yes      Log        0.8         1       0.01
+WEL           no       No         1.0         1       0.01
+UZF           yes      No         1.0         1       0.01
+RIV_S         yes      No         1.0         1       0.01
+END Parameter_Groups

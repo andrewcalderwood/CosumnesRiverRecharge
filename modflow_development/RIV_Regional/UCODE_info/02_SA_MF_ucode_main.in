@@ -1,0 +1,92 @@
+# This file can be annoted by using a # in the first column. 
+# Comments can also appear in the input blocks (helpful for quickly
+# turning on/off options), except a comment cannot appear within an
+# input table (except immediately after the BEGIN statement).
+# No blank lines are allowed within the input block.
+
+BEGIN Options Keywords
+  Verbose = 3
+END Options
+ 
+BEGIN UCODE_Control_Data Keywords
+  ModelName = ButteValley_TR
+  ModelLengthUnits = m
+  ModelTimeUnits = d
+  Sensitivities = True
+# Ucode does NOT check for dimensional consistency in the units.  
+# The input above is simply to help you keep track.
+END UCODE_Control_Data
+
+BEGIN Model_Command_Lines Keywords
+# Only a single 'command' can be given.  If you need to run multiple
+# codes (e.g., a pre-processor + flow model + post processor), then
+# group them together into a batch file or script which can be executed
+# as a single command.  If there are spaces, put the command in " "
+  Command = run_mf_py.bat
+    Purpose = Forward
+    CommandID = ForwardModel
+END Model_Command_Lines
+ 
+BEGIN Parameter_Groups Files
+  MF_ucode.pgroup
+END Parameter_Groups
+ 
+BEGIN Parameter_Data Files
+  MF_ucode.pdata
+END Parameter_Data
+
+#BEGIN Derived_Parameters Files
+#  MF_ucode.derpdata
+#END Derived_Parameters
+
+BEGIN Observation_Groups Table
+#Note - the table below is not as 'nicely' formatted as the tables above.
+# Tables can be read in 'free format'. Entries do not have to align with
+# a column. Need at least 1 space between entries, max 2000 characters/line
+#  flows 0.4 CV 2d
+  NROW=1 NCOL=4 COLUMNLABELS
+  GroupName Statistic StatFlag PlotSymbol
+  Heads 1.0025 VAR 1
+END Observation_Groups
+ 
+BEGIN Observation_Data Files
+# Often convenient to put large inputs (like observation data) in a 
+# separate file.  This compartmentalizes the input, and keeps the main
+# input file more compact. This data file can then be read as a table.
+  hob_obs_table.dat
+END Observation_Data
+ 
+BEGIN Model_Input_Files Keywords
+  ModInFile = ZonePropertiesInitial.csv
+    TemplateFile = ZonePropertiesInitial.csv.jtf
+  ModInFile = GHB_UZF_WEL_scaling.csv
+    TemplateFile = GHB_UZF_WEL_scaling.csv.jtf
+END Model_Input_Files
+ 
+BEGIN Model_Output_Files Keywords
+#  ModOutFile = MF.chob.out
+#    InstructionFile = MF.chob_ins
+#    Category = Obs
+  ModOutFile = MF.hob.out
+    InstructionFile = MF.hob.out.jif
+    Category = Obs
+END Model_Output_Files
+ 
+BEGIN Parallel_Control Keywords
+  Parallel = Yes 
+  Wait = 0.01
+  VerboseRunner = 5
+  OperatingSystem = Windows
+END Parallel_Control
+ 
+BEGIN Parallel_Runners Table
+  NROW=7 NCOL=3 COLUMNLABELS
+  RunnerName RunnerDir RunTime
+  Runner1 r01\ 2400
+  Runner2 r02\ 2400
+  Runner3 r03\ 2400
+  Runner4 r04\ 2400
+  Runner5 r05\ 2400
+  Runner6 r06\ 2400
+  Runner7 r07\ 2400
+END Parallel_Runners
