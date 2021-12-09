@@ -69,7 +69,7 @@ def elev_to_tprogs_layers(elev, tprogs_top_elev, tprogs_bot_elev, num_lays):
     elev_round = np.round((elev) * (1/lay_thick)) / (1/lay_thick) # dem rounded to the layer thickness
     elev_round[elev_round >= tprogs_top_elev] = tprogs_top_elev# any elevation above the top is set to the top
     # subtract the calculated row from top elev divided by layer thickness to get to index 0 at top and index 320 and bottom
-    elev_indices = top/lay_thick - elev_round*(1/lay_thick) 
+    elev_indices = tprogs_top_elev/lay_thick - elev_round*(1/lay_thick) 
     return(elev_indices.astype(int))
 
 
