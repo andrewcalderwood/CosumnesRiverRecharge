@@ -1,0 +1,18 @@
+# general color correspondance for zone budget plotting in matplotlib.pyplot using a dictionary,,
+flux,color,name
+FROM_RECHARGE,green,Recharge
+TO_RECHARGE,green,Surface leakage
+FROM_STREAM_LEAKAGE,blue,Stream Leakage to GW
+TO_STREAM_LEAKAGE,blue,GW to Stream
+FROM_WELLS,red,Injection wells
+TO_WELLS,red,Pumping
+FROM_LAKE_SEEPAGE,navy,Blodgett Dam Recharge
+TO_LAKE_SEEPAGE,navy,Groundwater to Blodgett Dam
+FROM_CONSTANT_HEAD,lightgreen,Groundwater Inflow Foothills
+TO_CONSTANT_HEAD,lightgreen,Groundwater Outflow Foothills
+FROM_HEAD_DEP_BOUNDS,aqua,Groundwater Inflow  
+TO_HEAD_DEP_BOUNDS,aqua,Groundwater Outflow  
+FROM_ZONE_0,gray,Groundwater Inflow
+TO_ZONE_0,gray,Groundwater Outflow
+FROM_RIVER_LEAKAGE,navy,Blodgett Dam Recharge
+TO_RIVER_LEAKAGE,navy,Groundwater to Blodgett Dam
