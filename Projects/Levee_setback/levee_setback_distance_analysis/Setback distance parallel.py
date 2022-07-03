@@ -14,6 +14,8 @@ while os.path.basename(git_dir) != 'CosumnesRiverRecharge':
 gwfm_dir = '\\'.join(str.split(git_dir,'\\')[0:3])+ '/Box/research_cosumnes/GWFlowModel'
 print(git_dir, gwfm_dir)
 
+box_dir = gwfm_dir+'/Levee_setback/levee_setback_distance_analysis/'
+
 # set base model path
 ext_dir = 'F:/WRDAPP'
 c_dir = 'C:/WRDAPP'
@@ -25,6 +27,19 @@ elif os.path.exists(c_dir):
 
 loadpth = loadpth +'/GWFlowModel/Cosumnes/levee_setback/setback_distance_analysis/'
 model_ws = loadpth+'Permeameter_for_velocity'
+
+####################################################################################################
+## Adjustments here ##
+flow_percentile = 95
+# tprogs_id = ''
+tprogs_id = '_no_conditioning'
+
+# data_dir = box_dir+'data_output/'
+data_dir = box_dir+'no_conditioning/data_output/'
+
+
+####################################################################################################
+model_ws = model_ws +tprogs_id
 
 # load the model
 name = 'MF.nam'
@@ -98,5 +113,5 @@ for r in np.arange(0,100):
 
 hf_tot_df = pd.DataFrame(hf_tot, columns = setbacks)
 # save counted high flow cells to a csv
-hf_tot_df.to_csv('surface_highflow_by_distance.csv')
+hf_tot_df.to_csv(data_dir + 'surface_highflow_by_distance.csv')
 
