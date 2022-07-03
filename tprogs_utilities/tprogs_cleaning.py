@@ -7,6 +7,7 @@ Author: Andrew Calderwood
 
 import sys
 import numpy as np
+from numpy import ma
 
 def tprogs_cut_elev(tprogs_line, dem_data, **kwargs):
     """
@@ -59,12 +60,16 @@ def int_to_param(tprogs, params):
     return(tprogs_K,tprogs_Sy,tprogs_Ss)
 
 
-def elev_to_tprogs_layers(elev, tprogs_top_elev, tprogs_bot_elev, num_lays):
+def elev_to_tprogs_layers(elev, tprogs_info):
     """
     function to get the tprogs layers based on the given elevation
+    tprogs_info: [top_elev, bot_elev, num_lays]
     Example
     layer 0 is 80 meters, layer 1 is 79.5 meters, layer -1 is -80 meters
     """
+    tprogs_top_elev = tprogs_info[0]
+    tprogs_bot_elev = tprogs_info[1]
+    num_lays = tprogs_info[2]
     lay_thick = (tprogs_top_elev - tprogs_bot_elev)/num_lays
     elev_round = np.round((elev) * (1/lay_thick)) / (1/lay_thick) # dem rounded to the layer thickness
     elev_round[elev_round >= tprogs_top_elev] = tprogs_top_elev# any elevation above the top is set to the top
@@ -73,21 +78,21 @@ def elev_to_tprogs_layers(elev, tprogs_top_elev, tprogs_bot_elev, num_lays):
     return(elev_indices.astype(int))
 
 
-def get_tprogs_for_elev(tprogs_arr, top_elev, bot_elev, **kwargs):
+def get_tprogs_for_elev(tprogs_arr, top_elev, bot_elev, tprogs_info, **kwargs):
     """
     Function to grab the TPROGs layers by elevation filters and returns
     a 3D array with uneven numbers of filled values in the vertical direction.
-
     Parameters
     ----------
     tprogs_arr : 3D masked array of TPROGs_realziation
     top_elev : 2D array of elevation setting top reference point
     bot_elev: 2D array of elevation setting bottom reference poing
+    tprogs_info: [top_elev, bot_elev, num_lays]
     """
     rows = kwargs.get('rows', np.where(np.ones(top_elev.shape)==1)[0])
     cols = kwargs.get('cols', np.where(np.ones(top_elev.shape)==1)[1])
-    top_indices = elev_to_tprogs_layers(top_elev)
-    bot_indices = elev_to_tprogs_layers(bot_elev)
+    top_indices = elev_to_tprogs_layers(top_elev, tprogs_info)
+    bot_indices = elev_to_tprogs_layers(bot_elev, tprogs_info)
     # find tprogs layer for desired rows and columns
     top_indices = top_indices[rows, cols].astype(int)
     bot_indices = bot_indices[rows, cols].astype(int)
@@ -98,8 +103,10 @@ def get_tprogs_for_elev(tprogs_arr, top_elev, bot_elev, **kwargs):
     max_layers = np.max(bot_indices - top_indices)
     for k in np.arange(0,max_layers):
         layexist = (bot_indices-top_indices) > k # pick where data should be referenced
-        tprogs_subset[k, layexist] = K[top_indices[layexist]+k, rows[layexist], cols[layexist]]
+        tprogs_subset[k, layexist] = tprogs_arr[top_indices[layexist]+k, rows[layexist], cols[layexist]]
     # return grabbed data in array format if entire domain was used
     if len(rows) == top_elev.shape[0]*top_elev.shape[1]:
         tprogs_subset = np.reshape(tprogs_subset, (max_layers, top_elev.shape[0], top_elev.shape[1]))
+    # mask array again
+    tprogs_subset = ma.masked_invalid(tprogs_subset)
     return(tprogs_subset)
