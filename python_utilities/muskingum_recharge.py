@@ -41,18 +41,41 @@ def Muskingum(I, N, K, X):
             
     return(Q)
 
+def xs_setback(xs_levee_smooth, setback):
+    ''' Function to add levee wall to XS if setback location is not 16 ft elevation above thalweg'''
+    mid = np.mean(xs_levee_smooth.index) # location that should be channel bottom based on NHD line
+    roll_window = 400 # window used to capture true channel minimum
+    # for a given setback imagine there is an impenetrable levee blocking overbank flow
+    xs_elevs = xs_levee_smooth[mid-100-setback:mid+100+setback]
+    # the channel should fall within the center 400m so that minimum can be used to set new levee height
+    thalweg = xs_elevs.loc[mid-roll_window/2:mid+roll_window/2].min()
+    # check to see XS elevation at setback distance to determine if it should be raised to needed levee height
+    # where XS height is less than 16 ft above channel bottom then raise to 16 ft above
+    if xs_elevs.loc[mid-100-setback] - thalweg< 16*0.3048:
+        xs_elevs.loc[mid-100-setback] = thalweg + 16*0.3048
+    if xs_elevs.loc[mid+100+setback] - thalweg< 16*0.3048:
+        xs_elevs.loc[mid+100+setback] = thalweg + 16*0.3048
+    return(xs_elevs)
+
 def mannings(d, xs_elevs, n, S):
     ''' Manning Equation from XS data assume constant roughness, slope estimate
     slope = singular value typically based on xs mins
     roughness = singular value, could vary along XS but information is usually not available'''
-
+    # water surface elevation is thalweg plus depth
     wse = xs_elevs.min()+d
+    # when wse is above max height of XS then remove excess water (wse = max height)
+    if wse > xs_elevs.max():
+        wse = xs_elevs.max()
+    # calculate depth of water over each XS
     xs_wet = wse - xs_elevs
+    # when wse is below XS elevation, remove XS from calculation
     xs_wet[xs_wet < 0] = 0
+
     # multiply by 10m to get area and sum for area
     A = xs_wet.sum() * 10
     # calculate wetted perimeter
     xy = xs_elevs[wse - xs_elevs > 0]
+    # use distance formula to calculate length of XS that is wetted
     Wp = np.sum(np.sqrt(np.diff(xy.values)**2 + np.diff(xy.index.values)**2))
     Q_calc = (np.sqrt(S)/n) * (A**(5/3)) / (Wp**(2/3))
     return(Q_calc)
