@@ -1,0 +1,24 @@
+conda create -n geosp39 python=3.9
+yes
+# Basic geospatial packages
+gdal, fiona, shapely
+# secondary
+geopandas, rasterio, pyproj
+# tertiary
+richdem, pysheds
+
+Installed (assume conda install unless specified otherwise)
+1. shapely
+- important NEW packages installed: geos (total 5.6MB)
+2. fiona 
+- important NEW packages installed: curl, gdal, geotiff, proj (total 24.3 MB)
+3. gdal (already installed because of fiona)
+4. pyproj
+- specified as added/updated specs
+5. rasterio
+- important NEW packages installed: affine (6.4 MB total)
+6. geopandas
+- important NEW packages installed: pandas, scipy, rtree (37.3 MB)
+7. richdem (pip3 install)
+error: Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools": https://visualstudio.microsoft.com/visual-cpp-build-tools/ (follow instruction to install Visual Studio Build Tools 2022 or whichever is most recent then continue with pip install)
+8. pysheds (pip install, download looks different from standard pip install)
