@@ -9,7 +9,7 @@ import sys
 import numpy as np
 from numpy import ma
 
-def tprogs_cut_elev(tprogs_line, dem_data, **kwargs):
+def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info, **kwargs):
     """
     Parameters
     ----------
@@ -20,15 +20,15 @@ def tprogs_cut_elev(tprogs_line, dem_data, **kwargs):
     """
     rows = kwargs.get('rows', np.where(np.ones(dem_data.shape)==1)[0])
     cols = kwargs.get('cols', np.where(np.ones(dem_data.shape)==1)[1])
-    tprogs_arr = np.reshape(tprogs_line, (320, 100,230))
-    tprogs_c = np.reshape(tprogs_arr[:, rows,cols],
-                             (tprogs_arr.shape[0],dem_data.shape[0],dem_data.shape[1]))
-    tprogs_elev = np.copy(tprogs_c)
-    # the bottom layer of the tprogs model is at -50 m amsl and the top layer is 50 m amsl
-    t = 0
-    for k in np.arange(-80,80,0.5):
+    tprogs_elev = np.copy(np.reshape(tprogs_line,
+                             (tprogs_info[-1], dem_data.shape[0], dem_data.shape[1])))
+    # flip tprogs model along z axis to match modflow definition of 0 as top (TPROGS says 0 is bottom)
+    tprogs = np.flip(tprogs_elev,axis=0)
+    # the bottom layer of the tprogs model is at -80 m amsl and the top layer is 80 m amsl
+    delz = (tprogs_info[0] - tprogs_info[1])/tprogs_info[2]
+    for t, k in enumerate(np.arange(tprogs_info[0],tprogs_info[1],-delz)):
         tprogs_elev[t,dem_data<k]= np.NaN
-        t+=1
+
     masked_tprogs = ma.masked_invalid(tprogs_elev)
     return(masked_tprogs)
 
@@ -42,8 +42,6 @@ def int_to_param(tprogs, params):
     """
     tprogs[tprogs<0] *= -1
     tprogs = tprogs.astype(float)
-    # flip tprogs model along z axis to match modflow definition of 0 as top (TPROGS says 0 is bottom)
-    tprogs = np.flip(tprogs,axis=0)
     tprogs_K = np.copy(tprogs)
     tprogs_Sy = np.copy(tprogs)
     tprogs_Ss = np.copy(tprogs)

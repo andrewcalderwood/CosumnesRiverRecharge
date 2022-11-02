@@ -145,3 +145,6 @@ def calc_depth_arr(wse_grid, wse_all):
     # remove data outside of setback
     d_arr[str_setbacks[s] !=1] = np.NaN
     return(d_arr)    
+
+
+
