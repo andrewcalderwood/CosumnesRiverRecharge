@@ -30,15 +30,17 @@ def highflow_at_groundsurface(run_ws, flow_percentile):
     extcbb = flopy.utils.postprocessing.get_extended_budget(cbb)
     (qx, qy, qz) = flopy.utils.postprocessing.get_specific_discharge(vectors = extcbb, model=m)
     # convert flow to positive as it is all moving in the downward, -z direction
-    qz *= -1
-
-   # get high conductivity at ground surface
-    qz_plt = np.zeros((100,230))
-    qz_plt[rows,cols] = qz[tprogs_lay[rows,cols],rows,cols] 
+    # q = qz * -1 # not a good indicator at all
+    # much better to use magntiude of velocity vector
+    q = np.sqrt(qx**2 + qy**2 + qz**2)
     # split cells into low and high conductivity, based on chosen flow percentile
-    qz_lay = np.zeros((100,230))
-    qz_lay[qz_plt >= np.percentile(qz_plt,flow_percentile)] = 1
-    return(qz_lay)
+    q_lay = np.zeros((320, 100,230))
+    q_lay[q >= np.percentile(q,flow_percentile)] = 1
+
+    # get high conductivity at ground surface
+    q_plt = np.zeros((100,230))
+    q_plt[rows,cols] = q_lay[tprogs_lay[rows,cols],rows,cols] 
+    return(q_plt)
 
 def high_flow_arr(flow_percentile, str_setbacks):
     tic = time.time()

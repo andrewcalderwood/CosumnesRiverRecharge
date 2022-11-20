@@ -36,7 +36,8 @@ print( gwfm_dir)
 box_dir = gwfm_dir+'/Levee_setback/levee_setback_distance_analysis/'
 
 # tprogs_id = '' # original tprogs with conditioning data in output tsim
-tprogs_id = '_no_conditioning'
+# tprogs_id = '_no_conditioning'
+tprogs_id = '_no_cond_c3d'
 
 data_dir = box_dir+ tprogs_id+'/data_output/'
 fig_dir = box_dir+tprogs_id+'/figures/'
@@ -99,7 +100,7 @@ vani = 100
 soil_K = soil_K/86400/vani 
 
 # high flow array maps
-flow_percentile=95
+flow_percentile = 6 #95
 hf_tot_in =  np.loadtxt(data_dir+'surface_highflow_by_realization_'+str(flow_percentile)+'.tsv',delimiter = '\t')
 hf_tot = np.reshape(hf_tot_in, (100, nrow, ncol))
 
@@ -143,6 +144,7 @@ plt.ylabel('Flow ($m^3/s$)')
 ####################################################################################################
 #%% Recharge analysis ##
 
+
 def realization_recharge(t):
     # allocate arrays
     Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1))
@@ -152,9 +154,9 @@ def realization_recharge(t):
     # save depth arrays for each setbacks
     d_arr = np.zeros((q_in.shape[0], len(setbacks), nrow, ncol))
     wse_arr = np.zeros((len(setbacks), nrow, ncol))
+    cell_frac = np.zeros((q_in.shape[0], len(setbacks), nrow, ncol))
     # save high recharge flows
     rch_hf_arr = np.zeros((q_in.shape[0], len(setbacks), nrow, ncol))
-
 
     tic = time()
     n = 0.048 # assume constant roughness for now
@@ -180,12 +182,32 @@ def realization_recharge(t):
                     depth = 0
                 # join depth calculated at cross-section to corresponding model cells and corresponding setback
                 wse_arr[s,(xs_arr==nseg)&(str_setbacks <= s+1)] = depth + xs_elevs.min()
-                d_arr[qn, s,(xs_arr==nseg)&(str_setbacks <= s+1)] = depth 
-            # identify wse above surface elevation 
-            d_arr[qn,:] = d_arr[qn,:]* (wse_arr > dem_data)
+                # calculate depth of water at different elevation percentiles for segment and setback
+                diff = wse_arr[s,:]*(xs_arr==nseg)*(str_setbacks <= s+1) - arr_elev
+                # when depth is negative remove
+                diff[diff<0] = np.NaN
+                # only keep cells where water level is above lowest elevation
+                diffmax = np.nanmax(diff, axis=0)
+                # keep cells where diffmax >0 
+                x,y = np.where(diffmax>0)
+                # find the highest elevation above which there is water, subtract 1 uses lower percentile
+                # where the wse was below the minimum ignore
+                bot_q = np.argmin(diff, axis=0)[x,y] - 1
+                bot_q[bot_q<0] = 0
+                top_q = np.argmin(diff, axis=0)[x,y] 
+                # find percentage of interim quantile
+                perc_q = (wse_arr[s, x,y] - arr_elev[bot_q, x,y])/(arr_elev[top_q, x,y] +1E-3 - arr_elev[bot_q, x,y])
+                # percent of cell area covered by flood
+                cell_frac[qn, s,x,y] = (bot_q + perc_q)/10
+                # depth for each cell is difference between water surface and average flooded ground elevation
+                d_arr[qn, s,(xs_arr==nseg)&(str_setbacks <= s+1)] = np.nanmean(diff, axis=0)[(xs_arr==nseg)&(str_setbacks <= s+1)] #depth 
+
+                # identify wse above surface elevation 
+#             d_arr[qn,:] = d_arr[qn,:]* (wse_arr > dem_data)
             # calculate vertical seepage with Darcy's equation assuming a saturated zone thickness similar to the lake bed in modflow
             # hydraulic conductivity is in m/s, hydraulic gradient is unitless, area is 200x200 m^2
-            rch_hf_arr[qn,:,:,:] += (xs_arr==nseg)*(soil_K[t,:,:])*K_rch*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:]* + soil_thick)/soil_thick)
+            q_seep = (soil_K[t,:,:])*K_rch*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:]* + soil_thick)/soil_thick)
+            rch_hf_arr[qn,:,:,:] += (xs_arr==nseg) * q_seep * cell_frac[qn]
             Q[qn, :, nseg+1] = Q[qn, :, nseg] - np.nansum(rch_hf_arr[qn,:, xs_arr==nseg], axis=(0))
    
     base_fn = join(data_dir, 'r'+str(t).zfill(3)+'_')
@@ -195,33 +217,24 @@ def realization_recharge(t):
     # for recharge we want to aggregate across time steps but look at differences across setbacks
     rch_out = np.reshape(rch_hf_arr.sum(axis=0), (len(setbacks)*nrow, ncol))
     np.savetxt(base_fn+'recharge.tsv', rch_out)
-    
     toc = time()
     print((toc-tic)/3600)
+    return(Q, rch_hf_arr, d_arr, cell_frac)
 
-
-
-realization_recharge(0)
 
 ###############################################################################
 #%% Multiprocess
 
-def f(n):
-    folder = '/realization'+ str(n).zfill(3)+'/'
-    rv = subprocess.run('mf2005.exe MF.nam', shell=True, check=True, capture_output=True, cwd = model_ws + folder)
-    return rv
-
-
 def main():
-    pool = Pool(processes=multiprocessing.cpu_count()-1)  # set the processes max number to the number of cpus
-    result = pool.map(f, range(100))
+    pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
+    result = pool.map(realization_recharge, range(100))
     pool.close()
     pool.join()
     print(result)
     print('end')
 
-# if __name__ == "__main__":
-#     tic = time()
-#     main()
-#     toc = time()
-#     print('Total time: %.2f minutes' (toc-tic)/60)
+if __name__ == "__main__":
+    tic = time()
+    main()
+    toc = time()
+    print('Total time: %.2f minutes' %((toc-tic)/60))
