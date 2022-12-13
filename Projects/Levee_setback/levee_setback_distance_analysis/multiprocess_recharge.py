@@ -14,11 +14,7 @@ from scipy.optimize import minimize_scalar
 
 from time import time
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.lines as lines
-
-
+import geopandas as gpd
 ####################################################################################################
 #%% 
 ## Set up directory referencing
@@ -59,9 +55,9 @@ ncol = 230
 # dem data for cropping above land surface
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_linear.tsv')
 
-import muskingum_recharge
-reload(muskingum_recharge)
-
+# import muskingum_recharge
+# reload(muskingum_recharge)
+# if I comment out geopandas in the muskingum_recharge script then no issue
 from muskingum_recharge import min_Q, mannings, calc_depth_arr, xs_setback
 
 
@@ -104,46 +100,44 @@ flow_percentile = 6 #95
 hf_tot_in =  np.loadtxt(data_dir+'surface_highflow_by_realization_'+str(flow_percentile)+'.tsv',delimiter = '\t')
 hf_tot = np.reshape(hf_tot_in, (100, nrow, ncol))
 
+# zonal statistics for elevation
+zs = gpd.read_file(gwfm_dir+'/DIS_data/grid_elevation_m_statistics.shp')
+# columns with different quantiles 0 to 100% of elevation
+q_cols = zs.columns[zs.columns.str.contains('perc')]
+df_elevs = zs[q_cols]
 
+# convert quantile dataframe to a 3D array
+arr_elev = np.zeros((df_elevs.shape[1], zs.row.max(),zs.column.max()))
+for n in np.arange(0,df_elevs.shape[1]):
+    arr_elev[n, zs.row-1, zs.column-1] = df_elevs.iloc[:,n]
 ####################################################################################################
 #%% 
 ## Pre-process ##
 # find minimum from channel center
 xs_mins = xs_levee_smooth.loc[3100:3300].min(axis=0)
 xs_mins.index = xs_mins.index.astype(int)
-# xs_mins.interpolate(method='linear').plot()
 slope = xs_mins.diff().rolling(2, center=True, closed='right').mean().bfill()/2000*-1
 adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
 
-(xs_mins.diff()/-2000).plot()
-slope.plot()
-plt.show()
-xs_mins.plot()
-plt.plot(adj_xs_mins)
-
 # for n in flood_type.index:
 # 1, 2, 3 are floods long enough to apply to analysis
-n=2
+ft=1
 # typical winter baseflow, peak flow, peak location, total time (days)
 # flow of 23 m3/s listed by Whipple as floodplain cutoff
 q_base = 23 # 200*(0.3048**3)
-q_peak = flood_type.loc[n,'cms_pk']
+q_peak = flood_type.loc[ft,'cms_pk']
 # total duration in days 
-T = int(10**flood_type.loc[n,'log_no_d'])
-p_l = flood_type.loc[n,'pk_loc']
+T = int(10**flood_type.loc[ft,'log_no_d'])
+p_l = flood_type.loc[ft,'pk_loc']
 tp = int(p_l*T)
 
 q_rise = np.linspace(q_base, q_peak, tp)
 q_fall = np.linspace(q_peak, q_base, (T-tp+1))
 q_in = np.append(q_rise, q_fall[1:])
-plt.plot(q_in)
-plt.xlabel('Days')
-plt.ylabel('Flow ($m^3/s$)')
 
-
+# print(q_in)
 ####################################################################################################
 #%% Recharge analysis ##
-
 
 def realization_recharge(t):
     # allocate arrays
@@ -160,8 +154,8 @@ def realization_recharge(t):
 
     tic = time()
     n = 0.048 # assume constant roughness for now
-    K_rch = 1.173/24 # fraction of the day that flow is on each segment for recharge
-    t = 0 # tprogs realization
+    # no scaling factor needed because the flow is already daily averaged
+#     K_rch = 1.173/24 # fraction of the day that flow is on each segment for recharge
     #.25 hours (15 min) for 30 days run
 
     # iterate across streamflows
@@ -173,19 +167,30 @@ def realization_recharge(t):
                 # for a given setback imagine there is an impenetrable levee blocking overbank flow
     #             xs_elevs = xs_levee_smooth.iloc[:,nseg][3100-setback:3300+setback]
                 xs_elevs = xs_setback(xs_levee_smooth.iloc[:,nseg], setback)
-                # solve for depth that matches given flow
-                if Q[t, s,nseg] >0:
+                # solve for depth that matches given flow, less than 1 cms too small to calculate
+                if Q[qn, s,nseg] >1:
+                    # solve for depth that matches given flow
                     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                                          bounds=(0,10), method='bounded')
-                    depth = res.x
+                                              bounds=(1E-3, 10), method='Golden', tol=1E-3)
+                    # if large flow error, likely stuck in local minimum try setting higher or lower
+                    if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) > Q[qn, s,nseg]*1.05:
+                        res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
+                                      bounds=(1E-3, res.x-0.1), method='bounded')
+                    if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) < Q[qn, s,nseg]*0.95:
+                        res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
+                                      bounds=(res.x+0.1, 10), method='bounded')
+                    if res.fun>0.05*Q[qn, s,nseg]: # greater than 5% difference try to fix with bounded solving
+                        print(str(nseg),' ', s, '%.2f'%res.fun, 'iter %i'%res.nit, ', ',res.success, 'd %.2f'%res.x)
+                    depth = np.copy(res.x)
                 else:
                     depth = 0
                 # join depth calculated at cross-section to corresponding model cells and corresponding setback
-                wse_arr[s,(xs_arr==nseg)&(str_setbacks <= s+1)] = depth + xs_elevs.min()
+                # add elevation to minimum to apply segment midpoint as elevation rather than lowest point
+                wse_arr[s,(xs_arr==nseg)&(str_setbacks <= s+1)] = depth + xs_elevs.min() + slope.iloc[nseg]*1000
                 # calculate depth of water at different elevation percentiles for segment and setback
                 diff = wse_arr[s,:]*(xs_arr==nseg)*(str_setbacks <= s+1) - arr_elev
                 # when depth is negative remove
-                diff[diff<0] = np.NaN
+                diff[diff<0] = 0 #np.NaN
                 # only keep cells where water level is above lowest elevation
                 diffmax = np.nanmax(diff, axis=0)
                 # keep cells where diffmax >0 
@@ -206,20 +211,25 @@ def realization_recharge(t):
 #             d_arr[qn,:] = d_arr[qn,:]* (wse_arr > dem_data)
             # calculate vertical seepage with Darcy's equation assuming a saturated zone thickness similar to the lake bed in modflow
             # hydraulic conductivity is in m/s, hydraulic gradient is unitless, area is 200x200 m^2
-            q_seep = (soil_K[t,:,:])*K_rch*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:]* + soil_thick)/soil_thick)
+            q_seep = (soil_K[t,:,:])*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
             rch_hf_arr[qn,:,:,:] += (xs_arr==nseg) * q_seep * cell_frac[qn]
+            #if recharge is greater than flow, reduce recharge to flow
+            if Q[qn, :, nseg] < np.nansum(rch_hf_arr[qn,:, xs_arr==nseg]):
+                rch_hf_arr[qn,:, xs_arr==nseg] *= (Q[qn, :, nseg]/np.nansum(rch_hf_arr[qn,:, xs_arr==nseg], axis=(0)))
             Q[qn, :, nseg+1] = Q[qn, :, nseg] - np.nansum(rch_hf_arr[qn,:, xs_arr==nseg], axis=(0))
-   
-    base_fn = join(data_dir, 'r'+str(t).zfill(3)+'_')
+
+    base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
+    print(base_fn)
     # saving all of the flow at all steps, setbacks is needed to post-process
     Q_out = np.reshape(Q, ((q_in.shape[0]*len(setbacks), xs_levee_smooth.shape[1]+1)))
     np.savetxt(base_fn+'flow.tsv', Q_out)
     # for recharge we want to aggregate across time steps but look at differences across setbacks
-    rch_out = np.reshape(rch_hf_arr.sum(axis=0), (len(setbacks)*nrow, ncol))
+    rch_out = np.reshape(np.nansum(rch_hf_arr, axis=0), (len(setbacks)*nrow, ncol))
     np.savetxt(base_fn+'recharge.tsv', rch_out)
     toc = time()
     print((toc-tic)/3600)
     return(Q, rch_hf_arr, d_arr, cell_frac)
+
 
 
 ###############################################################################
