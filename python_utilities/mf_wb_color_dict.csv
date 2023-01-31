@@ -16,3 +16,7 @@ FROM_ZONE_0,gray,Groundwater Inflow
 TO_ZONE_0,gray,Groundwater Outflow
 FROM_RIVER_LEAKAGE,navy,River Leakage to GW
 TO_RIVER_LEAKAGE,navy,GW Leakage to River
+FROM_STORAGE,black,Groundwater Storage Change
+TO_STORAGE,black,Groundwater Storage Change
+FROM_ZONE_1,gray,Groundwater Inflow
+TO_ZONE_1,gray,Groundwater Outflow
