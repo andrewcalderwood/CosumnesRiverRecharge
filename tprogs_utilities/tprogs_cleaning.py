@@ -33,7 +33,7 @@ def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info, **kwargs):
     return(masked_tprogs)
 
 
-def int_to_param(tprogs, params):
+def int_to_param(tprogs, params, porosity = False):
     """
     Parameters
     ----------
@@ -45,6 +45,7 @@ def int_to_param(tprogs, params):
     tprogs_K = np.copy(tprogs)
     tprogs_Sy = np.copy(tprogs)
     tprogs_Ss = np.copy(tprogs)
+    tprogs_n = np.copy(tprogs)
     # hydraulic parameters from fleckenstein 2006
     # I-IV gravel, sand, muddy sand, mud
     # K in m/s, Sy, Ss
@@ -54,8 +55,14 @@ def int_to_param(tprogs, params):
         tprogs_Sy[tprogs==n]= params.loc[n,'Sy']
     for n in np.arange(1,5):
         tprogs_Ss[tprogs==n]= params.loc[n,'Ss']
-            
-    return(tprogs_K,tprogs_Sy,tprogs_Ss)
+
+    out = [tprogs_K,tprogs_Sy,tprogs_Ss]
+    if porosity == True:
+        for n in np.arange(1,5):
+            tprogs_n[tprogs==n] = params.loc[n,'porosity']
+        out = out + [tprogs_n]
+
+    return(out)
 
 
 def elev_to_tprogs_layers(elev, tprogs_info):
