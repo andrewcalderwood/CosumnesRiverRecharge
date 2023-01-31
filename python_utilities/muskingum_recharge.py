@@ -41,8 +41,8 @@ def Muskingum(I, N, K, X):
             
     return(Q)
 
-def xs_setback(xs_levee_smooth, setback):
-    ''' Function to add levee wall to XS if setback location is not 16 ft elevation above thalweg'''
+def xs_setback(xs_levee_smooth, setback, levee_ft = 20):
+    ''' Function to add levee wall to XS if setback location is not 20 ft (or user specified) above thalweg'''
     mid = np.mean(xs_levee_smooth.index) # location that should be channel bottom based on NHD line
     roll_window = 400 # window used to capture true channel minimum
     # for a given setback imagine there is an impenetrable levee blocking overbank flow
@@ -51,16 +51,18 @@ def xs_setback(xs_levee_smooth, setback):
     thalweg = xs_elevs.loc[mid-roll_window/2:mid+roll_window/2].min()
     # check to see XS elevation at setback distance to determine if it should be raised to needed levee height
     # where XS height is less than 16 ft above channel bottom then raise to 16 ft above
-    if xs_elevs.loc[mid-100-setback] - thalweg< 16*0.3048:
-        xs_elevs.loc[mid-100-setback] = thalweg + 16*0.3048
-    if xs_elevs.loc[mid+100+setback] - thalweg< 16*0.3048:
-        xs_elevs.loc[mid+100+setback] = thalweg + 16*0.3048
+    if xs_elevs.loc[mid-100-setback] - thalweg< levee_ft*0.3048:
+        xs_elevs.loc[mid-100-setback] = thalweg + levee_ft*0.3048
+    if xs_elevs.loc[mid+100+setback] - thalweg< levee_ft*0.3048:
+        xs_elevs.loc[mid+100+setback] = thalweg + levee_ft*0.3048
     return(xs_elevs)
 
 def mannings(d, xs_elevs, n, S):
     ''' Manning Equation from XS data assume constant roughness, slope estimate
     slope = singular value typically based on xs mins
     roughness = singular value, could vary along XS but information is usually not available'''
+    if d <=0: # if input attempts to set negative or zero value set to near zero
+        d = 1E-3
     # water surface elevation is thalweg plus depth
     wse = xs_elevs.min()+d
     # when wse is above max height of XS then remove excess water (wse = max height)
@@ -70,13 +72,16 @@ def mannings(d, xs_elevs, n, S):
     xs_wet = wse - xs_elevs
     # when wse is below XS elevation, remove XS from calculation
     xs_wet[xs_wet < 0] = 0
-
+#     xs_wet.plot()
     # multiply by 10m to get area and sum for area
     A = xs_wet.sum() * 10
     # calculate wetted perimeter
     xy = xs_elevs[wse - xs_elevs > 0]
-    # use distance formula to calculate length of XS that is wetted
-    Wp = np.sum(np.sqrt(np.diff(xy.values)**2 + np.diff(xy.index.values)**2))
+    # use distance formula to calculate length of XS that is wetted, +10 to count first cell missed by diff
+#     Wp1 = np.sum(np.sqrt(np.diff(xy.values)**2 + np.diff(xy.index.values)**2)) + 10
+    # quick check shows not a huge difference between difference formula and midpoint sum so 
+    # simplifying to midpoint sum to avoid issue with zero Wp
+    Wp = xy.shape[0] * 10
     Q_calc = (np.sqrt(S)/n) * (A**(5/3)) / (Wp**(2/3))
     return(Q_calc)
 
