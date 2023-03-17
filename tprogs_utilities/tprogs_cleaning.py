@@ -46,7 +46,6 @@ def int_to_param(tprogs, params, porosity = False):
     tprogs_Sy = ma.copy(tprogs)
     tprogs_Ss = ma.copy(tprogs)
     tprogs_n = ma.copy(tprogs)
-    # hydraulic parameters from fleckenstein 2006
     # I-IV gravel, sand, muddy sand, mud
     # K in m/s, Sy, Ss
     for n in np.arange(1,5):
