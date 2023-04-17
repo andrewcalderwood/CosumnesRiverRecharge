@@ -1,0 +1,26 @@
+,class,name,subclass
+0,G,Grain and hay crops,-1
+1,R,Rice,-1
+2,F,Field crops,-1
+3,P,Pasture,-1
+4,T,"Truck, nursery, and berry crops",-1
+5,D,Deciduous fruits and nuts,-1
+6,C,Citrus and subtropical,-1
+7,V,Vineyards,-1
+8,I,Idle,-1
+9,S,Semi-agricultural and incidental to agriculture,-1
+10,U,"Urban-residential, commercial, and industrial, unsegregated",-1
+11,UR,"Urban residential-single and multi-family units, includes trailer parks",-1
+12,UC,Urban commercial,-1
+13,UI,Urban industrial,-1
+14,UV,Urban vacant,-1
+15,NC,"Native classes, unsegregated",-1
+16,NV,Native vegetation,-1
+17,NR,Native riparian vegetation,-1
+18,NW,Water surface,-1
+19,NB,Barren and wasteland,-1
+20,NS,Not surveyed,-1
+21,E,Entry denied,-1
+22,Z,Outside of the study area,-1
+23,X,Unclassified fallow “X” reflect the following circumstances:,-1
+24,Y,Young Perennial,-1

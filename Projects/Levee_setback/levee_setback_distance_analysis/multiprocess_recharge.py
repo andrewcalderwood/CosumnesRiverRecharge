@@ -72,10 +72,16 @@ xs_levee_smooth = pd.read_csv(chan_dir+'xs_levee_smooth.csv', index_col='dist_fr
 num_segs = xs_levee_smooth.shape[1]
 # wse_grid.to_file(gis_dir+'wse_grid.shp')
 
+import h5py
+f = h5py.File(join(chan_dir, 'setback_locs.hdf5'), "r")
+# upper = 3, middle = 2, lower=1
+local_str_setbacks = f['setbacks']['local'][:]
+str_setbacks = f['setbacks']['regional'][:]
+f.close()
 # load array identifying row,col to setback ID (1,17)
-str_setbacks = np.loadtxt(chan_dir+ 'regional_str_setback_id_arr.tsv', delimiter='\t').astype(int)
-# str_setbacks = ma.masked_where(str_setbacks==0,str_setbacks)
-str_setbacks = np.where(str_setbacks==0,np.NaN, str_setbacks)
+# str_setbacks = np.loadtxt(chan_dir+ 'regional_str_setback_id_arr.tsv', delimiter='\t').astype(int)
+# # str_setbacks = ma.masked_where(str_setbacks==0,str_setbacks)
+# str_setbacks = np.where(str_setbacks==0,np.NaN, str_setbacks)
 
 # load array identifying row,col to XS id (1,28)
 xs_arr = np.loadtxt(chan_dir+'XS_num_grid_reference.tsv')
@@ -83,7 +89,6 @@ xs_arr = np.loadtxt(chan_dir+'XS_num_grid_reference.tsv')
 # load flood typology characteristics (based on daily data 1908 - 2014) - median values 
 #"cms_pk" for peak discharge, "pk_loc" for time to peak, and "log_no_d" for duration
 flood_type = pd.read_csv(join(box_dir, 'whipple_grp6_w97ftmedians.csv'),index_col='Group.1')
-
 
 # tprogs near surface data
 soil_thick=2
@@ -93,7 +98,7 @@ soil_K_out = np.loadtxt(fn, delimiter='\t')
 soil_K = np.reshape(soil_K_out, (100, nrow, ncol))
 # convert soil conductivity from m/d to m/s and apply vertical anisotropy factor
 vani = 100
-soil_K = soil_K/86400/vani 
+soil_K = (soil_K/vani)/86400 
 
 # high flow array maps
 flow_percentile = 6 #95
@@ -146,7 +151,7 @@ q_in = np.append(q_rise, q_fall[1:])
 
 
 
-def realization_recharge(t):
+def realization_recharge(t, str_setbacks, region):
     # allocate arrays - num flow steps, num setbacks, num segments
     Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1))
     # set inflow for segment 1 across all setbacks and for all times
@@ -172,12 +177,13 @@ def realization_recharge(t):
     #             xs_elevs = xs_levee_smooth.iloc[:,nseg][3100-setback:3300+setback]
                 xs_elevs = xs_setback(xs_levee_smooth.iloc[:,nseg], setback)
                 # boolean of row,col cells that fall within the segment and setback
-                fp_zon = (xs_arr==nseg)&(str_setbacks <= s+1)
+                # fp_zon = (xs_arr==nseg)&(str_setbacks <= s+1)
+                fp_zon = (xs_arr==nseg)&(str_setbacks[s]==1)
                 # solve for depth that matches given flow, assume less than 1 cms is too small to calculate
                 if Q[qn, s,nseg] >1:
                     # solve for depth that matches given flow
                     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                                              bounds=(1E-3, 10), method='Golden', tol=1E-3)
+                                              method='Golden', tol=1E-3)
                     # if large flow error, likely stuck in local minimum try setting higher or lower
                     if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) > Q[qn, s,nseg]*1.05:
                         res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
@@ -237,7 +243,8 @@ def realization_recharge(t):
                 print(qn, nseg+1)
                 
                 
-    base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
+    # base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
+    base_fn = join(data_dir, region, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
     # saving all of the flow at all steps, setbacks is needed to post-process
     Q_out = np.reshape(Q, ((q_in.shape[0]*len(setbacks), xs_levee_smooth.shape[1]+1)))
     np.savetxt(base_fn+'flow.tsv', Q_out)
@@ -248,7 +255,20 @@ def realization_recharge(t):
     print((toc-tic)/3600)
     return(Q, rch_hf_arr, d_arr, cell_frac)
 
+###############################################################################
+#%% Make short code to loop over local zones
 
+# choose one function to use
+def run_rech(t):
+    for zone in np.arange(1,4):
+        base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
+        os.makedirs(base_fn, exist_ok=True)
+
+        realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone))
+
+# def run_rech(t):
+#     region = 'regional'
+#     realization_recharge(t, str_setbacks, 'regional')
 
 ###############################################################################
 #%% Multiprocess
@@ -257,7 +277,8 @@ def realization_recharge(t):
 
 def main():
     pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
-    result = pool.map(realization_recharge, range(100))
+    # result = pool.map(realization_recharge, range(100)) # original without adding inputs
+    result = pool.map(run_rech, range(100))
     pool.close()
     pool.join()
     print(result)
