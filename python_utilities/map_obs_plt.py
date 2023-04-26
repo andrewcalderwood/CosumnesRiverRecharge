@@ -5,6 +5,7 @@ First iteration as a Module June 2022
 Author: Andrew Calderwood
 """
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 
 import matplotlib.pyplot as plt

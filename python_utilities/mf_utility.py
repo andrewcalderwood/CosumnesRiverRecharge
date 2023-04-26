@@ -7,7 +7,8 @@ Author: Andrew Calderwood
 
 import matplotlib.pyplot as plt
 import geopandas as gpd
-
+import numpy as np
+import pandas as pd
 
 def get_layer_from_elev(elev, botm_slice, nlay):
     """  Return uppermost model layer (0-based) occupied at least partly by some elevation data
