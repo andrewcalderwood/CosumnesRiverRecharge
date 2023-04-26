@@ -129,29 +129,24 @@ xs_mins.index = xs_mins.index.astype(int)
 slope = xs_mins.diff().rolling(2, center=True, closed='right').mean().bfill()/2000*-1
 adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
 
-# for n in flood_type.index:
-# 1, 2, 3 are floods long enough to apply to analysis
-ft=3
-# typical winter baseflow, peak flow, peak location, total time (days)
-# flow of 23 m3/s listed by Whipple as floodplain cutoff
-q_base = 23 # 200*(0.3048**3)
-q_peak = flood_type.loc[ft,'cms_pk']
-# total duration in days 
-T = int(10**flood_type.loc[ft,'log_no_d'])
-p_l = flood_type.loc[ft,'pk_loc']
-tp = int(p_l*T)
 
-q_rise = np.linspace(q_base, q_peak, tp)
-q_fall = np.linspace(q_peak, q_base, (T-tp+1))
-q_in = np.append(q_rise, q_fall[1:])
-
-# print(q_in)
 ####################################################################################################
 #%% Recharge analysis ##
 
 
+def realization_recharge(t, str_setbacks, region, ft):
+    # typical winter baseflow, peak flow, peak location, total time (days)
+    # flow of 23 m3/s listed by Whipple as floodplain cutoff
+    q_base = 23 # 200*(0.3048**3)
+    q_peak = flood_type.loc[ft,'cms_pk']
+    # total duration in days 
+    T = int(10**flood_type.loc[ft,'log_no_d'])
+    p_l = flood_type.loc[ft,'pk_loc']
+    tp = int(p_l*T)
+    q_rise = np.linspace(q_base, q_peak, tp)
+    q_fall = np.linspace(q_peak, q_base, (T-tp+1))
+    q_in = np.append(q_rise, q_fall[1:])
 
-def realization_recharge(t, str_setbacks, region):
     # allocate arrays - num flow steps, num setbacks, num segments
     Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1))
     # set inflow for segment 1 across all setbacks and for all times
@@ -258,17 +253,20 @@ def realization_recharge(t, str_setbacks, region):
 ###############################################################################
 #%% Make short code to loop over local zones
 
-# choose one function to use
+# choose one function to use, regional or local
 def run_rech(t):
-    for zone in np.arange(1,4):
-        base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
-        os.makedirs(base_fn, exist_ok=True)
-
-        realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone))
+    for zone in [1,2,3]:
+        for ft in [1,2,3]:
+            # 1, 2, 3 are floods long enough to apply to analysis
+            base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
+            os.makedirs(base_fn, exist_ok=True)
+            realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
 # def run_rech(t):
 #     region = 'regional'
-#     realization_recharge(t, str_setbacks, 'regional')
+#     for ft in [1,2,3]:
+#         # 1, 2, 3 are floods long enough to apply to analysis
+#         realization_recharge(t, str_setbacks, 'regional', ft)
 
 ###############################################################################
 #%% Multiprocess
@@ -276,7 +274,8 @@ def run_rech(t):
 # realization_recharge(1)
 
 def main():
-    pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
+    # pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
+    pool = Pool(processes=25)  # with 100/25 that is 4 sets
     # result = pool.map(realization_recharge, range(100)) # original without adding inputs
     result = pool.map(run_rech, range(100))
     pool.close()
