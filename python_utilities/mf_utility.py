@@ -24,12 +24,13 @@ def get_layer_from_elev(elev, botm_slice, nlay):
                 elev_lay[j] = k + 1
     return(elev_lay.astype(int))
     
-def ghb_df(rows, cols, ghb_hd, distance):
+def ghb_df(rows, cols, ghb_hd, distance, width):
     """ Given rows and columns create GHB based on interpolated head levels
     INPUT:
-    rows, cols are 0 based row,column
+    rows, cols are 0 based row,column (array(n)))
     ghb_hd is a pd.Series with an index of 0-based row,cols 
-    distance is the GHB distnace used for all cells
+    distance is the GHB distance used for all cells
+    width is the GHB width used for all cells (float or array(n))
     OUTPUT:
     dataframe with the 0 based layer, row, column, boundary head and conductance"""
     # pull out head for rows and columns
@@ -49,7 +50,7 @@ def ghb_df(rows, cols, ghb_hd, distance):
             df.loc[n,'k'] = k
             n+=1
     df[['k','i','j']] = df[['k','i','j']].astype(int)
-    cond = hk[df.k, df.i, df.j]*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*delr/distance
+    cond = hk[df.k, df.i, df.j]*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*width/distance
     df.cond = cond
     df.bhead = ghb_hd.loc[list(zip(df.i, df.j))].value.values
     # drop cells where the head is below the deepest cell?
