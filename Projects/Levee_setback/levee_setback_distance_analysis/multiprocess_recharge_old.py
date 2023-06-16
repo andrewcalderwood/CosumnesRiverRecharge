@@ -129,36 +129,10 @@ xs_mins.index = xs_mins.index.astype(int)
 slope = xs_mins.diff().rolling(2, center=True, closed='right').mean().bfill()/2000*-1
 adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
 
-# rating curves for each segment and setback
-xs_flow_all = pd.read_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'))
 
-def depth_match(seg_flow, flow):
-    """ Given a XS (nseg, setback) return the expected depth (m) given a flow (cms)"""
-    # find flows above and below the input flow
-    flow_diff = (seg_flow.flow_cms-flow)
-    f_high = flow_diff[flow_diff>0].argsort().index[0]
-    f_low = flow_diff[flow_diff<0].argsort().index[-1]
-    match_d = seg_flow.loc[[f_low, f_high]].sort_values('flow_cms')
-    # linearly interpolate to calculate exact depth
-    flow_slope = (match_d.iloc[1].flow_cms-match_d.iloc[0].flow_cms)/(match_d.iloc[1].depth_m-match_d.iloc[0].depth_m)
-    out_depth = match_d.iloc[0].depth_m + (flow-match_d.iloc[0].flow_cms)/flow_slope
-    return(out_depth)
 ####################################################################################################
 #%% Recharge analysis ##
-def arr_to_h5(Q, rch_hf_arr, d_arr, h5_fn):
-    # convert arrays of annual rates to hdf5 files individually
-    f = h5py.File(h5_fn, "w")
-    grp = f.require_group('array') # makes sure group exists
-    grp.attrs['units'] = 'cubic meters/second'
-    grp.attrs['description'] = 'Each layer of the array is a day in the event'
-    dset = grp.require_dataset('flow', Q.shape, dtype='f', compression="gzip", compression_opts=4)
-    dset[:] = Q
-    dset = grp.require_dataset('rch_hf', rch_hf_arr.shape, dtype='f', compression="gzip", compression_opts=4)
-    dset[:] = rch_hf_arr
-    dset = grp.require_dataset('depth', d_arr.shape, dtype='f', compression="gzip", compression_opts=4)
-    dset[:] = d_arr
-    f.close()
-    
+
 
 def realization_recharge(t, str_setbacks, region, ft):
     # typical winter baseflow, peak flow, peak location, total time (days)
@@ -203,21 +177,18 @@ def realization_recharge(t, str_setbacks, region, ft):
                 # solve for depth that matches given flow, assume less than 1 cms is too small to calculate
                 if Q[qn, s,nseg] >1:
                     # solve for depth that matches given flow
-                    # res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                           method='Golden', tol=1E-3)
-                    # # if large flow error, likely stuck in local minimum try setting higher or lower
-                    # if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) > Q[qn, s,nseg]*1.05:
-                    #     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                   bounds=(1E-3,res.x-0.1), method='bounded')
-                    # if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) < Q[qn, s,nseg]*0.95:
-                    #     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                   bounds=(res.x+0.1,10), method='bounded')
-                    # if res.fun>0.05*Q[qn, s,nseg]: # greater than 5% difference try to fix with bounded solving
-                    #     print(str(nseg),' ', s, '%.2f'%res.fun, 'iter %i'%res.nit, ', ',res.success, 'd %.2f'%res.x)
-                    # depth = np.copy(res.x)
-                    # new depth solver uses pre-calculated rating curves
-                    seg_flow = xs_flow_all[(xs_flow_all.nseg==nseg)&(xs_flow_all.setback==setback)]
-                    depth = depth_match(seg_flow, flow=Q[qn, s, nseg])
+                    res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
+                                              method='Golden', tol=1E-3)
+                    # if large flow error, likely stuck in local minimum try setting higher or lower
+                    if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) > Q[qn, s,nseg]*1.05:
+                        res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
+                                      bounds=(1E-3,res.x-0.1), method='bounded')
+                    if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) < Q[qn, s,nseg]*0.95:
+                        res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
+                                      bounds=(res.x+0.1,10), method='bounded')
+                    if res.fun>0.05*Q[qn, s,nseg]: # greater than 5% difference try to fix with bounded solving
+                        print(str(nseg),' ', s, '%.2f'%res.fun, 'iter %i'%res.nit, ', ',res.success, 'd %.2f'%res.x)
+                    depth = np.copy(res.x)
                 else:
                     depth = 0
                 # join depth calculated at cross-section to corresponding model cells and corresponding setback
@@ -269,14 +240,12 @@ def realization_recharge(t, str_setbacks, region, ft):
                 
     # base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
     base_fn = join(data_dir, region, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
-    arr_to_h5(Q, rch_hf_arr, d_arr, base_fn+'output.hdf5')
-
     # saving all of the flow at all steps, setbacks is needed to post-process
     Q_out = np.reshape(Q, ((q_in.shape[0]*len(setbacks), xs_levee_smooth.shape[1]+1)))
-    # np.savetxt(base_fn+'flow.tsv', Q_out)
-    # # for recharge we want to aggregate across time steps but look at differences across setbacks
-    # rch_out = np.reshape(np.nansum(rch_hf_arr, axis=0), (len(setbacks)*nrow, ncol))
-    # np.savetxt(base_fn+'recharge.tsv', rch_out)
+    np.savetxt(base_fn+'flow.tsv', Q_out)
+    # for recharge we want to aggregate across time steps but look at differences across setbacks
+    rch_out = np.reshape(np.nansum(rch_hf_arr, axis=0), (len(setbacks)*nrow, ncol))
+    np.savetxt(base_fn+'recharge.tsv', rch_out)
     toc = time()
     print((toc-tic)/3600)
     return(Q, rch_hf_arr, d_arr, cell_frac)
@@ -285,19 +254,19 @@ def realization_recharge(t, str_setbacks, region, ft):
 #%% Make short code to loop over local zones
 
 # choose one function to use, regional or local
-# def run_rech(t):
-#     for zone in [1,2,3]:
-#         for ft in [1,2,3]:
-#             # 1, 2, 3 are floods long enough to apply to analysis
-#             base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
-#             os.makedirs(base_fn, exist_ok=True)
-#             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
-
 def run_rech(t):
-    region = 'regional'
-    for ft in [1,2,3]:
-        # 1, 2, 3 are floods long enough to apply to analysis
-        realization_recharge(t, str_setbacks, 'regional', ft)
+    for zone in [1,2,3]:
+        for ft in [1,2,3]:
+            # 1, 2, 3 are floods long enough to apply to analysis
+            base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
+            os.makedirs(base_fn, exist_ok=True)
+            realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
+
+# def run_rech(t):
+#     region = 'regional'
+#     for ft in [1,2,3]:
+#         # 1, 2, 3 are floods long enough to apply to analysis
+#         realization_recharge(t, str_setbacks, 'regional', ft)
 
 ###############################################################################
 #%% Multiprocess

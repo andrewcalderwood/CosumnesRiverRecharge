@@ -1,3 +1,7 @@
 # .gitignore removes files from GitHub syncing
 # blank line = no files, can be used to keep the file looking clean
 # the slash / is used as the directory separator
+Projects/Levee_setback/levee_setback_distance_analysis/.ipynb_checkpoints/03_Setback flow result plotting-checkpoint.ipynb
+Projects/Levee_setback/levee_setback_distance_analysis/.ipynb_checkpoints/08_connec3d-checkpoint.ipynb
+Projects/Levee_setback/levee_setback_distance_analysis/03_Setback flow result plotting.ipynb
+Projects/Levee_setback/levee_setback_distance_analysis/06_Muskingum_recharge.ipynb
