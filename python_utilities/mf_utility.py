@@ -24,37 +24,77 @@ def get_layer_from_elev(elev, botm_slice, nlay):
                 elev_lay[j] = k + 1
     return(elev_lay.astype(int))
     
-def ghb_df(rows, cols, ghb_hd, distance, width):
-    """ Given rows and columns create GHB based on interpolated head levels
-    INPUT:
-    rows, cols are 0 based row,column (array(n)))
-    ghb_hd is a pd.Series with an index of 0-based row,cols 
-    distance is the GHB distance used for all cells
-    width is the GHB width used for all cells (float or array(n))
-    OUTPUT:
-    dataframe with the 0 based layer, row, column, boundary head and conductance"""
-    # pull out head for rows and columns
-    head = ghb_hd.loc[list(zip(rows, cols))].value.values
-    ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay)
 
-    df = pd.DataFrame(np.zeros((np.sum(nlay - ghb_lay),5)))
-    df.columns = ['k','i','j','bhead','cond']
-    # get all of the i, j,k indices to reduce math done in the for loop
-    n=0
-    nk = -1
-    for i, j in list(zip(rows,cols)):
-        nk +=1
-        for k in np.arange(ghb_lay[nk], nlay):
-            df.loc[n,'i'] = i
-            df.loc[n,'j'] = j
-            df.loc[n,'k'] = k
-            n+=1
-    df[['k','i','j']] = df[['k','i','j']].astype(int)
-    cond = hk[df.k, df.i, df.j]*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*width/distance
-    df.cond = cond
-    df.bhead = ghb_hd.loc[list(zip(df.i, df.j))].value.values
-    # drop cells where the head is below the deepest cell?
-    return(df)
+def get_dates(dis, ref='end'):
+    """ Given a MODFLOW DIS file return datetimes given the model start datetime
+    input:
+    dis = flopy.modflow.ModflowDis object
+    ref = 'strt' or 'end' to specify how datetime should be kept
+    """
+    # specify string characters for timedelta and conversion factors from model unit to seconds
+    td_dict = {1:'s',2:'m',3:'h',4:'D'}
+    td_uni = 'timedelta64['+td_dict[dis.itmuni]+']'
+    tc_dict = {1:1,2:60,3:3600,4:86400}
+    # create copies for easier referencing
+    perlen = dis.perlen.array.copy()
+    nstp = dis.nstp.array.copy()
+    tsmult = dis.tsmult.array.copy()
+    ## process datetime reference ##
+    strt_date = pd.to_datetime(dis.start_datetime)
+    # the length of each period should correspond to the correct units
+    end_date = (strt_date + pd.Series(perlen.sum()).astype(td_uni))[0]
+    # with SS period near 0 no longer minus one
+    dates_per = strt_date + (perlen.cumsum()).astype(td_uni)
+    perlen_stp = np.repeat(perlen, nstp)
+    stp_len = []
+    for tn in np.arange(0, len(nstp)):
+        # calculate the multiplier for each step
+        stp_mult = ((tsmult[tn]*np.ones(nstp[tn])).cumprod()/tsmult[tn])
+        # fraction of period for each step times the period length to get the length of each step
+        stp_len = np.append(stp_len, perlen[tn]*stp_mult/stp_mult.sum())
+    # convert from model unit to seconds to maintain best accuracy with timedelta
+    # we want to create dates for the end of each timestep when the output is
+    td = (stp_len.cumsum()*tc_dict[dis.itmuni]).astype('timedelta64[s]')
+    dates_stps = strt_date + td
+    # in some cases it is better to represent output by date of start of each period
+    if ref=='strt':
+        dates_stps = pd.concat((pd.Series(strt_date), pd.Series(dates_stps[:-1])))
+    # get ALL stress periods and time steps list, not just those in the output
+    kstpkper = []
+    for n,stps in enumerate(nstp):
+        kstpkper += list(zip(np.arange(0,stps),np.full(stps,n)))
+
+    dt_ref = pd.DataFrame(dates_stps, columns=['dt'])
+    dt_ref['kstpkper'] = kstpkper
+    return(strt_date, end_date, dt_ref)
+    
+def clean_wb(model_ws, dt_ref):
+    """Give a volumetric water budget output from MF-OWHM,
+    return the water budget with a datetime column and 
+    the in and out columns with at least one non-zero value"""
+    # load summary water budget
+    wb = pd.read_csv(model_ws+'/flow_budget.txt', delimiter=r'\s+')
+
+    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
+    wb = wb.merge(dt_ref, on='kstpkper').set_index('dt')
+
+    # calculate change in storage
+    wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
+    # calculate total gw flow, sum GHB, CHD
+    wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
+    wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
+    wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
+    
+    wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
+    wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
+    wb_out_cols= wb_cols[wb_cols.str.contains('_OUT')]
+    wb_in_cols = wb_cols[wb_cols.str.contains('_IN')]
+    # only include columns with values used
+    wb_out_cols = wb_out_cols[np.sum(wb[wb_out_cols]>0, axis=0).astype(bool)]
+    wb_in_cols = wb_in_cols[np.sum(wb[wb_in_cols]>0, axis=0).astype(bool)]
+
+    return(wb, wb_out_cols, wb_in_cols)
+    
     
     
 def read_gage(gagenam):
@@ -63,7 +103,7 @@ def read_gage(gagenam):
     cols = gage.columns[1:-1]
     gage = gage.dropna(axis=1)
     gage.columns = cols
-    strt_date = pd.to_datetime(m.dis.start_datetime)
+    strt_date = pd.to_datetime(dis.start_datetime)
     gage['dt'] = strt_date+(gage.Time*24).astype('timedelta64[h]')
     gage = gage.set_index('dt')
     gage['dVolume'] = gage.Volume.diff()

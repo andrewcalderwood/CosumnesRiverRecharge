@@ -35,8 +35,9 @@ def lab_pnt(geom, scale = None, xscale = None, yscale = None):
 def plt_cln(ax):
     """ Set basic xy axis labels, reduce axis clutter"""
     ax.ticklabel_format(style='plain')
-    plt.ylabel('Easting (m)')
-    plt.xlabel('Northing (m)')
-    
+    plt.xlabel('Easting (m)')
+    plt.ylabel('Northing (m)')
+    # adjust major locators
     plt.locator_params(axis='x', nbins=5)
-    plt.locator_params(axis='y', nbins=6)
+    plt.locator_params(axis='y', nbins=5)
+    plt.yticks(rotation=90, verticalalignment = "center")
