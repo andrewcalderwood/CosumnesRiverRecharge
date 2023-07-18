@@ -1,0 +1,10 @@
+,freq,term,season,statistic,pvalue,perc_diff_in_means
+0,annual,Qout,Wet,2.646,0.0457,11.56
+0,annual,Qout,Dry,1.385,0.2246,-
+0,annual,Qout,Fall,-2.053,0.0953,-
+0,monthly,Qout,Wet,3.597,0.0006,11.56
+0,monthly,Qout,Dry,1.635,0.1065,-
+0,monthly,Qout,Fall,-2.342,0.022,-0.89
+0,daily,Qout,Wet,11.728,0.0,11.56
+0,daily,Qout,Dry,6.504,0.0,8.52
+0,daily,Qout,Fall,-3.038,0.0024,-0.89
