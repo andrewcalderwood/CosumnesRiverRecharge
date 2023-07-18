@@ -21,6 +21,10 @@ load("X.mat") % Load daily groundwater depths (ft)
 %%% Define which days in the season are irrigation days %%%
 I_SW = zeros(length(DATE),1);
 I_GW = zeros(length(DATE),1);
+
+% update depth to groundwater
+X = 90.*ones(132,1);
+
 for i = 1:n_irr
     I_SW(IRR_DAYS(i,1)+1,1) = I_WLEVELS(i);
     I_GW(IRR_DAYS(i,1)+1,1) = I_WLEVELS(i+n_irr);

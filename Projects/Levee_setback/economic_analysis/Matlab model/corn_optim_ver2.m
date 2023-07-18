@@ -30,8 +30,9 @@ p_e = 0.17; % Cost of energy for groundwater pumping ($/kWh)
 p_o = 956; % Variable operating costs per acre, excluding irrigation costs ($/acre)
 a = 1; % Parcel area
 gap_irr = 14; % Number of days between irrigations
-I_WTOTCON = [5 5]'; % Total surface water and groundwater available during the season (in)
 
+% adjust here for sensitivity testing
+I_WTOTCON = [5 10]'; % Total surface water and groundwater available during the season (in)
 %%% Create vectors of growing season dates %%%
 DATE = transpose(season_start:season_end); % Create vector of dates for growing season
 n_irr = floor(length(DATE)/gap_irr) + 1; % Calculate number of irrigations
@@ -55,16 +56,17 @@ PI_MAXUNCON = (-1)*PI_MAXUNCON; % Make profit positive
 
 %%% Calculate optimal irrigation schedule %%%
 I_WMAX0CON = zeros(1,2*n_irr); % Initial irrigation values for optimization
+% Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
 ACON = zeros(1,n_irr);
-ACON(1,1:n_irr) = ones(1,n_irr);
-ACON(2,(n_irr+1):(2*n_irr)) = ones(1,n_irr); % Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
+ACON(1,1:n_irr) = ones(1,n_irr); 
+ACON(2,(n_irr+1):(2*n_irr)) = ones(1,n_irr);
 AEQCON = []; % No equality contraints
 BEQCON = []; % No equality contraints
 I_WMAXLBCON = zeros(1,2*n_irr); % Irrigation cannot be negative
 [I_WMAXCON,PI_MAXCON] = fmincon(@corn_profit_ver2, I_WMAX0CON, ACON, I_WTOTCON, AEQCON, BEQCON, I_WMAXLBCON); % Calculate optimal irrigations using profit function
 PI_MAXCON = (-1)*PI_MAXCON; % Make profit positive
 
-%%% Plot irrigation during the season %%%
+%% Plot irrigation during the season
 IRR_DATES = NaT(n_irr,1);
 for i = 1:n_irr
     IRR_DATES(i,1) = DATE(IRR_DAYS(i,1)+1,1);
