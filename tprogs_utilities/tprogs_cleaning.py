@@ -24,6 +24,8 @@ def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info, **kwargs):
                              (tprogs_info[-1], dem_data.shape[0], dem_data.shape[1])))
     # flip tprogs model along z axis to match modflow definition of 0 as top (TPROGS says 0 is bottom)
     tprogs = np.flip(tprogs_elev,axis=0)
+    # flip along x-axis as tprogs has bottom row as 0 and modflow has top row as 0
+    tprogs = np.flip(tprogs_elev,axis=1)
     # the bottom layer of the tprogs model is at -80 m amsl and the top layer is 80 m amsl
     delz = (tprogs_info[0] - tprogs_info[1])/tprogs_info[2]
     for t, k in enumerate(np.arange(tprogs_info[0],tprogs_info[1],-delz)):
