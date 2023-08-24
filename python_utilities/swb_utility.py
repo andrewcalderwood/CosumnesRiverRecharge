@@ -5,10 +5,9 @@ First iteration as a Module August 2023
 Author: Andrew Calderwood
 """
 
-import matplotlib.pyplot as plt
-import geopandas as gpd
 import numpy as np
 import pandas as pd
+from os.path import join
 
 import h5py
 
@@ -69,7 +68,7 @@ def calc_pc(wc, soil_por, soil_Ks, soil_m):
     pc = soil_Ks*(sat)*(1- (1-(sat)**(1/soil_m))**soil_m)**2
     return(pc)
 
-def load_swb_data(strt_date, end_date, param):
+def load_swb_data(strt_date, end_date, param, uzf_dir):
     """Returns data in an array format with the first dimension for time
     and then either a 1D or 2D array representing fields or model grid cells"""
     nper_tr = (end_date-strt_date).days+1
