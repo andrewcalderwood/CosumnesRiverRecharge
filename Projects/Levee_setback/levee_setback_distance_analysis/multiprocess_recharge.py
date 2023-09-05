@@ -73,15 +73,12 @@ num_segs = xs_levee_smooth.shape[1]
 # wse_grid.to_file(gis_dir+'wse_grid.shp')
 
 import h5py
+# load array identifying row,col to setback ID (1,17)
 f = h5py.File(join(chan_dir, 'setback_locs.hdf5'), "r")
 # upper = 3, middle = 2, lower=1
 local_str_setbacks = f['setbacks']['local'][:]
 str_setbacks = f['setbacks']['regional'][:]
 f.close()
-# load array identifying row,col to setback ID (1,17)
-# str_setbacks = np.loadtxt(chan_dir+ 'regional_str_setback_id_arr.tsv', delimiter='\t').astype(int)
-# # str_setbacks = ma.masked_where(str_setbacks==0,str_setbacks)
-# str_setbacks = np.where(str_setbacks==0,np.NaN, str_setbacks)
 
 # load array identifying row,col to XS id (1,28)
 xs_arr = np.loadtxt(chan_dir+'XS_num_grid_reference.tsv')
@@ -92,7 +89,8 @@ flood_type = pd.read_csv(join(box_dir, 'whipple_grp6_w97ftmedians.csv'),index_co
 
 # tprogs near surface data
 soil_thick=2
-fn = chan_dir+'/tprogs_geomK_'+str(soil_thick)+'m_depth.tsv'
+# fn = chan_dir+'/tprogs_geomK_'+str(soil_thick)+'m_depth.tsv' # old version with linear dem and old function for sampling tprogs
+fn = chan_dir+'/tprogs_geomK_'+str(soil_thick)+'m_depth_dem_mean.tsv'
 # units of m/day
 soil_K_out = np.loadtxt(fn, delimiter='\t')
 soil_K = np.reshape(soil_K_out, (100, nrow, ncol))
@@ -145,7 +143,7 @@ def depth_match(seg_flow, flow):
     return(out_depth)
 ####################################################################################################
 #%% Recharge analysis ##
-def arr_to_h5(Q, rch_hf_arr, d_arr, h5_fn):
+def arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, h5_fn):
     # convert arrays of annual rates to hdf5 files individually
     f = h5py.File(h5_fn, "w")
     grp = f.require_group('array') # makes sure group exists
@@ -157,6 +155,8 @@ def arr_to_h5(Q, rch_hf_arr, d_arr, h5_fn):
     dset[:] = rch_hf_arr
     dset = grp.require_dataset('depth', d_arr.shape, dtype='f', compression="gzip", compression_opts=4)
     dset[:] = d_arr
+    dset = grp.require_dataset('XS_depth', d_arr.shape, dtype='f', compression="gzip", compression_opts=4)
+    dset[:] = d_xs
     f.close()
     
 
@@ -174,7 +174,9 @@ def realization_recharge(t, str_setbacks, region, ft):
     q_in = np.append(q_rise, q_fall[1:])
 
     # allocate arrays - num flow steps, num setbacks, num segments
-    Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1))
+    Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1)) # discharge for each XS
+    d_xs = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1)) # depth for each XS
+
     # set inflow for segment 1 across all setbacks and for all times
     # rate of cubic meters per second
     Q[:,:,0] = np.repeat(q_in.reshape(-1,1), len(setbacks), axis=1)
@@ -202,32 +204,19 @@ def realization_recharge(t, str_setbacks, region, ft):
                 fp_zon = (xs_arr==nseg)&(str_setbacks[s]==1)
                 # solve for depth that matches given flow, assume less than 1 cms is too small to calculate
                 if Q[qn, s,nseg] >1:
-                    # solve for depth that matches given flow
-                    # res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                           method='Golden', tol=1E-3)
-                    # # if large flow error, likely stuck in local minimum try setting higher or lower
-                    # if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) > Q[qn, s,nseg]*1.05:
-                    #     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                   bounds=(1E-3,res.x-0.1), method='bounded')
-                    # if mannings(res.x, xs_elevs, n, slope.iloc[nseg]) < Q[qn, s,nseg]*0.95:
-                    #     res = minimize_scalar(min_Q, args = (xs_elevs, n, slope.iloc[nseg], Q[qn, s,nseg]), 
-                    #                   bounds=(res.x+0.1,10), method='bounded')
-                    # if res.fun>0.05*Q[qn, s,nseg]: # greater than 5% difference try to fix with bounded solving
-                    #     print(str(nseg),' ', s, '%.2f'%res.fun, 'iter %i'%res.nit, ', ',res.success, 'd %.2f'%res.x)
-                    # depth = np.copy(res.x)
                     # new depth solver uses pre-calculated rating curves
                     seg_flow = xs_flow_all[(xs_flow_all.nseg==nseg)&(xs_flow_all.setback==setback)]
                     depth = depth_match(seg_flow, flow=Q[qn, s, nseg])
                 else:
                     depth = 0
+                # save depth to an array for export
+                d_xs[qn, s, nseg] = depth
                 # join depth calculated at cross-section to corresponding model cells and corresponding setback
                 # add elevation to minimum to apply segment midpoint as elevation rather than lowest point
-#                 wse_arr[s, fp_zon] = depth + xs_elevs.min() + slope.iloc[nseg]*1000
                 wse_arr[s, fp_zon] = depth + xs_mins_arr[fp_zon]
-#                 if any(np.isnan(xs_mins_arr[fp_zon])):
-#                     print('Seg',str(nseg),'Setback',str(s), xs_mins_arr[fp_zon])
                 # calculate depth of water at different elevation percentiles for segment and setback
-                diff = wse_arr[s,:]*fp_zon - arr_elev
+                # to account for flood connectivity and avoid negligible, require a minimum of 0.1 m 
+                diff = wse_arr[s,:]*fp_zon - 0.1 - arr_elev
                 # when depth is negative remove
                 diff[diff<0] = 0 #np.NaN
                 # only keep cells where water level is above lowest elevation
@@ -269,14 +258,8 @@ def realization_recharge(t, str_setbacks, region, ft):
                 
     # base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
     base_fn = join(data_dir, region, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
-    arr_to_h5(Q, rch_hf_arr, d_arr, base_fn+'output.hdf5')
+    arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, base_fn+'output.hdf5')
 
-    # saving all of the flow at all steps, setbacks is needed to post-process
-    Q_out = np.reshape(Q, ((q_in.shape[0]*len(setbacks), xs_levee_smooth.shape[1]+1)))
-    # np.savetxt(base_fn+'flow.tsv', Q_out)
-    # # for recharge we want to aggregate across time steps but look at differences across setbacks
-    # rch_out = np.reshape(np.nansum(rch_hf_arr, axis=0), (len(setbacks)*nrow, ncol))
-    # np.savetxt(base_fn+'recharge.tsv', rch_out)
     toc = time()
     print((toc-tic)/3600)
     return(Q, rch_hf_arr, d_arr, cell_frac)
@@ -293,11 +276,11 @@ def realization_recharge(t, str_setbacks, region, ft):
 #             os.makedirs(base_fn, exist_ok=True)
 #             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
-def run_rech(t):
-    region = 'regional'
-    for ft in [1,2,3]:
-        # 1, 2, 3 are floods long enough to apply to analysis
-        realization_recharge(t, str_setbacks, 'regional', ft)
+# def run_rech(t):
+#     region = 'regional'
+#     for ft in [1,2,3]:
+#         # 1, 2, 3 are floods long enough to apply to analysis
+#         realization_recharge(t, str_setbacks, 'regional', ft)
 
 ###############################################################################
 #%% Multiprocess
