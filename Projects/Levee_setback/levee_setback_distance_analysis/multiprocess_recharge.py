@@ -143,7 +143,7 @@ def depth_match(seg_flow, flow):
     return(out_depth)
 ####################################################################################################
 #%% Recharge analysis ##
-def arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, h5_fn):
+def arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, cell_frac, h5_fn):
     # convert arrays of annual rates to hdf5 files individually
     f = h5py.File(h5_fn, "w")
     grp = f.require_group('array') # makes sure group exists
@@ -155,8 +155,10 @@ def arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, h5_fn):
     dset[:] = rch_hf_arr
     dset = grp.require_dataset('depth', d_arr.shape, dtype='f', compression="gzip", compression_opts=4)
     dset[:] = d_arr
-    dset = grp.require_dataset('XS_depth', d_arr.shape, dtype='f', compression="gzip", compression_opts=4)
+    dset = grp.require_dataset('XS_depth', d_xs.shape, dtype='f', compression="gzip", compression_opts=4)
     dset[:] = d_xs
+    dset = grp.require_dataset('cell_frac', cell_frac.shape, dtype='f', compression="gzip", compression_opts=4)
+    dset[:] = cell_frac
     f.close()
     
 
@@ -258,7 +260,7 @@ def realization_recharge(t, str_setbacks, region, ft):
                 
     # base_fn = join(data_dir, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
     base_fn = join(data_dir, region, 'type'+str(ft), 'r'+str(t).zfill(3)+'_')
-    arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, base_fn+'output.hdf5')
+    arr_to_h5(Q, rch_hf_arr, d_arr, d_xs, cell_frac, base_fn+'output.hdf5')
 
     toc = time()
     print((toc-tic)/3600)
@@ -276,11 +278,11 @@ def realization_recharge(t, str_setbacks, region, ft):
 #             os.makedirs(base_fn, exist_ok=True)
 #             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
-# def run_rech(t):
-#     region = 'regional'
-#     for ft in [1,2,3]:
-#         # 1, 2, 3 are floods long enough to apply to analysis
-#         realization_recharge(t, str_setbacks, 'regional', ft)
+def run_rech(t):
+    region = 'regional'
+    for ft in [1,2,3]:
+        # 1, 2, 3 are floods long enough to apply to analysis
+        realization_recharge(t, str_setbacks, 'regional', ft)
 
 ###############################################################################
 #%% Multiprocess
