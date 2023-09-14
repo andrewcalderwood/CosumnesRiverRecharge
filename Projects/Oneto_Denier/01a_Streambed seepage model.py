@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -20,11 +21,12 @@
 # ## Model set up
 # Initial set up was a year long flow test with the primary boundary condition the SFR package and the GHB included to allow lateral groundwater outflow which is expected as the water entering the perched aquifers may transfer horizontally. Added evapotranspiration with EVT to allow dry season perched aquifer usage. Recharge was added then removed because it caused too much of a jump in levels. Added lake package to represent floodplain recharge in the 2D floodplain.
 
+
 # %%
 # standard python utilities
 import os
 import sys
-from os.path import basename, dirname, join, exists
+from os.path import basename, dirname, join, exists, expanduser
 import glob
 import time
 
@@ -50,11 +52,10 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
 
 # %%
-doc_dir = os.getcwd()
-while os.path.basename(doc_dir) != 'Documents':
-    doc_dir = os.path.dirname(doc_dir)
+usr_dir = expanduser('~')
+doc_dir = join(usr_dir, 'Documents')
 # dir of all gwfm data
-gwfm_dir = os.path.dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
+gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 # dir of stream level data for seepage study
 proj_dir = gwfm_dir + '/Oneto_Denier/'
 dat_dir = proj_dir+'Stream_level_data/'
@@ -97,7 +98,7 @@ tprogs_info = [80, -80, 320]
 #
 
 # %%
-ss_bool = False
+ss_bool = False # false = no steady state
 
 # %%
 # Oneto-Denier data is about 2012-2019
@@ -349,8 +350,7 @@ for k in np.arange(1,nlay_tprogs):
 botm = np.zeros(m.dis.botm.shape)
 botm[:nlay_tprogs] = np.copy(tprogs_botm)
 if nlay-nlay_tprogs==1:
-    botm[-1] = -200
-
+    botm[-1] = -200 
 
 
 # %%
@@ -392,7 +392,14 @@ else:
 params['K_m_d'] = params.K_m_s * 86400    
 
 # %%
+# find the best realization to use when doing floodplain study
+top10 = pd.read_csv(join(proj_dir, 'upscale4x_top_10_accurate_realizations.csv'),index_col=0)
+t = top10.idxmax().RMSE
+print(t)
+top10.loc[t]
+# top10
 
+# %%
 t=11 # realization with NSE>0.5
 tprogs_line = np.loadtxt(tprogs_files[t])
 # filter elevation by regional model
@@ -1198,13 +1205,8 @@ for k in XSg.xs_num.round(): # round is fix for subtracting to id diversion segm
 
 
 # %%
-sfr.check()
 
-# %%
-# FLOWTAB = mb4rl.discharge_va.values
-# DPTHTAB = mb4rl.gage_height_va.values
-# WDTHTAB = mb4rl.chan_width.values
-# sfr.channel_flow_data = {0: {1: [FLOWTAB, DPTHTAB, WDTHTAB]}}
+# sfr.check()
 
 # %%
 # sfr.write_file()
@@ -1688,9 +1690,6 @@ evt = flopy.modflow.ModflowEvt(model=m, nevtop = 3, ievt = ievt,
 # evt.write_file()
 
 
-# %%
-# m.write_name_file()
-
 # %% [markdown]
 # We need to be careful to avoid double accounting for ET as noted by Graham. He was concerned that ET was removed during pre-processing and during model runs which is a valid point. 
 # - Here we should remove ET from the soil budget by applying precipitation in place of deep percolation in zones where we expect GW ET (rooting depth > 2m).
@@ -1704,6 +1703,7 @@ adj_ss_finf_local = ss_finf_local.copy().mean(axis=0)
 adj_finf[:, ext_dp>2] = rain_arr[:, ext_dp>2]
 adj_ss_finf_local[ext_dp>2] = rain_arr_ss[ext_dp>2]
 
+
 # %%
 # finf_spd = { (j): finf_local[j-1,:,:] for j in np.arange(time_tr0,nper)}
 finf_spd = { (j): adj_finf[j-1,:,:] for j in np.arange(time_tr0,nper)}
@@ -1712,10 +1712,11 @@ if ss_bool:
     finf_spd[0] = adj_ss_finf_local
 
 
+
 # %%
 # nrchtop : rch to which layer, rech:array of recharge rates
 rch = flopy.modflow.ModflowRch(model=m, nrchop = 3, rech = finf_spd, ipakcb = 55)
-# rch.write_file()
+
 
 # %%
 # rch.write_file()
@@ -1773,6 +1774,7 @@ if ss_bool == True:
     ET_ag = np.concatenate((ET_ag_SS, ET_ag), axis=0)
 
 # %%
+
 wells_grid = pd.read_csv(gwfm_dir+'/WEL_data/wells_grid.csv')
 wells_grid = gpd.GeoDataFrame(wells_grid, geometry = gpd.points_from_xy(wells_grid.easting, wells_grid.northing),
                               crs='epsg:32610')
@@ -1839,6 +1841,7 @@ for n,d in enumerate(dates):
     wel_ETc_dict[n+time_tr0] = fields_spd[['layer','row','column','flux']].values
 
 # %%
+
 # Create well flopy object
 wel = flopy.modflow.ModflowWel(m, stress_period_data=wel_ETc_dict,ipakcb=55)
 

@@ -282,11 +282,11 @@ def run_rech(t):
             os.makedirs(base_fn, exist_ok=True)
             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
-# def run_rech(t):
-#     region = 'regional'
-#     for ft in [1,2,3]:
-#         # 1, 2, 3 are floods long enough to apply to analysis
-#         realization_recharge(t, str_setbacks, 'regional', ft)
+def run_rech(t):
+    region = 'regional'
+    for ft in [1,2,3]:
+        # 1, 2, 3 are floods long enough to apply to analysis
+        realization_recharge(t, str_setbacks, 'regional', ft)
 
 ###############################################################################
 #%% Multiprocess

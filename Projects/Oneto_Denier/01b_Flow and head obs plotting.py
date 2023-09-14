@@ -15,12 +15,11 @@
 # %%
 # standard python utilities
 import os
-from os.path import join, basename,dirname
+from os.path import join, basename,dirname, exists, expanduser
 import sys
 import glob
 import pandas as pd
 import numpy as np
-import calendar
 import time
 
 # standard python plotting utilities
@@ -30,8 +29,8 @@ import matplotlib.dates as mdates
 import seaborn as sns
 
 # standard geospatial python utilities
-import pyproj # for converting proj4string
-import shapely
+# import pyproj # for converting proj4string
+# import shapely
 import geopandas as gpd
 # import rasterio
 
@@ -44,9 +43,8 @@ from matplotlib.ticker import MaxNLocator
 
 
 # %%
-doc_dir = os.getcwd()
-while basename(doc_dir) != 'Documents':
-    doc_dir = dirname(doc_dir)
+usr_dir = expanduser('~')
+doc_dir = join(usr_dir, 'Documents')
     
 # dir of all gwfm data
 gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
@@ -63,18 +61,20 @@ py_dir = doc_dir +'GitHub/CosumnesRiverRecharge/python_utilities/'
 
 
 # %%
+
 def add_path(fxn_dir):
     """ Insert fxn directory into first position on path so local functions supercede the global"""
     if fxn_dir not in sys.path:
         sys.path.insert(0, fxn_dir)
 # flopy github path - edited
 add_path(doc_dir+'/GitHub/flopy')
-import flopy 
-# other functions
+
+import flopy
+
 py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 
-from mf_utility import get_layer_from_elev
+from mf_utility import get_dates, get_layer_from_elev, clean_wb
 from map_cln import gdf_bnds, plt_cln
 
 # %%
@@ -212,10 +212,7 @@ rm_elev = rm_elev.drop_duplicates(['Sensor'])
 rm_elev = rm_elev.sort_values('iseg')
 
 # %%
-# rm_elev[['iseg','z_m', 'Sensor', 'MPE (meters)', 'dist_m']]
-# rm_elev.columns
 
-# %%
 # elevation check for Graham to show the difference between wells and the river
 fig,ax=plt.subplots()
 # rm_elev
@@ -230,30 +227,9 @@ plt.xticks(rotation=90);
 # ## Model output - time variant
 
 # %%
-strt_date = pd.to_datetime(m.dis.start_datetime)
-# end_date = (strt_date + pd.Series((m.dis.nper-1)*15).astype('timedelta64[m]'))[0] # SS
-end_date = (strt_date + pd.Series(m.dis.perlen.array.sum()).astype('timedelta64[D]'))[0]
-# with SS period near 0 no longer minus one
-dates_per = strt_date + (m.dis.perlen.array.cumsum()).astype('timedelta64[D]')
-stplen = m.dis.perlen.array/m.dis.nstp.array
-# astype timedelta64 results in save days
-hrs_from_strt = ((np.append([0], np.repeat(stplen, m.dis.nstp.array)[:-1])).cumsum()*24).astype('timedelta64[h]')
-dates_stps = strt_date + hrs_from_strt
 
+strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 
-# %%
-hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
-spd_stp = hdobj.get_kstpkper()
-times = hdobj.get_times()
-
-# get ALL stress periods and time steps list, not just those in the output
-kstpkper = []
-for n,stps in enumerate(m.dis.nstp.array):
-    kstpkper += list(zip(np.arange(0,stps),np.full(stps,n)))
-
-dt_ref = pd.DataFrame(dates_stps, columns=['dt'])
-dt_ref['kstpkper'] = kstpkper
-# dt_ref
 
 # %%
 chk_ws = join(loadpth,'parallel_oneto_denier_upscale4x_2014_2018','realization011')
@@ -271,6 +247,7 @@ def clean_wb(flow_name, dt_ref):
 
     # calculate change in storage
     wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
+    wb['dSTORAGE_sum'] = wb.dSTORAGE.cumsum()
     # calculate total gw flow, sum GHB, CHD
     wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
     wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
@@ -293,15 +270,9 @@ wb, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget.txt', dt_ref)
 # %%
 wb[wb_out_cols].mean(), wb[wb_in_cols].mean()
 
-# %%
-wb_chk[wb_out_cols].mean(), wb_chk[wb_in_cols].mean()
 
 # %%
-
-# %%
-
-# %%
-wb_chk, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget_old.txt', dt_ref)
+# wb_chk, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget_old.txt', dt_ref)
 
 # %%
 fig,ax= plt.subplots(3,1, sharex=True)
@@ -385,8 +356,9 @@ from sklearn.metrics import r2_score, mean_squared_error
 def nse(targets,predictions):
     return 1-(np.sum((targets-predictions)**2)/np.sum((targets-np.mean(predictions))**2))
 
-def clean_hob(model_ws):
-    hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
+
+def clean_hob(model_ws, name='MF.hob.out'):
+    hobout = pd.read_csv(join(model_ws,name),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
                          dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
     hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split('p',n=2, expand=True)
     hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
@@ -404,6 +376,7 @@ def clean_hob(model_ws):
 # hobout = clean_hob(chk_ws)
 hobout = clean_hob(model_ws)
 
+
 # removing oneto ag because of large depth offset
 hobout = hobout[hobout.Sensor != 'MW_OA']
 
@@ -414,7 +387,7 @@ mw_stats['r2'] = 0
 for s in hobout.Sensor.unique():
     df_s = hobout[hobout.Sensor==s]
     mw_stats.loc[s,'r2'] = r2_score(df_s.obs_val, df_s.sim_val)
-    mw_stats.loc[s,'RMSE'] = mean_squared_error(df_s.obs_val, df_s.sim_val, squared=False)
+    mw_stats.loc[s,'RMSE'] = mean_squared_error(df_s.obs_val, df_s.sim_val, squared=False) # false returns RMSE instead of MSE
     mw_stats.loc[s,'NSE'] = nse(df_s.obs_val, df_s.sim_val)
 
 t=0
