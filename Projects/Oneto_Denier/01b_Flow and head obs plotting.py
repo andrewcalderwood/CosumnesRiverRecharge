@@ -61,10 +61,6 @@ py_dir = doc_dir +'GitHub/CosumnesRiverRecharge/python_utilities/'
 
 
 # %%
-x=2
-
-
-# %%
 def add_path(fxn_dir):
     """ Insert fxn directory into first position on path so local functions supercede the global"""
     if fxn_dir not in sys.path:
@@ -178,11 +174,11 @@ for p in vka_quants.index:
 # grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
 
 # %%
-# grid_sfr.plot('facies', legend=True)
+grid_sfr.plot('facies', legend=True)
 
 # %%
-lak_shp = join(gwfm_dir,'LAK_data/floodplain_delineation')
-lak_extent = gpd.read_file(join(lak_shp,'LCRFR_ModelDom_2017/LCRFR_2DArea_2015.shp' )).to_crs('epsg:32610')
+# lak_shp = join(gwfm_dir,'LAK_data/floodplain_delineation')
+# lak_extent = gpd.read_file(join(lak_shp,'LCRFR_ModelDom_2017/LCRFR_2DArea_2015.shp' )).to_crs('epsg:32610')
 
 
 # %% [markdown]
@@ -215,13 +211,13 @@ rm_elev = rm_elev.sort_values('iseg')
 
 # %%
 # elevation check for Graham to show the difference between wells and the river
-fig,ax=plt.subplots()
-# rm_elev
-rm_elev.plot(x='Sensor',y='z_m_min', ax=ax, kind='scatter', color='red',label='River Min')
-rm_elev.plot(x='Sensor',y='z_m_min_cln',ax=ax, kind='scatter', color='black', label='River Min adj')
-rm_elev.plot(x='Sensor',y='MPE (meters)',ax=ax, kind='scatter', color='brown', label='Well MPE')
-plt.ylabel('Elevation (m AMSL)')
-plt.xticks(rotation=90);
+# fig,ax=plt.subplots()
+# # rm_elev
+# rm_elev.plot(x='Sensor',y='z_m_min', ax=ax, kind='scatter', color='red',label='River Min')
+# rm_elev.plot(x='Sensor',y='z_m_min_cln',ax=ax, kind='scatter', color='black', label='River Min adj')
+# rm_elev.plot(x='Sensor',y='MPE (meters)',ax=ax, kind='scatter', color='brown', label='Well MPE')
+# plt.ylabel('Elevation (m AMSL)')
+# plt.xticks(rotation=90);
 # rm_elev.
 
 # %% [markdown]
@@ -232,9 +228,8 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 
 
 # %%
-chk_ws = join(loadpth,'parallel_oneto_denier_upscale4x_2014_2018','realization011')
-chk_ws
-
+# chk_ws = join(loadpth,'parallel_oneto_denier_upscale4x_2014_2018','realization011')
+# chk_ws
 
 # %%
 
@@ -268,12 +263,8 @@ def clean_wb(flow_name, dt_ref):
 wb, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget.txt', dt_ref)
 
 # %%
+print('Mean water budget ($m^3/day$)')
 wb[wb_out_cols].mean(), wb[wb_in_cols].mean()
-
-# %%
-
-# %%
-# wb_chk, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget_old.txt', dt_ref)
 
 # %%
 fig,ax= plt.subplots(3,1, sharex=True)
@@ -313,9 +304,6 @@ ext_dp = m.evt.exdp.array[0][0]
 ievt = m.evt.ievt.array[0][0]
 surf = m.evt.surf.array[0][0]
 
-
-# %%
-# wb.iloc[0]
 
 # %%
 # hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
@@ -374,7 +362,7 @@ def clean_hob(model_ws, name='MF.hob.out'):
 
 # %%
 # hobout = clean_hob(chk_ws)
-hobout = clean_hob(model_ws, 'MF.hob_chk.out')
+hobout = clean_hob(model_ws, 'MF.hob.out')
 
 # removing oneto ag because of large depth offset
 hobout = hobout[hobout.Sensor != 'MW_OA']
@@ -422,6 +410,15 @@ for n in np.arange(0,len(axes)):
 #     axes[n].axhline(mw_dat['bot_screen_m'].values[0]-1, ls='--', linewidth=3, color='black')
 
 # %%
+mw_chk = 'MW_19'
+fig,ax = plt.subplots(1+len(wb_out_cols),1, figsize=(6.5, 8), sharex=True)
+sns.lineplot(hob_long[hob_long.Sensor== mw_chk], x='dt',y='gwe', hue='type', ax=ax[0])
+
+for n, wb_n in enumerate(wb_out_cols):
+    wb.plot(y=wb_n, ax=ax[n+1], legend=False)
+    ax[n+1].set_ylabel(wb_out_cols[n].split('_')[0])
+
+# %%
 # aggregate error for spatial plotting by month average?
 
 hob_diff = hob_long.pivot_table(index=['dt','Sensor'],values='gwe',columns='type')
@@ -430,6 +427,10 @@ hob_diff['h_diff'] = hob_diff.sim_val - hob_diff.obs_val
 hob_diff_mon = hob_diff.reset_index().set_index('dt').groupby('Sensor').resample('MS').mean()
 hob_diff_mon = hob_diff_mon[['h_diff']].reset_index()
 # hob_diff_mon
+
+# %%
+import flopy.utils.binaryfile as bf
+hdobj = bf.HeadFile(join(model_ws,'MF.hds'))
 
 # %%
 # t_plt = '2017-11-01'
@@ -441,10 +442,7 @@ diff_plt = hob_diff_mon[hob_diff_mon.dt == t_plt]
 diff_plt = rm_grid.join(diff_plt.set_index('Sensor'),on='Sensor')
 
 fig,ax=plt.subplots(figsize=(8, 8))
-# m_domain.plot(ax=ax,color='None')
 mapview = flopy.plot.PlotMapView(model=m,ax=ax)
-
-gdf_bnd = gdf_bnds(rm_grid,buf=400,ax=ax)
 
 spd = dt_ref[dt_ref.dt==t_plt].kstpkper.values[0]
 avg_sfr_lay = int(np.round(grid_sfr.k.mean()))
@@ -453,21 +451,21 @@ head = hdobj.get_data((0,spd[-1]))[avg_sfr_lay] #m.dis.top.array -
 head[head==-1e30] = np.nan
 # m_domain.plot(ax=ax_n,color='none')
 im = mapview.contour_array(head, masked_values=[-999.99, -1e30], ax=ax)
-# gdf_bnd = gdf_bnds(rm_grid,buf=400,ax=ax)
-
 plt.colorbar(im, ax=ax, shrink = 0.4)
 plt.clabel(im)
 
+mapview.plot_array(ext_dp, ax=ax)
 grid_sfr.plot(color='blue', ax=ax)
-lak_extent.plot(color='none', ax=ax)
+# lak_extent.plot(color='none', ax=ax)
 diff_plt.plot('h_diff', scheme='Quantiles', k = 6, ax=ax,
                   legend=True,cmap='bwr', legend_kwds={'loc':'lower right' ,'title':'Error (Sim - Obs)'})
 
 rm_grid.apply(lambda x: ax.annotate(x.Sensor.replace('MW_',''), xy=x.geometry.coords[0], ha='center', fontsize=6,
                                     xytext = (5,10), textcoords='offset pixels',
-#                                     arrowprops = {'shrink':1},
                                     bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2)
                                                         ),axis=1);
+gdf_bnd = gdf_bnds(rm_grid,buf=100, ax=ax)
+
 ax.set_title(t_plt)
 
 ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
@@ -549,6 +547,8 @@ for n, wb_n in enumerate(wb_out_cols):
     wb.plot(y=wb_n, ax=ax[n], legend=False)
     ax[n].set_ylabel(wb_out_cols[n].split('_')[0])
 
+# %%
+
 # %% [markdown]
 # ## SFR Plotting
 
@@ -601,42 +601,6 @@ sfrdf =  clean_sfr_df(model_ws)
 sns.relplot(sfrdf.groupby(['WY','segment']).sum(numeric_only=True), x='segment',y='flowing', hue='WY')
 
 # %%
-# fig, ax = plt.subplots(1,3, figsize=(16,4))
-# for s in [1,30,55]:
-#     sfrdf[sfrdf.segment==s].plot(y='Qout_cfs',ax=ax[0], label=s)
-#     sfrdf[sfrdf.segment==s].plot(y='depth',ax=ax[1], label=s)
-#     sfrdf[sfrdf.segment==s].plot(y='Qaquifer_cfs',ax=ax[2], label=s)
-
-
-# %%
-# sfrdf.groupby('segment').mean()['gradient'].plot()
-
-# %%
-
-x = int(grid_sfr.facies.isin(['gravel','sand']).sum())
-y = sfrdf[sfrdf.facies.isin(['gravel','sand'])].resample('AS').mean(numeric_only=True)
-y_plt = y[['Qbase','connected']]
-y_plt['num_coarse'] = x
-y_plt['year'] = y_plt.index.year
-y_sym = ['.','x','*','s', 'D']
-
-fig, ax = plt.subplots(1,2,figsize=(8,3))
-ax[0].set_ylabel('Mean Annual Baseflow ($m^3/day$)')
-ax[0].set_xlabel('Number of Coarse Stream Segments')    
-ax[1].set_ylabel('Fraction of Time Connected')
-ax[1].set_xlabel('Number of Coarse Stream Segments')
-    
-for n, yr in enumerate(y_plt.year):
-    # ax[0].scatter(np.repeat(x, len(y1)), y1.Qbase.values)
-    y_plt[y_plt.year==yr].plot.scatter('num_coarse','Qbase', ax=ax[0],  marker=y_sym[n])
-
-    # ax[1].scatter(np.repeat(x, len(y1)), y1.connected.values)
-    y_plt[y_plt.year==yr].plot.scatter('num_coarse','connected', ax=ax[1], marker=y_sym[n])
-
-
-plt.legend(y_plt.year)
-
-# %%
 # grid_sfr[['iseg','ireach','facies']]
 sfr_facies_sum = sfrdf.groupby(['dt','facies']).sum(numeric_only=True)
 seep_facies_sum = sfr_facies_sum[['Qrech','Qbase']].melt(ignore_index=False)
@@ -653,7 +617,7 @@ seep_facies_sum = sfr_facies_sum[['Qrech','Qbase']].melt(ignore_index=False)
 fig,ax = plt.subplots(2,2, figsize=(12,8), sharex=True, sharey=True)#
 
 df_rech= seep_facies_sum[seep_facies_sum.variable=='Qrech'].reset_index('facies')
-for n, f in enumerate(['mud','sandy mud','sand','gravel']):
+for n, f in enumerate(df_rech.facies.unique()):
     ax_n = ax[int(n/2), n%2]
     df_plt = df_rech[df_rech.facies==f]
     df_plt.index = pd.to_datetime(df_plt.index)
@@ -677,10 +641,12 @@ g.set(yscale='log')
 
 # %%
 
+# %%
+
 # spd_hd = dt_ref[dt_ref.dt == '2020-05-21'].kstpkper.values[0]
 # head = hdobj.get_data(spd_hd)[0][0]
 
-for t in spd_stp[0::90]: # every 7 days 
+for t in dt_ref.kstpkper.values[0::90]: # every 7 days 
 #     spd_hd = dt_ref[dt_ref.dt == t].kstpkper.values[0]
     head = hdobj.get_data(t)[grid_sfr.k, grid_sfr.i, grid_sfr.j]
     head = head[head!=-1e30]
@@ -703,7 +669,7 @@ ny = 4
 fig,ax = plt.subplots(ny,nx, figsize=(12,12),sharex=True, sharey=True)
 
 # fig.tight_layout()
-for n,t in enumerate(spd_stp[::180][1:]):
+for n,t in enumerate(dt_ref.kstpkper.values[::180][1:]):
     head = hdobj.get_data(t)[avg_sfr_lay] #m.dis.top.array - 
         
     ax_n = ax[int(n / nx), n % nx]

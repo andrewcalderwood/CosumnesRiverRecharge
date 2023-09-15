@@ -1456,7 +1456,7 @@ for t, year in enumerate(np.arange(strtyear,endyear)):
 
     year_to_int[t,0] = t
     year_to_int[t,1] = year
-    
+
 
 # %%
 # ceate multi, index to stack fall and spring data
@@ -2173,6 +2173,9 @@ hob_col = rm_grid.column.values-1
 avg_screen = rm_grid[['top_screen_m','bot_screen_m']].mean(axis=1).values
 rm_grid['lay'] = get_layer_from_elev(avg_screen, m.dis.botm[:,hob_row, hob_col], m.dis.nlay)
 
+
+# %%
+rm_grid
 
 # %%
 # rm_grid.drop(columns=['geometry'])

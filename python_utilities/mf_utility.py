@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import os
+from os.path import join, exists
+#%% Model development
+
 
 def get_layer_from_elev(elev, botm_slice, nlay):
     """  Return uppermost model layer (0-based) occupied at least partly by some elevation data
@@ -24,6 +28,20 @@ def get_layer_from_elev(elev, botm_slice, nlay):
                 elev_lay[j] = k + 1
     return(elev_lay.astype(int))
     
+
+def param_load(model_ws, file_dir, file_name):
+    """ Check if a file exists in the model directory if not copy from Box location"""
+    if file_name in os.listdir(model_ws):
+        print('exists in model workspace')
+        params = pd.read_csv(join(model_ws, file_name))
+    else:
+        print('added to model workspace')
+        params = pd.read_csv(join(file_dir,file_name))
+        params.to_csv(join(model_ws,file_name), index=False)
+    return(params)
+
+
+#%% Post-processing
 
 def get_dates(dis, ref='end'):
     """ Given a MODFLOW DIS file return datetimes given the model start datetime
