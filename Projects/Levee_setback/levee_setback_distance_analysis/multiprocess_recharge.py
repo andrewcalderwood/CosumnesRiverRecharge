@@ -232,6 +232,10 @@ def realization_recharge(t, str_setbacks, region, ft):
                 top_q = np.argmin(diff, axis=0)[x,y] 
                 # find percentage of interim quantile
                 perc_q = (wse_arr[s, x,y] - arr_elev[bot_q, x,y])/(arr_elev[top_q, x,y] +1E-3 - arr_elev[bot_q, x,y])
+                # need to account for when top_q == bot_q
+                perc_q = np.where(arr_elev[bot_q, x,y]==arr_elev[top_q, x,y], 0, perc_q)
+                # adjust for when wse > top_q
+                perc_q = np.where(wse_arr[s, x,y]>arr_elev[top_q, x,y], 0, perc_q)
                 # percent of cell area covered by flood
                 cell_frac[qn, s,x,y] = (bot_q + perc_q)/10
                 # depth for each cell is difference between water surface and average flooded ground elevation
@@ -270,13 +274,13 @@ def realization_recharge(t, str_setbacks, region, ft):
 #%% Make short code to loop over local zones
 
 # choose one function to use, regional or local
-# def run_rech(t):
-#     for zone in [1,2,3]:
-#         for ft in [1,2,3]:
-#             # 1, 2, 3 are floods long enough to apply to analysis
-#             base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
-#             os.makedirs(base_fn, exist_ok=True)
-#             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
+def run_rech(t):
+    for zone in [1,2,3]:
+        for ft in [1,2,3]:
+            # 1, 2, 3 are floods long enough to apply to analysis
+            base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
+            os.makedirs(base_fn, exist_ok=True)
+            realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
 def run_rech(t):
     region = 'regional'

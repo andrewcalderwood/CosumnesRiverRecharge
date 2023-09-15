@@ -1,7 +1,6 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -25,7 +24,7 @@
 # standard python utilities
 import os
 import sys
-from os.path import basename, dirname, join, exists, expanduser
+from os.path import basename, dirname, join, exists
 import glob
 import time
 
@@ -51,10 +50,11 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
 
 # %%
-usr_dir = expanduser('~')
-doc_dir = join(usr_dir, 'Documents')
+doc_dir = os.getcwd()
+while os.path.basename(doc_dir) != 'Documents':
+    doc_dir = os.path.dirname(doc_dir)
 # dir of all gwfm data
-gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
+gwfm_dir = os.path.dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 # dir of stream level data for seepage study
 proj_dir = gwfm_dir + '/Oneto_Denier/'
 dat_dir = proj_dir+'Stream_level_data/'
@@ -97,7 +97,7 @@ tprogs_info = [80, -80, 320]
 #
 
 # %%
-ss_bool = False # false = no steady state
+ss_bool = False
 
 # %%
 # Oneto-Denier data is about 2012-2019
@@ -349,7 +349,8 @@ for k in np.arange(1,nlay_tprogs):
 botm = np.zeros(m.dis.botm.shape)
 botm[:nlay_tprogs] = np.copy(tprogs_botm)
 if nlay-nlay_tprogs==1:
-    botm[-1] = -200 
+    botm[-1] = -200
+
 
 
 # %%
@@ -389,14 +390,6 @@ else:
     
 # convert from m/s to m/d
 params['K_m_d'] = params.K_m_s * 86400    
-
-# %%
-# find the best realization to use when doing floodplain study
-top10 = pd.read_csv(join(proj_dir, 'upscale4x_top_10_accurate_realizations.csv'),index_col=0)
-t = top10.idxmax().RMSE
-print(t)
-top10.loc[t]
-# top10
 
 # %%
 
@@ -643,42 +636,15 @@ ss_rain = np.repeat(np.repeat(np.reshape(rain_df.values, (rain_df.shape[0],1,1))
 from swb_utility import load_swb_data
 
 # %%
-# def load_swb_data(strt_date, end_date, param):
-#     nper_tr = (end_date-strt_date).days+1
-#     # years and array index 
-#     # include final year for specifying index then drop
-#     years = pd.date_range(strt_date,end_date+pd.DateOffset(years=1),freq='AS-Oct')
-#     yr_ind = (years-strt_date).days
-#     years = years[:-1]
-#     perc = np.zeros((nper_tr, nrow_p,ncol_p))
-#     # need separte hdf5 for each year because total is 300MB
-#     for n in np.arange(0,len(years)):
-#     #     arr = pc[yr_ind[n]:yr_ind[n+1]]
-#         fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(years[n].year+1)+".hdf5")
-#         with h5py.File(fn, "r") as f:
-#             arr = f['array']['WY'][:]
-#             perc[yr_ind[n]:yr_ind[n+1]] = arr
-#     return(perc)
 
-
-# finf = load_swb_data(strt_date, end_date, 'percolation')
-# ss_finf = load_swb_data(ss_strt, strt_date-pd.DateOffset(days=1), 'percolation')
 finf = load_swb_data(strt_date, end_date, 'field_percolation', uzf_dir)
 ss_finf = load_swb_data(ss_strt, strt_date-pd.DateOffset(days=1), 'field_percolation', uzf_dir)
 
 
 # %%
 # load applied water from soil water budget
-# it is the ETc scaled by irrigation efficiencies
-# AW = load_swb_data(strt_date, end_date, 'applied_water')
-# AW_ss = load_swb_data(ss_strt, strt_date-pd.DateOffset(days=1), 'applied_water')
 AW = load_swb_data(strt_date, end_date, 'field_applied_water', uzf_dir)
 AW_ss = load_swb_data(ss_strt, strt_date-pd.DateOffset(days=1), 'field_applied_water', uzf_dir)
-
-# AW_local = np.zeros((nper_tr, nrow, ncol))
-# AW_local[:, grid_match.row-1, grid_match.column-1] = AW[:,grid_match.p_row-1, grid_match.p_column-1]
-# AW_ss_local = np.zeros((1, nrow, ncol))
-# AW_ss_local[:, grid_match.row-1, grid_match.column-1] = AW_ss.mean(axis=0)[grid_match.p_row-1, grid_match.p_column-1]
 
 
 # %%
@@ -688,9 +654,6 @@ finf_local[:, grid_match.row-1, grid_match.column-1] = finf[:,grid_match.p_row-1
 ss_finf_local = np.zeros((1, nrow, ncol))
 ss_finf_local[:, grid_match.row-1, grid_match.column-1] = ss_finf.mean(axis=0)[grid_match.p_row-1, grid_match.p_column-1]
 
-# percolation can't exceed vertical conductivity (secondary runoff)
-# finf_local = np.where(finf_local >vka[0,:,:], vka[0,:,:], finf_local)
-# ss_finf_local = np.where(ss_finf_local >vka[0,:,:], vka[0,:,:], ss_finf_local)
 
 # %% [markdown]
 # ## Prepare Lake bathymetry
@@ -1218,9 +1181,6 @@ if scenario != 'no_reconnection':
 
 # %%
 # Change column name to float type for easier referencing in iteration
-# XS8pt.columns = XS8pt.columns.astype('float')
-# XS8pt
-# must start at 0 if only at teichert
 xsnum = 1
 
 # Pre-create dictionary to be filled in loop
@@ -1238,7 +1198,13 @@ for k in XSg.xs_num.round(): # round is fix for subtracting to id diversion segm
 
 
 # %%
-# sfr.check()
+sfr.check()
+
+# %%
+# FLOWTAB = mb4rl.discharge_va.values
+# DPTHTAB = mb4rl.gage_height_va.values
+# WDTHTAB = mb4rl.chan_width.values
+# sfr.channel_flow_data = {0: {1: [FLOWTAB, DPTHTAB, WDTHTAB]}}
 
 # %%
 # sfr.write_file()
@@ -1276,8 +1242,6 @@ inflow_in = pd.read_csv(sfr_dir+'MB_daily_flow_cfs_2010_2019.csv', index_col = '
 inflow_in['flow_cmd'] = inflow_in.flow_cfs * (86400/(3.28**3))
 # filter out data between the stress period dates
 inflow = inflow_in.loc[strt_date:end_date]
-# the time should be simulation time not stress period (time_tr0)
-# time_flow = np.transpose((np.arange(time_tr0,len(inflow.flow_cmd)+time_tr0),inflow.flow_cmd))
 # correct model time for start of transient periods, uses perlen not just assuming days
 time_flow = np.transpose((np.cumsum(perlen), inflow.flow_cmd))
 
@@ -1368,8 +1332,7 @@ precip_lake = precip_lake.sum(axis=(1,2))/(lak_active.sum())
 # Exactly 151 lines must be included within each lake bathymetry input file and each line must contain 1 value 
 #  of lake stage (elevation), volume, and area (3 numbers per line) if the keyword “TABLEINPUT” is specified in item 1a.
 # A separate file is required for each lake. 
-# initial lake stage should be dry (below lake bottom)
-# stages = minElev - lkbd_thick - 0.1 # causes lake to remain dry for entire simulation
+# initial lake stage should be just above lake bottom)
 stages = minElev +0.01
 
 # (ssmn, ssmx) max and min stage of each lake for steady state solution, there is a stage range for each lake
@@ -1391,9 +1354,6 @@ flux_data[0] = {0:[0,0,0,0]} # default to no additional fluxes
 #     flux_data[j] = {0: [precip_lake[j-1], et_lake[j-1], 0, 0] } 
 
 
-# if scenario != 'no_reconnection':
-    # 1 1000 1E-5 0.02 - taken from mt shasta
-    # filler value for bdlknc until soil map data is loaded by uzf
 lak = flopy.modflow.ModflowLak(model = m, lakarr = lakarr, bdlknc = bdlknc,  stages=stages, 
                                stage_range=stage_range, flux_data = flux_data,
                                theta = 1, nssitr = 1000, sscncr = 1E-5, surfdepth = 0.02, # take from Shasta model
@@ -1530,11 +1490,6 @@ thickness = -1*np.diff(topbotm, axis=0)
 
 # %%
 ibound = np.ones((nlay,nrow,ncol))
-# to maintain gw flow gradient that mimics ground surface slope shanafield used a CHD at up and down stream
-# ibound[:,:,0] = -1
-# ibound[:,:,-1] = -1
-# find wherever layer less than min thickness to set as inactive, with thin layer version
-# ibound[thickness < 0.5] = 0
 # where bottom is above land surface set as inactive 
 ibound[botm>dem_data] = 0
 
@@ -1582,6 +1537,9 @@ rain_m = rain_in/1000
 rain_df = rain_m[strt_date:end_date].resample('D').interpolate('linear')['Fair Oaks']
 rain_arr = np.repeat(np.repeat(np.reshape(rain_df.values, (rain_df.shape[0],1,1)), nrow, axis=1),ncol, axis=2)
 
+rain_df = rain_m[ss_strt:strt_date].resample('D').interpolate('linear')['Fair Oaks']
+rain_arr_ss = np.repeat(np.repeat(np.reshape(rain_df.values, (rain_df.shape[0],1,1)), nrow, axis=1),ncol, axis=2)
+rain_arr_ss = rain_arr_ss.mean(axis=0)
 
 # %% [markdown]
 # # Evapotranspiration
@@ -1730,6 +1688,9 @@ evt = flopy.modflow.ModflowEvt(model=m, nevtop = 3, ievt = ievt,
 # evt.write_file()
 
 
+# %%
+# m.write_name_file()
+
 # %% [markdown]
 # We need to be careful to avoid double accounting for ET as noted by Graham. He was concerned that ET was removed during pre-processing and during model runs which is a valid point. 
 # - Here we should remove ET from the soil budget by applying precipitation in place of deep percolation in zones where we expect GW ET (rooting depth > 2m).
@@ -1737,23 +1698,24 @@ evt = flopy.modflow.ModflowEvt(model=m, nevtop = 3, ievt = ievt,
 
 # %%
 adj_finf = finf_local.copy()
+adj_ss_finf_local = ss_finf_local.copy().mean(axis=0)
 # where GDEs are active the rain should be directly applied instead of SWB percolation
 # as we don't want to double count ET
 adj_finf[:, ext_dp>2] = rain_arr[:, ext_dp>2]
+adj_ss_finf_local[ext_dp>2] = rain_arr_ss[ext_dp>2]
 
 # %%
 # finf_spd = { (j): finf_local[j-1,:,:] for j in np.arange(time_tr0,nper)}
 finf_spd = { (j): adj_finf[j-1,:,:] for j in np.arange(time_tr0,nper)}
 
-if ss_bool == True:
-    finf_spd[0] = ss_finf_local
+if ss_bool:
+    finf_spd[0] = adj_ss_finf_local
 
 
 # %%
 # nrchtop : rch to which layer, rech:array of recharge rates
 rch = flopy.modflow.ModflowRch(model=m, nrchop = 3, rech = finf_spd, ipakcb = 55)
-
-
+# rch.write_file()
 
 # %%
 # rch.write_file()
@@ -1811,30 +1773,6 @@ if ss_bool == True:
     ET_ag = np.concatenate((ET_ag_SS, ET_ag), axis=0)
 
 # %%
-## only needed when in grid format
-# remove evapotranspiration in stream cells
-# ag_local[:, sfr_rows, sfr_cols] = 0
-
-# # ET_ag = np.copy(ag_local)
-# ET_ag = np.copy(AW_local)
-
-# if ss_bool == True:
-#     # ET_ag_SS = np.reshape(ss_ag_local.mean(axis=0),(1, nrow,ncol))
-#     ET_ag_SS = np.copy(AW_ss_local)
-#     ET_ag = np.concatenate((ET_ag_SS, ET_ag), axis=0)
-# print(ET_ag[0].sum().round(1))
-# # remove pumping where it is considered GDE, reduced SS by almost 1/2 (5.7 to 3.6)
-# # ET_ag[:, (GDE_cell.row-1).astype(int), (GDE_cell.column-1).astype(int)] = 0
-# # print(ET_ag[0].sum().round(1))
-# # remove pumping where it is known restoration (floodplain), doesn't remove much (3.65 to 3.61)
-# ET_ag[:, lakarr[0] >0] = 0
-# print(ET_ag[0].sum().round(1))
-# # no pumping where land is fallows
-# ET_ag[:, fallow.row-1, fallow.column-1] = 0
-# print(ET_ag[0].sum().round(1))
-
-
-# %%
 wells_grid = pd.read_csv(gwfm_dir+'/WEL_data/wells_grid.csv')
 wells_grid = gpd.GeoDataFrame(wells_grid, geometry = gpd.points_from_xy(wells_grid.easting, wells_grid.northing),
                               crs='epsg:32610')
@@ -1846,75 +1784,6 @@ reg_ag_well_depth_arr = np.loadtxt(gwfm_dir+'/WEL_data/ag_well_depth_arr.tsv', d
 ag_well_depth_arr = np.zeros((nrow,ncol))
 ag_well_depth_arr[grid_match.row-1, grid_match.column-1] = reg_ag_well_depth_arr[grid_match.p_row-1, grid_match.p_column-1]
 
-
-# %%
-# plt.imshow(ag_well_depth_arr)
-# plt.colorbar()
-
-# %%
-# removes 80% of wells
-# ag_screen_botm
-# remove wells that have more than 20% below the model bottom
-# drop_wells = pd.DataFrame(np.rot90(np.where((dem_data-ag_well_depth_arr)*0.8 < botm[-1])), columns=['row','column'])
-drop_wells = pd.DataFrame(np.rot90(np.where((dem_data-ag_well_depth_arr)*0.8 < -37)), columns=['row','column'])
-
-# %%
-ag_well_elev = dem_data - ag_well_depth_arr
-ag_screen_botm = np.where((ag_well_elev<botm)&(ag_well_elev> botm[-1]))
-ag_screen_botm = np.rot90(ag_screen_botm)
-ag_screen_botm = pd.DataFrame(ag_screen_botm, columns=['layer','row','column'])
-ag_max_lay = ag_screen_botm.groupby(['row','column']).max()
-# any wells below most bottom go in bottom layer
-ag_max_lay.layer[ag_max_lay.layer == nlay] = nlay-1
-
-# assume 10% of well is screened? Pauloo? tprogs lay thickness is 4m, so 12ft, not quite enough for typical well?
-# if we go two layers we have 8 m which is near the average expected well screen
-ag_screen_top = np.where((ag_well_elev*0.8 <botm)&(ag_well_elev*0.8>botm[-1]))
-ag_screen_top = np.rot90(ag_screen_top)
-ag_screen_top = pd.DataFrame(ag_screen_top, columns=['layer','row','column'])
-ag_min_lay = ag_screen_top.groupby(['row','column']).max()
-ag_min_lay.layer[ag_min_lay.layer == nlay] = nlay-1
-
-
-# %%
-# ag_well_lay.layer.median() 
-# mean layer is 10, median is 11
-# the issue with pumping could be so much in the deeper aquifer it causes issues
-ag_min_lay.shape, ag_max_lay.shape
-
-# %%
-# if the layer max is missing set as model bottom
-ag_lays = ag_min_lay.join(ag_max_lay, rsuffix='_mx',lsuffix='_mn')
-ag_lays.loc[ag_lays.layer_mx.isna(),'layer_mx'] = m.dis.nlay-1
-ag_lays.layer_mx = ag_lays.layer_mx.astype(int)
-
-# %%
-# iterate over all row, col and get layers for each well based on "screen" 
-ag_well_lay = np.zeros((1,3))
-for i,j in zip(ag_min_lay.reset_index().row,ag_min_lay.reset_index().column):
-    lays = np.arange(ag_lays.layer_mn.loc[i,j], ag_lays.layer_mx.loc[i,j]+1)
-    ijk = np.rot90(np.vstack((np.tile(i,len(lays)), np.tile(j,len(lays)),lays)))
-    ag_well_lay = np.vstack((ag_well_lay,ijk))
-# delete filler first row
-ag_well_lay = ag_well_lay[1:]
-ag_well_lay = pd.DataFrame(ag_well_lay.astype(int), columns=['row','column','layer'])
-
-# %%
-# num_ag_layers = (ag_max_lay - ag_min_lay+1).reset_index()
-# # divide ET_ag by the number of layers it will go into
-# ET_ag_layered = np.zeros(ET_ag.shape)
-# # ET_ag_layered = np.copy(ET_ag)
-# ET_ag_layered[:,num_ag_layers.row,num_ag_layers.column] = ET_ag[:,num_ag_layers.row,num_ag_layers.column]/num_ag_layers.layer.values
-# # adjustments to allow connection with rows,cols with pumping
-# row_col = ag_well_lay.loc[:,['row','column']].rename({'row':'rowi','column':'colj'},axis=1)
-# ag_well_lay = ag_well_lay.set_index(['row','column'])
-# ag_well_lay['rowi'] = row_col.rowi.values
-# ag_well_lay['colj'] = row_col.colj.values
-
-# %%
-# plt.imshow(ET_ag_layered.sum(axis=0))
-# shows how certain pockets of ag are removed because teh wells are below the model bottom
-# it would be easy to extent the model bottom to -200 instead of -150 m since it's all homogeneous below -37m
 
 # %% [markdown]
 # ## Irrigation clip to local domain
@@ -1968,29 +1837,6 @@ for n,d in enumerate(dates):
     AW_spd = AW_irr_local[n]
     fields_spd['flux'] = -AW_spd*fields_spd.field_area_m2
     wel_ETc_dict[n+time_tr0] = fields_spd[['layer','row','column','flux']].values
-
-# %%
-# layer for ETc ag well pumping
-# ETc_lay = 1
-# create empty dictionary to fill with stress period data
-# wel_ETc_dict = {}
-# # end date is not included as a stress period, starting at 1st TR spd (2)
-# for t in np.arange(0,nper):
-#     wel_i, wel_j = np.where(ET_ag_layered[t,:,:]>0)
-#     new_xyz = ag_well_lay.loc[list(zip(wel_i,wel_j))] 
-# # use new row,cols because there are more layers to use
-#     wel_ETc = -ET_ag_layered[t,new_xyz.rowi,new_xyz.colj]*delr*delr
-#     # ['layer','row','column', 'flux'] are necessary for WEL package
-#     spd_ag = np.stack((new_xyz.layer, new_xyz.rowi, new_xyz.colj,wel_ETc),axis=1)
-#     # correct by dropping any rows or cols without pumping as some may be added
-#     spd_ag = spd_ag[spd_ag[:,-1]!=0,:]
-# #     dom_loc['flux'] = - dom_use.loc[dates[t],'flux_m3d']
-# #     wells_dom = dom_loc[['layer','row','column','flux']].values
-# #     spd_noag = np.vstack((wells_dom))
-#     # join pumping from ag with point pumping from domstic/supply wells that are constant
-# #     spd_all = np.vstack((spd_ag,spd_noag)) 
-#     spd_all = np.copy(spd_ag)
-#     wel_ETc_dict[t] = spd_all
 
 # %%
 # Create well flopy object
