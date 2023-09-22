@@ -152,8 +152,6 @@ nrow_p = int(parent_grid.row.max())
 ncol_p = int(parent_grid.column.max())
 
 # %%
-
-# %%
 delr = 100
 delc = 100
 rotation=52.9
@@ -1669,10 +1667,10 @@ if not exists(join(gde_dir,'Oneto_Denier','GDE_cell.shp')):
 
     # slow to compute
     GDE_cell = GDE_grid.dissolve(by='node', aggfunc = 'mean', numeric_only=True)
-    # GDE_cell.to_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
+    GDE_cell.to_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
 else:
-    print('temp')
-    # GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
+    print('reusing')
+    GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
 
 # %%
 # joining the native land use map to this really helps fill it in 
@@ -1727,10 +1725,6 @@ et_layer = get_layer_from_elev((dem_data - ext_dp)[et_rows, et_cols], m.dis.botm
 ievt = np.zeros((nrow,ncol))
 ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
-
-# %%
-plt.imshow(ext_dp)
-plt.colorbar()
 
 # %%
 
@@ -2332,11 +2326,12 @@ nwt.__dict__ = nwt_dict
 
 # %%
 # Writing the MODFLOW data files
-m.write_input()
+# m.write_input()
 
 
 # %%
-m.model_ws
+
+# %%
 
 # %% [markdown]
 # #
