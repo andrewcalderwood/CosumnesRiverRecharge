@@ -106,8 +106,8 @@ ss_bool = False # false = no steady state
 # Transient -> might want to think about making SP1 steady
 ss_strt = pd.to_datetime('2010-10-01')
 strt_date = pd.to_datetime('2014-10-01')
-end_date = pd.to_datetime('2018-09-30') # end date for validation
-# end_date = pd.to_datetime('2020-9-30') # end time for analysis
+# end_date = pd.to_datetime('2018-09-30') # end date for validation
+end_date = pd.to_datetime('2020-9-30') # end time for analysis
 
 dates = pd.date_range(strt_date, end_date)
 # The number of periods is the number of dates 
@@ -1159,6 +1159,16 @@ ret_seg = od_ret.index[0]
 chan_seg = od_sfr.index[0]
 up_seg = div_seg - 1
 
+# %% [markdown]
+# For the new no reconnection scheme it is just as fast to copy the same model input files and just replace the diversion flow (FLOW with IPRIOR=-1) and fraction of return flow (FLOW with IPRIOR=-2)
+
+# %%
+# pull out floodplain activation flows
+fp_flow_baseline = bc_params[bc_params.Scenario=='Baseline'].loc['fp_active_flow','StartValue']*86400
+fp_flow_no_reconnection = bc_params[bc_params.Scenario=='No reconnection'].loc['fp_active_flow','StartValue']*86400
+print('Baseline flow is %.2f  m^3/day ' %fp_flow_baseline)
+print('No reconnection flow is %.2f  m^3/day ' %fp_flow_no_reconnection)
+
 # %%
 # if scenario != 'no_reconnection':
 # adjust segments to include floodplain connection
@@ -1171,9 +1181,9 @@ sfr_seg.iupseg[sfr_seg.nseg==div_seg] = up_seg
 sfr_seg.iprior[sfr_seg.nseg==div_seg] = -3 # iprior=-3 any flows above the flow specified will be diverted
 ## 
 if scenario == 'no_reconnection':
-    sfr_seg.flow[sfr_seg.nseg==div_seg] = 109*86400 # 109 cms is floodplain threshold in 2014
+    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_no_reconnection # 109 cms is floodplain threshold in 2014
 else:
-    sfr_seg.flow[sfr_seg.nseg==div_seg] = 23*86400 # 23 cms is floodplain threshold per Whipple in the Cosumnes
+    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_baseline # 23 cms is floodplain threshold per Whipple in the Cosumnes
 sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain
 
 # adjust for flow from diversion segment back to  channel
@@ -1669,10 +1679,10 @@ if not exists(join(gde_dir,'Oneto_Denier','GDE_cell.shp')):
 
     # slow to compute
     GDE_cell = GDE_grid.dissolve(by='node', aggfunc = 'mean', numeric_only=True)
-    # GDE_cell.to_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
+    GDE_cell.to_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
 else:
-    print('temp')
-    # GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
+    print('reusing')
+    GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
 
 # %%
 # joining the native land use map to this really helps fill it in 
@@ -1789,7 +1799,13 @@ lu_ag = gpd.read_file(join(uzf_dir, 'county_landuse', 'domain_ag_lu_2018.shp'))
 lu_ag = gpd.overlay(lu_ag, m_domain)
 
 # %%
-# lu_ag.plot()
+# WATERSOURC = {1: SW, 2: Mixed, 3: GW, 4:Unknown}
+fig,ax = plt.subplots()
+lu_ag.plot(ax=ax)
+XSg.plot(ax=ax, markersize=0.1)
+gpd.sjoin_nearest(lu_ag, XSg.drop(columns=['index_right']), max_distance=1000*0.3048, how='inner')
+# 1000*0.3048
+# lu_ag
 
 # %%
 # load prepared daily domestic use data
@@ -2193,37 +2209,36 @@ rm_grid['lay'] = get_layer_from_elev(avg_screen, m.dis.botm[:,hob_row, hob_col],
 
 
 # %%
-rm_grid
-
-# %%
 # rm_grid.drop(columns=['geometry'])
 rm_grid.to_csv(join(proj_dir, 'mw_hob_cleaned.csv'), index=False)
 
 # %%
-# load field data
-gwl = pd.read_csv(join(hob_dir,'AllSets.csv'), parse_dates=['dt'], index_col=['dt'], dtype=object)
-gwl.index = gwl.index.tz_localize(None)
-gwl = gwl.apply(lambda x: pd.to_numeric(x, errors='coerce'))
-# filter for wells within the grid
-gwl = gwl.loc[:,gwl.columns.isin(rm_t.Sensor.values)]
-# filter for dates within the period
-gwl_dates = gwl.loc[strt_date:end_date]
-
-# taking daily average only changes maximum/minimum values by 0.01-0.3
-# np.max(np.abs(gwl.resample('D').mean().min()- gwl.min())), np.max(np.abs(gwl.resample('D').mean().max()- gwl.max()))
-gwl_D = gwl_dates.resample('D').mean()
-
-# long format to prepare for identifier
-gwl_long = gwl_D.melt(ignore_index=False, var_name='Well',value_name='obs')
-# drop NAs
-gwl_long = gwl_long.dropna(subset=['obs'])
-# # get spd corresponding to dates
-gwl_long['spd'] = (gwl_long.index-strt_date).days.values + time_tr0
-# create unique obs name for each obs based on spd
-gwl_long['obs_nam'] = gwl_long.Well +'p'+ gwl_long.spd.astype(str).str.zfill(3)
-
-# %%
-gwl_long.to_csv(join(model_ws,'gwl_long.csv'))
+if not exists(join(model_ws, 'gwl_long.csv')):
+    # seems to be a problematic cell chunk with loading
+    # load field data
+    gwl = pd.read_csv(join(hob_dir,'AllSets.csv'), parse_dates=['dt'], index_col=['dt'], dtype=object)
+    gwl.index = gwl.index.tz_localize(None)
+    gwl = gwl.apply(lambda x: pd.to_numeric(x, errors='coerce'))
+    # filter for wells within the grid
+    gwl = gwl.loc[:,gwl.columns.isin(rm_t.Sensor.values)]
+    # filter for dates within the period
+    gwl_dates = gwl.loc[strt_date:end_date]
+    
+    # taking daily average only changes maximum/minimum values by 0.01-0.3
+    # np.max(np.abs(gwl.resample('D').mean().min()- gwl.min())), np.max(np.abs(gwl.resample('D').mean().max()- gwl.max()))
+    gwl_D = gwl_dates.resample('D').mean()
+    
+    # long format to prepare for identifier
+    gwl_long = gwl_D.melt(ignore_index=False, var_name='Well',value_name='obs')
+    # drop NAs
+    gwl_long = gwl_long.dropna(subset=['obs'])
+    # # get spd corresponding to dates
+    gwl_long['spd'] = (gwl_long.index-strt_date).days.values + time_tr0
+    # create unique obs name for each obs based on spd
+    gwl_long['obs_nam'] = gwl_long.Well +'p'+ gwl_long.spd.astype(str).str.zfill(3)
+    gwl_long.to_csv(join(model_ws,'gwl_long.csv'))
+else:
+    gwl_long = pd.read_csv(join(model_ws, 'gwl_long.csv'), index_col=0)
 
 # %%
 # calculate offset from the centroid
@@ -2282,6 +2297,12 @@ for n,stps in enumerate(m.dis.nstp.array):
 
 # get the first of each month to print the budget
 month_intervals = (pd.date_range(strt_date,end_date, freq="MS")-strt_date).days
+spd = {}
+# output file for parallel runs when head/cbc is not needed
+for j in month_intervals:
+    spd[j,0] = ['print budget']
+oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True, filenames='MF_parallel.oc')
+oc.write_file()
 
 # For later model runs when all the data is needed to be saved
 spd = {}
@@ -2332,11 +2353,12 @@ nwt.__dict__ = nwt_dict
 
 # %%
 # Writing the MODFLOW data files
-m.write_input()
+# m.write_input()
 
-
-# %%
-m.model_ws
 
 # %% [markdown]
 # #
+
+# %%
+
+# %%

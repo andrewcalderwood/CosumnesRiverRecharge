@@ -287,16 +287,10 @@ def wb_chk_plt(var):
 # wb_chk_plt('ET')
 # wb_chk_plt('WEL')
 
-# %% [markdown]
-# The ET water budget does seem to be impacted quite a bit during the wet season because more water is available. SFR is affected on a few random dates to the extreme, but overall not too much. Since there is an impact on ET then it seems like it would make sense. Making the rainfall for GDE areas had the RMSE go from 1.66 to and NSE from 0.66 to .67 so not a major change, but slight improvement.
-
 # %%
 # wb_chk.SFR_OUT.plot()
 # wb.SFR_OUT.plot(alpha=0.6)
 
-
-# %% [markdown]
-# Adjusting the GHB to use heads at 500 m did reduce the baseflow magnitude and number of days, it would be interesting to see how this impacts NSE. Also the NSe went from 0.60 to 0.66 and RMSE went from 1.8 to 1.6 with the increased outflow which supports the need to re-run all realizations with the udpated GHB.
 
 # %%
 et_local = m.evt.evtr.array[:,0]
@@ -312,12 +306,8 @@ surf = m.evt.surf.array[0][0]
 
 # %% [markdown]
 # # Plot Groundwater Observed vs Simulated
-# We need to validate that the local model of Oneto-Denier is adequately representing stream-aquifer interactions so it can be used to quantify storage changes and particle age.
+# We need to validate that the local model of Oneto-Denier is adequately representing stream-aquifer interactions so it can be used to quantify storage changes (and particle age).
 #
-# - field data shows fall lows around -2 to 2 m with peaks to 8m with winter
-# - simulated data shows fall lows around 3-5 meters with peaks to 8 m
-# - the simulated data as usual isn't showing as extreme reactions as the real data is showing which could be partly due to an issue with the initial steady state levels, the peaks match which means the stream stage is peaking close to reality. I may need to consider adding evapotranspiration as the GDEs are likely pulling water
-# - adding EVT and RCH together brought the steady state conditions to match observed conditions, but way over-estimated the winter peaks
 
 # %%
 # hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
