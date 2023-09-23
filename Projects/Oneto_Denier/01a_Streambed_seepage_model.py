@@ -152,8 +152,6 @@ nrow_p = int(parent_grid.row.max())
 ncol_p = int(parent_grid.column.max())
 
 # %%
-
-# %%
 delr = 100
 delc = 100
 rotation=52.9
@@ -1739,10 +1737,6 @@ ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
 
 # %%
-plt.imshow(ext_dp)
-plt.colorbar()
-
-# %%
 
 # surf : et surface elevation. evtr: maximum ET flux
 # exdp: extinction depth. ievt : layer indicator variable
@@ -2354,6 +2348,7 @@ nwt.__dict__ = nwt_dict
 # %%
 # Writing the MODFLOW data files
 # m.write_input()
+
 
 
 # %% [markdown]
