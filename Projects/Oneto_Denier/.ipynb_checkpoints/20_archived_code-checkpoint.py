@@ -1,3 +1,6 @@
+# %% [markdown]
+# # Old WEL package
+#
 
 # %% WEL package
 
@@ -101,3 +104,29 @@
 # #     spd_all = np.vstack((spd_ag,spd_noag)) 
 #     spd_all = np.copy(spd_ag)
 #     wel_ETc_dict[t] = spd_all
+
+# %% [markdown]
+# # Post-processing
+
+# %%
+# hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
+# # extract time series of heads for each desired location
+# mw_hds = hdobj.get_ts(list(zip(rm_grid['lay'], hob_row, hob_col)))
+# mw_hds = pd.DataFrame(mw_hds, columns=['time']+rm_grid.Sensor.tolist())
+# # convert to hourly to maintain more precision in DT
+# mw_hds['dt'] = strt_date+(mw_hds.time.values*24 ).astype('timedelta64[h]')
+# mw_gwl = mw_hds.drop(columns=['time'])
+# # long format for id join with observed dat
+# mw_long = mw_gwl.melt(id_vars='dt', var_name='Well',value_name='sim')
+# mw_long = mw_long[mw_long.sim != -1e30]
+
+# %%
+# mw_chk = mw_long.join(gwl_long.set_index(['Well','dt']), on=['Well','dt'], how='inner')
+# mw_chk = mw_chk.melt(id_vars=['dt', 'Well'],value_vars=['sim','obs'], value_name='gwe', var_name='type')
+
+# %%
+# sns.relplot(mw_chk,x='dt',y='gwe',col='Well', hue='type', col_wrap=4)
+
+# %%
+
+# %%

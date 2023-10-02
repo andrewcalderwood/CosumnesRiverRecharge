@@ -6,6 +6,10 @@ import glob
 
 import pandas as pd
 import numpy as np
+
+# when dealing with larger data sets, it may be worthwhile using parallel subprocess
+import shutil, os
+
 # -
 
 doc_dir = join(expanduser('~'), 'Documents')
@@ -25,13 +29,13 @@ add_path(ucode_fxn_dir)
 import ucode_input
 
 # from importlib import reload
-reload(ucode_input)
+# reload(ucode_input)
 # -
 
 loadpth =  'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage'
 upscale = 'upscale4x_'
 # model_nam = 'oneto_denier_'+upscale+'2014_2018'
-model_nam = 'oneto_denier_'+upscale+'2014_2020' # +'_no_reconnection'
+model_nam = 'oneto_denier_'+upscale+'2014_2020'  #+'_no_reconnection'
 model_ws = join(loadpth, model_nam)+'_ucode'
 
 # # Load parameter data
@@ -45,7 +49,7 @@ params['K_m_d'] = params.K_m_s * 86400
 # load other model parameters
 bc_params = pd.read_csv(join(model_ws, 'BC_scaling.csv'))
 bc_params = bc_params.set_index('ParamName')
-bc_params = bc_params[bc_params.Scenario != 'No reconnection'].drop(columns=['Scenario'])
+# bc_params = bc_params[bc_params.Scenario != 'No reconnection'].drop(columns=['Scenario'])
 
 # # Pgroup data
 
@@ -141,8 +145,6 @@ files = glob.glob(model_ws+'/*.jtf')
 files
 
 # +
-# when dealing with larger data sets, it may be worthwhile using parallel subprocess
-import shutil, os
 
 
 for n in np.arange(0, n_nodes).astype(str):
@@ -150,10 +152,6 @@ for n in np.arange(0, n_nodes).astype(str):
     os.makedirs(model_ws+folder,exist_ok=True)
     for f in files:
         shutil.copy(f, model_ws+folder)
-# -
-
-
-
 # +
 # replace oc file with simplified version that only prints the budget monthly
 f = glob.glob(model_ws+'/MF_parallel.oc')[0]
