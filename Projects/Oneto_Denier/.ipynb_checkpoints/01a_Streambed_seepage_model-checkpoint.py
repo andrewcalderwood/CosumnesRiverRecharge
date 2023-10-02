@@ -152,8 +152,6 @@ nrow_p = int(parent_grid.row.max())
 ncol_p = int(parent_grid.column.max())
 
 # %%
-
-# %%
 delr = 100
 delc = 100
 rotation=52.9
@@ -259,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-# model_nam = 'oneto_denier_homogeneous'
+model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -279,6 +277,7 @@ dis = flopy.modflow.ModflowDis(nrow=nrow, ncol=ncol,
                                xul = xul, yul = yul,rotation=rotation, proj4_str=proj4_str,
                               nper = nper, perlen=perlen, nstp=nstp, steady = steady,
                               start_datetime = strt_date)
+print(model_ws)
 
 
 # %%
@@ -496,6 +495,7 @@ if model_nam.__contains__('homogeneous'):
     vka[:] = eff_K.loc[eff_K.name=='VKA', 'permeameter'].values[0]
     ss[:] = np.nanmean(ss)
     sy[:] = np.nanmean(sy)
+    seep_vka[:] = eff_K.loc[eff_K.name=='VKA', 'permeameter'].values[0]
 
 
 # %%
@@ -1355,6 +1355,7 @@ lkbd_K[lakarr==0] = 0 # where lake cells don't exist set K as 0
 bdlknc = (lkbd_K/lkbd_thick)/bc_params.loc['bdlknc_scale', 'StartValue']
 
 
+
 # %%
 # from rasterstats import zonal_stats
 # raster_name = fn = join(lak_shp,"floodplain_crop.tif")
@@ -1422,7 +1423,7 @@ lak.tabdata = True
 
 
 # %%
-# lak.write_file()
+#lak.write_file()
 
 
 # %%
@@ -1737,10 +1738,6 @@ et_layer = get_layer_from_elev((dem_data - ext_dp)[et_rows, et_cols], m.dis.botm
 ievt = np.zeros((nrow,ncol))
 ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
-
-# %%
-plt.imshow(ext_dp)
-plt.colorbar()
 
 # %%
 
@@ -2353,7 +2350,8 @@ nwt.__dict__ = nwt_dict
 
 # %%
 # Writing the MODFLOW data files
-# m.write_input()
+m.write_input()
+
 
 
 # %% [markdown]

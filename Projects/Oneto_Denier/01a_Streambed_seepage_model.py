@@ -257,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-# model_nam = 'oneto_denier_homogeneous'
+model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -277,6 +277,7 @@ dis = flopy.modflow.ModflowDis(nrow=nrow, ncol=ncol,
                                xul = xul, yul = yul,rotation=rotation, proj4_str=proj4_str,
                               nper = nper, perlen=perlen, nstp=nstp, steady = steady,
                               start_datetime = strt_date)
+print(model_ws)
 
 
 # %%
@@ -494,6 +495,7 @@ if model_nam.__contains__('homogeneous'):
     vka[:] = eff_K.loc[eff_K.name=='VKA', 'permeameter'].values[0]
     ss[:] = np.nanmean(ss)
     sy[:] = np.nanmean(sy)
+    seep_vka[:] = eff_K.loc[eff_K.name=='VKA', 'permeameter'].values[0]
 
 
 # %%
@@ -1353,6 +1355,7 @@ lkbd_K[lakarr==0] = 0 # where lake cells don't exist set K as 0
 bdlknc = (lkbd_K/lkbd_thick)/bc_params.loc['bdlknc_scale', 'StartValue']
 
 
+
 # %%
 # from rasterstats import zonal_stats
 # raster_name = fn = join(lak_shp,"floodplain_crop.tif")
@@ -1420,7 +1423,7 @@ lak.tabdata = True
 
 
 # %%
-# lak.write_file()
+#lak.write_file()
 
 
 # %%
@@ -2347,7 +2350,7 @@ nwt.__dict__ = nwt_dict
 
 # %%
 # Writing the MODFLOW data files
-# m.write_input()
+m.write_input()
 
 
 
