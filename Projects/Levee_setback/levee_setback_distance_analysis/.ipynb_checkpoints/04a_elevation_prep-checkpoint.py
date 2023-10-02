@@ -59,6 +59,10 @@ def add_path(fxn_dir):
 add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/python_utilities')
 
 # %%
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln
+
+
+# %%
 # set box directory for output figures and data
 box_dir = gwfm_dir+'/Levee_setback/levee_setback_distance_analysis/'
 
@@ -98,10 +102,14 @@ raster_name = gwfm_dir+"/DEM_data/USGS_ten_meter_dem/modeldomain_10m_transformed
 grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
 
 m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
-grid_sfr = gpd.read_file(gwfm_dir+'/SFR_data/final_grid_sfr/grid_sfr.shp')
+sfr_dir = join(gwfm_dir, 'SFR_data')
+grid_sfr = gpd.read_file(join(sfr_dir,'final_grid_sfr/grid_sfr.shp'))
 # load sacramento river, creeks
-rivers = gpd.read_file(gwfm_dir+'/SFR_data/Sac_valley_rivers/Sac_valley_rivers.shp')
+rivers = gpd.read_file(join(sfr_dir,'Sac_valley_rivers/Sac_valley_rivers.shp'))
 cr = gpd.overlay(rivers.loc[rivers.GNIS_Name=='Cosumnes River'].to_crs('epsg:32610'), m_domain)
+
+# %% [markdown]
+# There is no good way to adjust the stream line because in the end the channel will be off from the cross-sections. This means it is best to choose at a coarse interval (e.g., 2000 m) and then correct the center alignment.
 
 # %%
 from shapely.geometry import MultiLineString, LineString, Point, shape, mapping
@@ -157,6 +165,7 @@ sfr_sp['z_m'] = sfr_sp.loc[:,'z_ft']*0.3048
 # %% [markdown]
 # Find XS every 1000 meters avoids too much overlap in XS,  after calculating depth there is some discontinuity but WSE is uniform with slope, so the numebr could be reduced to 2000m which would also aid muskingum-cunge routing requirements (coarser time step allowed).   
 # I also realized that I should simplify the river feature to linearize it and avoid XS occuring on oddities where there is a large turn in the channel for a short distance. Adding a 500m tolerance simplify additionally reduces overlap and produces good XS locations/angles.
+# - Although the XS are wide enough, there are some that are offset from the channel center and if we include an extra 200 m then we can adjust for the true channel center
 
 # %%
 
@@ -199,23 +208,35 @@ def make_transects(geom, dline = 2000, xs_width = 3305*2):
 geom = linemerge(cr.geometry.unary_union)
 
 # %%
-xs_width = 3305*2
+xs_width = 3305*2 # original w/o adjustment for channel center
+xs_width = 3705*2 # add 400 m to both sides to then cut off later for finding channel center
+
 transg200 = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 200, xs_width = xs_width)
 # drop transects that are less than 25% in the domain
 transg200 = transg200[gpd.overlay(transg200, m_domain).geometry.length > xs_width*0.25]
+transg200['line'] = np.arange(0,len(transg200))
 transg200.to_file(gis_dir+'/transect_lines_subsegments.shp')
 
 transg = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 2000, xs_width = xs_width)
 # drop transects that are less than 25% in the domain
 transg = transg[gpd.overlay(transg, m_domain).geometry.length > xs_width*0.25]
+transg['line'] = np.arange(0,len(transg))
 transg.to_file(gis_dir+'/transect_lines.shp')
 
-# check cross section lines are paralle
+# check cross section lines are parallel
 fig,ax=plt.subplots(figsize=(6,6))
 transg200.plot(color='red', ax=ax)
 transg.plot(ax=ax)
 cr.plot(ax=ax)
 m_domain.plot(ax=ax, color='None')
+
+# %%
+# lines for plotting figures
+transg = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 2000, xs_width = 3300*2)
+# drop transects that are less than 25% in the domain
+transg = transg[gpd.overlay(transg, m_domain).geometry.length > 3300*2*0.25]
+transg['line'] = np.arange(0,len(transg))
+transg.to_file(gis_dir+'/transect_lines_3300.shp')
 
 
 # %%
@@ -249,7 +270,7 @@ def transect2pts(transg, dline = 10, xs_width = 3305*2):
     # remove na values
     xs_all = xs_all.dropna(subset=['xs_num'])
     return(xs_all)
-xs_all = transect2pts(transg, dline = 10, xs_width = 3305*2)
+xs_all = transect2pts(transg, dline = 10, xs_width = xs_width)
 
 
 # %%
@@ -313,12 +334,49 @@ xs_all.drop(['geometry'],axis=1).to_csv(chan_dir+'XS_point_elevations.csv', inde
 xs_all_df = pd.DataFrame(xs_all)
 # pivot based on XS number and save only elevation in z_m
 xs_all_df = xs_all_df.pivot_table(index='dist_from_right_m',columns='xs_num',values='z_m')
-xs_all_df.to_csv(chan_dir+'Elevation_by_XS_number_meters.csv')
+# xs_all_df.to_csv(chan_dir+'Elevation_by_XS_number_meters.csv')
+
+# %%
+dline=10
+roll_window=600
+channel_middle = int(len(xs_all_df)/2)*dline
+channel_bool = (xs_all_df.index >= channel_middle - (roll_window/2))& (xs_all_df.index <= channel_middle + (roll_window/2))    
+min_idx =  xs_all_df[channel_bool].idxmin()
+# min_idx
 
 # %%
 
-xs_all_df.plot()
-plt.legend(ncol=4, loc=(1,0.01), title='XS Number')
+fig,ax = plt.subplots(5,1, figsize=(5,12),sharex=True)
+for ng in np.arange(0,5):
+    nseg = np.arange(ng*5,5*(ng+1))
+    xs_chk = xs_all_df[nseg]
+    xs_chk[channel_bool].plot(ax=ax[ng])
+    for n, ns in enumerate(nseg):
+        ax[ng].plot(min_idx.iloc[n], xs_chk.loc[min_idx.iloc[n], ns],marker='x', color='black')
+    
+fig.tight_layout(h_pad=0.1)
+
+
+# %%
+f_width = 3305 # final width to extract on each side of the new min
+xs_all_fix = pd.DataFrame()
+for nseg in np.arange(0,xs_all_df.shape[1]):
+# for nseg in [2]:
+    # index the widths
+    xs_fix = xs_all_df.loc[min_idx.loc[nseg]-f_width:min_idx.loc[nseg]+f_width, nseg].copy()
+    # assign the new distances
+    xs_fix.index -= min_idx.loc[nseg]
+    xs_all_fix = pd.concat((xs_all_fix, xs_fix), axis=1)
+xs_all_fix.index.name='dist_from_center_m'
+
+# %%
+xs_all_fix.to_csv(chan_dir+'Elevation_by_XS_number_meters.csv')
+
+# %%
+
+# xs_all_fix.plot(legend=False)
+# xs_all_df.plot()
+# plt.legend(ncol=4, loc=(1,0.01), title='XS Number')
 
 
 # %% [markdown]
@@ -338,7 +396,7 @@ plt.legend(ncol=4, loc=(1,0.01), title='XS Number')
 # %%
 xs_all = pd.read_csv(chan_dir+'XS_point_elevations.csv')
 
-xs_all_df = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv',index_col='dist_from_right_m')
+xs_all_df = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv',index_col='dist_from_center_m')
 
 
 def xs_channel_smooth(xs_all_df, roll_window = 400, dline = 10):
@@ -354,11 +412,14 @@ def xs_channel_smooth(xs_all_df, roll_window = 400, dline = 10):
     xs_levee_smooth.loc[channel_bool,:] = xs_roll_mean.loc[channel_bool,:]
     return(xs_levee_smooth)
 
+# %%
+# not sure if needed anymore
+# xs_levee_smooth200 = xs_channel_smooth(xs_all_df200, roll_window = 400, dline = 10)
+# # save for flow-recharge notebook
+# xs_levee_smooth200.to_csv(chan_dir+'xs_levee_smooth_subsegments.csv')
+
 
 # %%
-xs_levee_smooth200 = xs_channel_smooth(xs_all_df200, roll_window = 400, dline = 10)
-# save for flow-recharge notebook
-xs_levee_smooth200.to_csv(chan_dir+'xs_levee_smooth_subsegments.csv')
 
 xs_levee_smooth = xs_channel_smooth(xs_all_df, roll_window = 400, dline = 10)
 # # save for flow-recharge notebook
@@ -369,7 +430,8 @@ fig,ax = plt.subplots(figsize=(12,6))
 
 # xs_levee_smooth.plot(ax=ax)
 # ax.legend(ncol=4, loc=(1,0.01), title='XS Number')
-n=22
+n=26
+
 xs_all_df.iloc[:,n].plot(ax=ax, label='XS')
 xs_levee_smooth.iloc[:,n].plot(ax=ax, label='Smooth')
 plt.legend()
@@ -380,28 +442,22 @@ plt.legend()
 # 50 point rating curves to match modflow format.
 
 # %%
+xs_all_df = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv', index_col='dist_from_center_m')
+
+xs_levee_smooth = pd.read_csv(chan_dir+'xs_levee_smooth.csv', index_col='dist_from_center_m')
+
+# %%
 # load flood typology characteristics (based on daily data 1908 - 2014) - median values 
 #"cms_pk" for peak discharge, "pk_loc" for time to peak, and "log_no_d" for duration
 flood_type = pd.read_csv(join(box_dir, 'whipple_grp6_w97ftmedians.csv'),index_col='Group.1')
 
 
 # %%
+# from importlib import reload
+# import muskingum_recharge
+# reload(muskingum_recharge)
 from muskingum_recharge import min_Q, mannings, calc_depth_arr, gridded_interpolation, xs_setback, mannings_v
 
-
-
-# %%
-# original XS data
-def prep_xs(xs_all_df):
-    xs_all_cln = xs_all_df.reset_index()
-    xs_all_cln = xs_all_cln.assign(dist_from_center_m=xs_all_cln.dist_from_right_m-3300)
-    xs_all_cln = xs_all_cln.set_index('dist_from_center_m').drop(columns='dist_from_right_m')
-    return xs_all_cln
-
-
-
-# %%
-# xs_all_cln.iloc[:,0].plot()
 
 # %%
 def get_mins(xs_all_cln):
@@ -410,7 +466,7 @@ def get_mins(xs_all_cln):
     xs_mins.index = xs_mins.index.astype(int)
     # xs_mins.interpolate(method='linear').plot()
     # 4 is required to avoid negatives
-    slope = xs_mins.diff().rolling(4, center=True, closed='right').mean().bfill()/2000*-1
+    slope = xs_mins.diff().rolling(4, center=True, closed='right').mean().bfill().ffill()/2000*-1
     adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
     return(adj_xs_mins, slope)
 
@@ -430,16 +486,19 @@ def make_rating_curve(xs_all_cln):
     # iterate over cross-section segments
     for nseg in segs:
         # nseg = 15
-        df = xs_all_cln[str(nseg)]
+        # df = xs_all_cln[str(nseg)]
         # iterate over the stream segments
         for setback in setbacks:
         # setback = 3200
             # maximum depth is tallest height of cross-section minus lowest point, flow above will run out of the channel
             xs_elevs = xs_setback(xs_all_cln.iloc[:,nseg].copy(), setback, 30)
-            dmax = xs_elevs.max()-xs_elevs.min()
+            dmax = np.min((xs_elevs.max()-xs_elevs.min(), 20)) # should not simulate above 20 m (30 ft depth)
+            dmax = np.max((dmax, 10)) # require at least 10 m to ensure sufficient flow calculation
+            # calculate more flow points than needed then chop off above extreme flows
             for d in np.linspace(0.01, dmax, 50):
                 flow = mannings(d, xs_elevs, n, slope.iloc[nseg])
                 xs_flow_all.loc[(nseg, setback, d),'flow_cms'] = flow
+    # return calculated rating curves
     return xs_flow_all.reset_index()
 
 
@@ -447,13 +506,36 @@ def make_rating_curve(xs_all_cln):
 
 
 # %%
-xs_all_cln = prep_xs(xs_all_df)
-xs_flow_all = make_rating_curve(xs_all_cln)
-xs_flow_all.to_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'), index=False)
+xs_flow_all = make_rating_curve(xs_all_df)
+xs_flow_all = xs_flow_all.dropna(subset='flow_cms')
+# xs_flow_all.to_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'), index=False)
 
-xs_all_cln = prep_xs(xs_levee_smooth)
-xs_flow_all = make_rating_curve(xs_levee_smooth)
-xs_flow_all.to_csv(join(chan_dir,'all_xs_smooth_50pt_rating_curves.csv'), index=False)
+# xs_flow_all = make_rating_curve(xs_levee_smooth)
+# xs_flow_all.to_csv(join(chan_dir,'all_xs_smooth_50pt_rating_curves.csv'), index=False)
+
+# %%
+# rolling mean to smooth out rating curves and create all unique flow-depths
+xs_flow_all_mean = xs_flow_all.groupby(['nseg','setback']).rolling(window=6, min_periods=0, center=False).mean().reset_index(['nseg','setback'])
+xs_flow_all_mean.to_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'), index=False)
+
+
+# %%
+# xs_elevs = xs_setback(xs_all_df.iloc[:,nseg].copy(), setback, 30)
+# xs_elevs.plot()
+
+# %%
+nseg=9
+xs_flow_all_mean[(xs_flow_all.nseg==nseg)&(xs_flow_all.setback==0)].max()
+
+# %%
+# abnormalities in the rating curve mean that flow can decrease with depth and create non-unique flow-depths
+# apply smoothing to alleviate this
+fig,ax=plt.subplots()
+nseg = 9
+setback=0
+
+xs_flow_all[(xs_flow_all.nseg==nseg)&(xs_flow_all.setback==0)].plot('depth_m','flow_cms',ax=ax)
+xs_flow_all_mean[(xs_flow_all.nseg==nseg)&(xs_flow_all.setback==0)].plot('depth_m','flow_cms',ax=ax)
 
 
 # %% [markdown]
@@ -513,6 +595,7 @@ xs_arr = transect2arr(transg, grid_p)
 
 # %%
 plt.imshow(xs_arr)
+print(np.unique(xs_arr))
 np.savetxt(chan_dir+'XS_num_grid_reference.tsv', xs_arr, delimiter='\t')
 
 # %% [markdown]

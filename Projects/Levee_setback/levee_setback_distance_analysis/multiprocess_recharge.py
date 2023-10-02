@@ -60,16 +60,18 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_linear.tsv')
 # if I comment out geopandas in the muskingum_recharge script then no issue
 from muskingum_recharge import min_Q, mannings, calc_depth_arr, xs_setback
 
-
+print('Header done')
 ####################################################################################################
 #%% 
 ## Input data ## 
 
 ## channel data##
 setbacks = np.arange(0, 3400,200)
+# original XS data
+xs_all_cln = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv', index_col='dist_from_center_m')
 # smoothed XS data used for setback analysis
-xs_levee_smooth = pd.read_csv(chan_dir+'xs_levee_smooth.csv', index_col='dist_from_right_m')
-num_segs = xs_levee_smooth.shape[1]
+# xs_all_cln = pd.read_csv(chan_dir+'xs_levee_smooth.csv', index_col='dist_from_center_m')
+num_segs = xs_all_cln.shape[1]
 # wse_grid.to_file(gis_dir+'wse_grid.shp')
 
 import h5py
@@ -118,14 +120,11 @@ for n in np.arange(0,df_elevs.shape[1]):
 xs_mins_arr = np.loadtxt(chan_dir+'subsegments_xs_mins.tsv', delimiter='\t')
 # need to correct segment definition to where the xs_mins subsegment data is
 xs_arr[np.isnan(xs_mins_arr)] = np.nan
+
+print('Input data loaded')
 ####################################################################################################
 #%% 
 ## Pre-process ##
-# find minimum from channel center
-xs_mins = xs_levee_smooth.loc[3100:3300].min(axis=0)
-xs_mins.index = xs_mins.index.astype(int)
-slope = xs_mins.diff().rolling(2, center=True, closed='right').mean().bfill()/2000*-1
-adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
 
 # rating curves for each segment and setback
 xs_flow_all = pd.read_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'))
@@ -176,8 +175,8 @@ def realization_recharge(t, str_setbacks, region, ft):
     q_in = np.append(q_rise, q_fall[1:])
 
     # allocate arrays - num flow steps, num setbacks, num segments
-    Q = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1)) # discharge for each XS
-    d_xs = np.zeros((q_in.shape[0], len(setbacks), xs_levee_smooth.shape[1]+1)) # depth for each XS
+    Q = np.zeros((q_in.shape[0], len(setbacks), xs_all_cln.shape[1]+1)) # discharge for each XS
+    d_xs = np.zeros((q_in.shape[0], len(setbacks), xs_all_cln.shape[1]+1)) # depth for each XS
 
     # set inflow for segment 1 across all setbacks and for all times
     # rate of cubic meters per second
@@ -195,12 +194,12 @@ def realization_recharge(t, str_setbacks, region, ft):
     # iterate across streamflows
     for qn in np.arange(0, q_in.shape[0]):
         # iterate across all cross-sections
-        for nseg in np.arange(0,xs_levee_smooth.shape[1]):
+        for nseg in np.arange(0,xs_all_cln.shape[1]):
             # iterate across all setbacks
             for s,setback in enumerate(setbacks):
                 # for a given setback imagine there is an impenetrable levee blocking overbank flow
-    #             xs_elevs = xs_levee_smooth.iloc[:,nseg][3100-setback:3300+setback]
-                xs_elevs = xs_setback(xs_levee_smooth.iloc[:,nseg], setback)
+    #             xs_elevs = xs_all_cln.iloc[:,nseg][3100-setback:3300+setback]
+                xs_elevs = xs_setback(xs_all_cln.iloc[:,nseg], setback)
                 # boolean of row,col cells that fall within the segment and setback
                 # fp_zon = (xs_arr==nseg)&(str_setbacks <= s+1)
                 fp_zon = (xs_arr==nseg)&(str_setbacks[s]==1)
@@ -244,7 +243,8 @@ def realization_recharge(t, str_setbacks, region, ft):
 #                 d_arr[qn,:] = d_arr[qn,:] * cell_frac[qn] # caused overflow error
             # calculate vertical seepage with Darcy's equation assuming a saturated zone thickness similar to the lake bed in modflow
             # hydraulic conductivity is in m/s, hydraulic gradient is unitless, area is 200x200 m^2
-            q_seep = (soil_K[t,:,:])*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
+            # q_seep = (soil_K[t,:,:])*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
+            q_seep = (soil_K[t,:,:])*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
             rch_hf_arr[qn,:,:,:] += (xs_arr==nseg) * q_seep * cell_frac[qn]
             # identify when the flow is less than the recharge predicted and recharge > 0 
             dry = (Q[qn, :, nseg] < np.nansum(rch_hf_arr[qn,:, xs_arr==nseg], axis=0)) & (np.nansum(rch_hf_arr[qn,:, xs_arr==nseg], axis=0)>0)
@@ -274,13 +274,13 @@ def realization_recharge(t, str_setbacks, region, ft):
 #%% Make short code to loop over local zones
 
 # choose one function to use, regional or local
-def run_rech(t):
-    for zone in [1,2,3]:
-        for ft in [1,2,3]:
-            # 1, 2, 3 are floods long enough to apply to analysis
-            base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
-            os.makedirs(base_fn, exist_ok=True)
-            realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
+# def run_rech(t):
+#     for zone in [1,2,3]:
+#         for ft in [1,2,3]:
+#             # 1, 2, 3 are floods long enough to apply to analysis
+#             base_fn = join(data_dir, 'local_'+str(zone), 'type'+str(ft))
+#             os.makedirs(base_fn, exist_ok=True)
+#             realization_recharge(t, np.where(local_str_setbacks==zone, 1, 0), 'local_'+str(zone), ft)
 
 def run_rech(t):
     region = 'regional'
@@ -295,7 +295,7 @@ def run_rech(t):
 
 def main():
     # pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
-    pool = Pool(processes=25)  # with 100/25 that is 4 sets
+    pool = Pool(processes=16)  # with 100/25 that is 4 sets, 16 is 6.25 sets
     # result = pool.map(realization_recharge, range(100)) # original without adding inputs
     result = pool.map(run_rech, range(100))
     pool.close()
