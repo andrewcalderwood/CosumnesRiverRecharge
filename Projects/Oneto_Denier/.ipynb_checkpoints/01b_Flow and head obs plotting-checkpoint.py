@@ -75,7 +75,7 @@ add_path(py_dir)
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
 from map_cln import gdf_bnds, plt_cln
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 ext_dir = 'F:/WRDAPP'
 c_dir = 'C:/WRDAPP'
 if os.path.exists(ext_dir):
@@ -93,7 +93,7 @@ model_nam = 'oneto_denier_'+upscale+'2014_2018'
 model_ws = join(loadpth,model_nam)
 
 # model_ws = join(loadpth,'parallel_oneto_denier','realization000')
-load_only = ['DIS','UPW','SFR','OC', 'EVT', 'BAS6']
+load_only = ['DIS','UPW','SFR','OC', 'EVT', 'BAS6', 'GHB']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws= model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt',
                               load_only=load_only,
@@ -244,9 +244,9 @@ def clean_wb(flow_name, dt_ref):
     wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
     wb['dSTORAGE_sum'] = wb.dSTORAGE.cumsum()
     # calculate total gw flow, sum GHB, CHD
-    wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
-    wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
-    wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
+    # wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
+    # wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
+    # wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
     
     wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
     wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
@@ -261,6 +261,9 @@ def clean_wb(flow_name, dt_ref):
 
 # %%
 wb, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget.txt', dt_ref)
+# manual columns
+wb_out_cols  =['WEL_OUT','ET_OUT','GHB_OUT','SFR_OUT','LAK_OUT']
+wb_in_cols = ['RCH_IN','GHB_IN','SFR_IN','LAK_IN']
 
 # %%
 print('Mean water budget ($m^3/day$)')
@@ -308,26 +311,6 @@ surf = m.evt.surf.array[0][0]
 # # Plot Groundwater Observed vs Simulated
 # We need to validate that the local model of Oneto-Denier is adequately representing stream-aquifer interactions so it can be used to quantify storage changes (and particle age).
 #
-
-# %%
-# hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
-# # extract time series of heads for each desired location
-# mw_hds = hdobj.get_ts(list(zip(rm_grid['lay'], hob_row, hob_col)))
-# mw_hds = pd.DataFrame(mw_hds, columns=['time']+rm_grid.Sensor.tolist())
-# # convert to hourly to maintain more precision in DT
-# mw_hds['dt'] = strt_date+(mw_hds.time.values*24 ).astype('timedelta64[h]')
-# mw_gwl = mw_hds.drop(columns=['time'])
-# # long format for id join with observed dat
-# mw_long = mw_gwl.melt(id_vars='dt', var_name='Well',value_name='sim')
-# mw_long = mw_long[mw_long.sim != -1e30]
-
-# %%
-# mw_chk = mw_long.join(gwl_long.set_index(['Well','dt']), on=['Well','dt'], how='inner')
-# mw_chk = mw_chk.melt(id_vars=['dt', 'Well'],value_vars=['sim','obs'], value_name='gwe', var_name='type')
-
-
-# %%
-# sns.relplot(mw_chk,x='dt',y='gwe',col='Well', hue='type', col_wrap=4)
 
 # %%
 from sklearn.metrics import r2_score, mean_squared_error

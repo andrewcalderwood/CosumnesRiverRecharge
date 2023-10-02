@@ -43,7 +43,7 @@ def Muskingum(I, N, K, X):
 
 def xs_setback(xs_levee_smooth, setback, levee_ft = 20):
     ''' Function to add levee wall to XS if setback location is not 20 ft (or user specified) above thalweg'''
-    mid = np.mean(xs_levee_smooth.index) # location that should be channel bottom based on NHD line
+    mid = xs_levee_smooth.index[int(xs_levee_smooth.shape[0]/2)] # location that should be channel bottom based on NHD line
     roll_window = 400 # window used to capture true channel minimum
     # for a given setback imagine there is an impenetrable levee blocking overbank flow
     xs_elevs = xs_levee_smooth[mid-100-setback:mid+100+setback]

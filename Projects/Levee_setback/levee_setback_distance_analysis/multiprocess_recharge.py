@@ -60,16 +60,17 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_linear.tsv')
 # if I comment out geopandas in the muskingum_recharge script then no issue
 from muskingum_recharge import min_Q, mannings, calc_depth_arr, xs_setback
 
-
+print('Header done')
 ####################################################################################################
 #%% 
 ## Input data ## 
 
 ## channel data##
 setbacks = np.arange(0, 3400,200)
+# original XS data
+xs_all_cln = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv', index_col='dist_from_center_m')
 # smoothed XS data used for setback analysis
-xs_all_cln = pd.read_csv(chan_dir+'Elevation_by_XS_number_meters.csv', index_col='dist_from_right_m')
-# xs_all_cln = pd.read_csv(chan_dir+'xs_all_cln.csv', index_col='dist_from_right_m') # smoothed XS
+# xs_all_cln = pd.read_csv(chan_dir+'xs_levee_smooth.csv', index_col='dist_from_center_m')
 num_segs = xs_all_cln.shape[1]
 # wse_grid.to_file(gis_dir+'wse_grid.shp')
 
@@ -119,14 +120,11 @@ for n in np.arange(0,df_elevs.shape[1]):
 xs_mins_arr = np.loadtxt(chan_dir+'subsegments_xs_mins.tsv', delimiter='\t')
 # need to correct segment definition to where the xs_mins subsegment data is
 xs_arr[np.isnan(xs_mins_arr)] = np.nan
+
+print('Input data loaded')
 ####################################################################################################
 #%% 
 ## Pre-process ##
-# find minimum from channel center
-xs_mins = xs_all_cln.loc[3100:3300].min(axis=0)
-xs_mins.index = xs_mins.index.astype(int)
-slope = xs_mins.diff().rolling(2, center=True, closed='right').mean().bfill()/2000*-1
-adj_xs_mins = np.append(xs_mins[0], (xs_mins[0]-slope.cumsum()*2000))
 
 # rating curves for each segment and setback
 xs_flow_all = pd.read_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'))
@@ -298,7 +296,7 @@ def run_rech(t):
 
 def main():
     # pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
-    pool = Pool(processes=25)  # with 100/25 that is 4 sets
+    pool = Pool(processes=16)  # with 100/25 that is 4 sets, 16 is 6.25 sets
     # result = pool.map(realization_recharge, range(100)) # original without adding inputs
     result = pool.map(run_rech, range(100))
     pool.close()

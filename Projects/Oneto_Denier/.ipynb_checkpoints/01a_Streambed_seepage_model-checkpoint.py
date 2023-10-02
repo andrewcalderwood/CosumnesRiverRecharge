@@ -21,7 +21,7 @@
 # ## Model set up
 # Initial set up was a year long flow test with the primary boundary condition the SFR package and the GHB included to allow lateral groundwater outflow which is expected as the water entering the perched aquifers may transfer horizontally. Added evapotranspiration with EVT to allow dry season perched aquifer usage. Recharge was added then removed because it caused too much of a jump in levels. Added lake package to represent floodplain recharge in the 2D floodplain.
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 # standard python utilities
 import os
 import sys
@@ -50,7 +50,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 usr_dir = expanduser('~')
 doc_dir = join(usr_dir, 'Documents')
 # dir of all gwfm data
@@ -63,7 +63,7 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 uzf_dir = gwfm_dir+'/UZF_data/'
 
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 def add_path(fxn_dir):
     """ Insert fxn directory into first position on path so local functions supercede the global"""
     if fxn_dir not in sys.path:
@@ -81,7 +81,7 @@ from mf_utility import get_layer_from_elev, param_load
 
 from map_cln import gdf_bnds, plt_cln
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 tprogs_fxn_dir = doc_dir+'/GitHub/CosumnesRiverRecharge/tprogs_utilities'
 add_path(tprogs_fxn_dir)
 import tprogs_cleaning as tc
@@ -312,7 +312,7 @@ grid_match = gpd.sjoin(child_grid, grid_p, predicate = 'intersects', how = 'left
 # Top of child grid needs to coincide with the top of the parent grid if vertical grid refinement is applied
 # It would be interesting to look at including the transfer of flow between the parent and child model as it is not currently implemented in MODFLOW. Need to create relation between parent and child grid row, column numbers
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 
 dem_data_p = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_mean.tsv')
 
@@ -377,7 +377,7 @@ gel_dir = join(gwfm_dir, 'UPW_data')
 eff_K = pd.read_csv(join(gel_dir, 'permeameter_regional.csv'))
 eff_K
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 mf_tprogs_dir = gwfm_dir+'/UPW_data/tprogs_final/'
 tprogs_files = glob.glob(mf_tprogs_dir+'*')
 
@@ -404,7 +404,7 @@ print(t)
 top10.loc[t]
 # top10
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 
 t=11 # realization with NSE>0.5
 tprogs_line = np.loadtxt(tprogs_files[t])
@@ -1795,7 +1795,7 @@ wel_dir = join(gwfm_dir, 'WEL_data')
 lu_ag = gpd.read_file(join(uzf_dir, 'county_landuse', 'domain_ag_lu_2018.shp'))
 lu_ag = gpd.overlay(lu_ag, m_domain)
 
-# %%
+# %% editable=true slideshow={"slide_type": ""}
 # WATERSOURC = {1: SW, 2: Mixed, 3: GW, 4:Unknown}
 fig,ax = plt.subplots()
 lu_ag.plot(ax=ax)

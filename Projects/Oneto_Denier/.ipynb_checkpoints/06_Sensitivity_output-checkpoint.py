@@ -62,18 +62,25 @@ py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 from mf_utility import get_dates, get_layer_from_elev
 from map_cln import gdf_bnds, plt_cln
+# -
+
+# ## Specify model
 
 # +
 loadpth =  'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage'
+scenario=''
+scenario='_no_reconnection'
 
 upscale = 'upscale4x_'
-model_nam = 'oneto_denier_'+upscale+'2014_2020_ucode'
-model_ws = join(loadpth,model_nam)
+model_nam = 'oneto_denier_'+upscale+'2014_2020'
+model_ws = join(loadpth,model_nam+scenario) +'_ucode'
 m_nam = 'MF_ucode'
 # -
 
-ucode_file = join(model_ws, 'r11_regular')
-sa_run_dir = join(sa_dir, basename(ucode_file))
+u_name = 'r11_full'
+# u_name = 'r11_missing_flow'
+ucode_file = join(model_ws, u_name)
+sa_run_dir = join(sa_dir, u_name+scenario)
 os.makedirs(sa_run_dir, exist_ok=True)
 
 
@@ -101,20 +108,19 @@ filename = join(ucode_file, m_nam+'._'+ext[n])
 print(filename)
 ss = clean_ucode(filename)
 ss['NORMALIZED COMPOSITE SCALED SENSITIVITY'] = ss.loc[:,'COMPOSITE SCALED SENSITIVITY'] / ss.loc[:,'COMPOSITE SCALED SENSITIVITY'].max()
-   
+
 
 # +
 # ss
 
 # +
-fig, ax = plt.subplots(2,1, sharex=True)
-ax_n = ax[0]
-ss.plot(x='PARAMETER NAME',y='COMPOSITE SCALED SENSITIVITY',kind='bar',legend=False, ax=ax_n)
-ax_n.set_yscale('log')
-
-ax_n = ax[1]
-ss.plot(x='PARAMETER NAME',y='COMPOSITE SCALED SENSITIVITY',kind='bar',legend=False, ax=ax_n)
+# fig, ax = plt.subplots(2,1, sharex=True)
+# ax_n = ax[0]
+# ss.plot(x='PARAMETER NAME',y='COMPOSITE SCALED SENSITIVITY',kind='bar',legend=False, ax=ax_n)
 # ax_n.set_yscale('log')
+# ax_n = ax[1]
+fig, ax_n = plt.subplots()
+ss.plot(x='PARAMETER NAME',y='COMPOSITE SCALED SENSITIVITY',kind='bar',legend=False, ax=ax_n)
 
 fig.supylabel('NORMALIZED COMPOSITE \n SCALED SENSITIVITY')
 plt.savefig(join(sa_run_dir, 'noramlized_CSS.png'),bbox_inches='tight',dpi=600)
