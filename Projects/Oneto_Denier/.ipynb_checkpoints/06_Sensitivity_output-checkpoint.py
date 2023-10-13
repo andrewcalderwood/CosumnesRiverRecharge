@@ -123,12 +123,14 @@ fig, ax_n = plt.subplots()
 ss.plot(x='PARAMETER NAME',y='COMPOSITE SCALED SENSITIVITY',kind='bar',legend=False, ax=ax_n)
 
 fig.supylabel('NORMALIZED COMPOSITE \n SCALED SENSITIVITY')
-plt.savefig(join(sa_run_dir, 'noramlized_CSS.png'),bbox_inches='tight',dpi=600)
+# plt.savefig(join(sa_run_dir, 'noramlized_CSS.png'),bbox_inches='tight',dpi=600)
 
 # -
+# Plot the change in observations with each sensitivity.  The ._os file has the observed and simulated files, but this is for the initial run?
 
-
-
+# +
+# clean_ucode(join(ucode_file, 'MF_ucode._os'))
+# -
 
 
 

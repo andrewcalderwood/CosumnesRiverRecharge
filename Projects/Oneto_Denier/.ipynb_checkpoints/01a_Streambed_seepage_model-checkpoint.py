@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py:percent
+#     formats: py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -150,8 +150,6 @@ print('NPER ', nper, 'NPER_TR ',nper_tr)
 parent_grid = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
 nrow_p = int(parent_grid.row.max())
 ncol_p = int(parent_grid.column.max())
-
-# %%
 
 # %%
 delr = 100
@@ -1161,6 +1159,8 @@ up_seg = div_seg - 1
 
 # %% [markdown]
 # For the new no reconnection scheme it is just as fast to copy the same model input files and just replace the diversion flow (FLOW with IPRIOR=-1) and fraction of return flow (FLOW with IPRIOR=-2)
+#
+# With some more thinking I've realized that under the pre-resotration scenario there is a steeper gradient (topographical) from the levee to the floodplain so any water above the levee would be more likely to go into the floodplain during the brief period of activity, while after restoration the lower levee means that the higher flow has to fight against topography at times and against the momentum of the water.
 
 # %%
 # pull out floodplain activation flows
@@ -1181,7 +1181,7 @@ sfr_seg.iupseg[sfr_seg.nseg==div_seg] = up_seg
 sfr_seg.iprior[sfr_seg.nseg==div_seg] = -3 # iprior=-3 any flows above the flow specified will be diverted
 ## 
 if scenario == 'no_reconnection':
-    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_no_reconnection # 109 cms is floodplain threshold in 2014
+    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_no_reconnection # 71.6 cms is floodplain threshold in 2014
 else:
     sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_baseline # 23 cms is floodplain threshold per Whipple in the Cosumnes
 sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain
@@ -1189,8 +1189,9 @@ sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplai
 # adjust for flow from diversion segment back to  channel
 sfr_seg.iupseg[sfr_seg.nseg==ret_seg] = div_seg
 sfr_seg.iprior[sfr_seg.nseg==ret_seg] = -2 # the flow diverted is a % of the total flow in the channel
+# there isn't clear data either way so keep constant
 if scenario == 'no_reconnection':
-    sfr_seg.flow[sfr_seg.nseg==ret_seg] = 0.75 # with no reconnection less fraction of flow remains in floodplain
+    sfr_seg.flow[sfr_seg.nseg==ret_seg] = 0.5 # with no reconnection less fraction of flow remains in floodplain
 else:
     sfr_seg.flow[sfr_seg.nseg==ret_seg] = 0.5 # approximate 50% of flow goes to floodplain?
 sfr_seg.outseg[sfr_seg.nseg==ret_seg] = chan_seg # flows out to main channel
@@ -1737,10 +1738,6 @@ et_layer = get_layer_from_elev((dem_data - ext_dp)[et_rows, et_cols], m.dis.botm
 ievt = np.zeros((nrow,ncol))
 ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
-
-# %%
-plt.imshow(ext_dp)
-plt.colorbar()
 
 # %%
 
@@ -2354,6 +2351,7 @@ nwt.__dict__ = nwt_dict
 # %%
 # Writing the MODFLOW data files
 # m.write_input()
+
 
 
 # %% [markdown]
