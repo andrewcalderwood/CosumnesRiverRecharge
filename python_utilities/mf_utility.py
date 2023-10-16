@@ -98,10 +98,15 @@ def clean_wb(model_ws, dt_ref):
 
     # calculate change in storage
     wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
-    # calculate total gw flow, sum GHB, CHD
-    wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
-    wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
-    wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
+    # calculate the cumulative storage change
+    wb['dSTORAGE_sum'] = wb.dSTORAGE.cumsum()
+    # calculate net groundwater flow
+    wb['GHB_NET'] = wb.GHB_IN - wb.GHB_OUT
+
+    # calculate total gw flow, sum GHB, CHD (not uniformly helpful, may be confusing)
+    # wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
+    # wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
+    # wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
     
     wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
     wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
@@ -140,7 +145,7 @@ def clean_sfr_df(model_ws, pd_sfr=None):
     sfrdf = sfrdf.groupby('segment').resample('D').mean(numeric_only=True)
     sfrdf = sfrdf.reset_index('segment', drop=True)
     sfrdf[['row','column']]-=1 # convert to python
-    cmd2cfs = 1/((0.3048**3)*86400) # cubic meters per day to cfs
+    # cmd2cfs = 1/((0.3048**3)*86400) # cubic meters per day to cfs
     sfrdf['month'] = sfrdf.index.month
     sfrdf['WY'] = sfrdf.index.year
     sfrdf.loc[sfrdf.month>=10, 'WY'] +=1

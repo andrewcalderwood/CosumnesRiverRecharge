@@ -255,8 +255,6 @@ fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
 
 # ### Need to identify extent of floodplain on channel
 
-
-
 # # Model summary plots
 # It would be cool to have functions that are built on using the flopy output rather than using input data even slightly slower because then there is more interoperability
 
@@ -264,8 +262,8 @@ fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
 loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale4x_2014_2018/'
 
-# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
-# model_nam = 'oneto_denier_upscale4x_2014_2020_no_reconnection/'
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
+model_nam = 'oneto_denier_upscale4x_2014_2020_no_reconnection/'
 
 model_ws = loadpth+model_nam
 model_ws
@@ -312,25 +310,34 @@ rain_m = rain_in/1000
 rain_plt = rain_m['Fair Oaks'].loc[strt_date:end_date]
 rain_plt = rain_plt.reindex(inflow.index)
 
+flw_lgd = []
+
 # +
 fig, ax = plt.subplots(figsize=(6.5,3))
 
 dt = inflow.index.values
 ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
+ax.axhline(y=23, color='black', linestyle='--')
+ax.axhline(y=71.6, color='black', linestyle='-.')
+
 # Create second axes, in order to get the bars from the top you can multiply by -1
 ax2 = ax.twinx()
-ax2.bar(dt, -rain_plt, 0.9)
+# ax2.bar(dt, -rain_plt.values, 0.9)
+ax2.plot(dt, -rain_plt, alpha=0.6)# regular line plot does better than a bar plot
 # Now need to fix the axis labels
 max_pre = np.max(rain_plt)+0.01
+max_pre = 0.12
 y2_ticks = np.arange(0, max_pre, 0.02)
 y2_ticklabels = [str(i) for i in y2_ticks]
 ax2.set_yticks(-1 * y2_ticks)
 ax2.set_yticklabels(y2_ticklabels)
 
 ax2.set_ylabel('Rainfall (m)')
-ax.set_ylabel('Streamflow (cms)')
+ax.set_ylabel('Streamflow ($m^3/s$)')
 ax.ticklabel_format(style='plain', axis='y') 
 ax.set_xlabel('Date')
+
+# fig.legend(['Baseline','No Reconnection'], ncol=2, loc='outside upper center', bbox_to_anchor=(0.5, 1.05),)
 
 plt.show()
 
@@ -339,7 +346,13 @@ plt.show()
 # #### Identify general hydrologic characteristics
 
 print('Days above 23 cms:',(inflow.flow_cms>23).sum())
-(inflow.flow_cms>23).resample('AS-Oct').sum()
+days_by_wy = (inflow.flow_cms>23).resample('AS-Oct').sum()
+days_by_wy[days_by_wy.index.year.isin([2016,2018])]
+
+flow = 71.6
+print('Days above '+str(flow)+' cms:',(inflow.flow_cms>flow).sum())
+days_by_wy = (inflow.flow_cms>flow).resample('AS-Oct').sum()
+days_by_wy[days_by_wy.index.year.isin([2016,2018])]
 
 # ## Time series plots
 
@@ -372,61 +385,8 @@ plt.xlabel('Date')
 fig.supylabel('Flux ($m^3/d$)')
 fig.tight_layout()
 
-# +
-sfr_dir = join(gwfm_dir, 'SFR_data')
-# USGS presents flow in cfs (cubic feet per second)
-inflow_in = pd.read_csv(join(sfr_dir,'MB_daily_flow_cfs_2010_2019.csv'), index_col = 'datetime', parse_dates = True)
-
-# covnert flow from cubic feet per second to cubic meters per day
-inflow_in['flow_cms'] = inflow_in.flow_cfs * (1/(3.28**3))
-# filter out data between the stress period dates
-inflow = inflow_in.loc[strt_date:end_date]
-# -
-
-## Potential ETo spatial interpolation from CIMIS
-fn = glob.glob(join(uzf_dir,'Cosumnes_dailyET_precip*.csv'))
-daily_data = pd.DataFrame()
-for file in fn:
-    new_data = pd.read_csv(file, index_col = ['Date'], parse_dates = True)
-    daily_data = pd.concat((daily_data, new_data))
-# units of mm
-data_in = daily_data[daily_data['Stn Name']=='Fair Oaks']
-# clean up data so columns are by location, units of Precip are in mm
-rain_in = data_in.pivot_table(index = 'Date', columns = 'Stn Name', values = 'Precip (mm)')
-rain_m = rain_in/1000
-# subset to model and reindex to match streamflow dates
-rain_plt = rain_m['Fair Oaks'].loc[strt_date:end_date]
-rain_plt = rain_plt.reindex(inflow.index)
-
-rain_plt.resample('AS-Oct').sum()*12/0.3048
-
-# +
-fig, ax = plt.subplots(figsize=(6.5,3))
-
-dt = inflow.index.values
-ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
-# Create second axes, in order to get the bars from the top you can multiply by -1
-ax2 = ax.twinx()
-ax2.bar(dt, -rain_plt, 0.9)
-# Now need to fix the axis labels
-max_pre = np.max(rain_plt)+0.01
-y2_ticks = np.arange(0, max_pre, 0.02)
-y2_ticklabels = [str(i) for i in y2_ticks]
-ax2.set_yticks(-1 * y2_ticks)
-ax2.set_yticklabels(y2_ticklabels)
-
-ax2.set_ylabel('Rainfall (m)')
-ax.set_ylabel('Streamflow (cms)')
-ax.ticklabel_format(style='plain', axis='y') 
-ax.set_xlabel('Date')
-
-plt.show()
-
-# -
-
 # ## Map spatial coverage of boundary conditions
 
-# +
 gde_dir = join(uzf_dir,'shp_GDE_TFT')
 GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
 
