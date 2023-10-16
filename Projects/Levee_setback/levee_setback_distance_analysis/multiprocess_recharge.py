@@ -128,6 +128,7 @@ print('Input data loaded')
 
 # rating curves for each segment and setback
 xs_flow_all = pd.read_csv(join(chan_dir,'all_xs_50pt_rating_curves.csv'))
+# xs_flow_all = pd.read_csv(join(chan_dir,'all_xs_smooth_50pt_rating_curves.csv'))
 
 def depth_match(seg_flow, flow):
     """ Given a XS (nseg, setback) return the expected depth (m) given a flow (cms)"""
@@ -243,7 +244,7 @@ def realization_recharge(t, str_setbacks, region, ft):
 #                 d_arr[qn,:] = d_arr[qn,:] * cell_frac[qn] # caused overflow error
             # calculate vertical seepage with Darcy's equation assuming a saturated zone thickness similar to the lake bed in modflow
             # hydraulic conductivity is in m/s, hydraulic gradient is unitless, area is 200x200 m^2
-            # q_seep = (soil_K[t,:,:])*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
+            # q_seep = (soil_K[t,:,:])*hf_tot[t,:,:]*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick) # limit recharge to HCP only
             q_seep = (soil_K[t,:,:])*(200*200)*((d_arr[qn,:] + soil_thick)/soil_thick)
             rch_hf_arr[qn,:,:,:] += (xs_arr==nseg) * q_seep * cell_frac[qn]
             # identify when the flow is less than the recharge predicted and recharge > 0 

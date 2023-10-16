@@ -255,8 +255,6 @@ fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
 
 # ### Need to identify extent of floodplain on channel
 
-
-
 # # Model summary plots
 # It would be cool to have functions that are built on using the flopy output rather than using input data even slightly slower because then there is more interoperability
 
