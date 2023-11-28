@@ -17,6 +17,7 @@ import os
 import sys
 from os.path import join, exists, basename, dirname
 import glob
+from importlib import reload
 
 import geopandas as gpd
 import pandas as pd
@@ -68,15 +69,32 @@ add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/tprogs_utilities')
 add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/python_utilities')
 # -
 
-from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln
+import map_cln
+reload(map_cln)
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, make_multi_scale
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
 
 # +
 # import mf_utility
 # reload(mf_utility)
+
+# +
+fig, ax = plt.subplots()
+m_domain.plot(ax=ax, color='none', edgecolor='black')
+plt_arrow(ax)
+plt_scale(ax)
+
+plt_arrow(ax, 0.05, 0.15)
+make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
+# make_multi_scale(ax, 0.1, 0.1, dist = 1E3, scales = [3,2,1])
+
 # -
 
+dist_lab = str(np.round(0.5, 1)).replace('.0','')
+len(dist_lab)
+
 grid_r = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
+grid_r = grid_r.rename(columns={'node':'node_p', 'row':'row_p','column':'column_p'})
 
 
 # +
@@ -89,8 +107,12 @@ grid_p = gpd.read_file(grid_fn)
 grid_p.crs = 'epsg:32610'
 # -
 
-grid_match = gpd.sjoin(grid_p, grid_r, how='left',lsuffix='c',rsuffix='p')
-grid_match = grid_match.rename(columns={'node_c':'node','row_c':'row','column_c':'column'})
+rot = 52.9
+
+# the spatial join has duplicate row,columns of the local
+# grid_match = gpd.sjoin(grid_p, grid_r, how='left')
+grid_match = gpd.overlay(grid_p, grid_r)
+grid_match = grid_match.loc[grid_match.geometry.area>9999].reset_index() # correct any duplicates due to tiny geometry inconsistencies
 
 grid_p['id'] = 0
 m_domain = grid_p.dissolve('id')
@@ -158,14 +180,39 @@ od_swale = fp_logger[fp_logger['Logger Location']=='SwaleBreach_1']
 # +
 
 
-legend_elements = [
+map_lgd = [
     Patch(facecolor='none', edgecolor='black', linestyle = '--', alpha=1., label='Watershed Extent'),
     Patch(facecolor='none', edgecolor='black',alpha=1., label='Model Extent'),
-    Patch(facecolor='none', edgecolor='red',alpha=1., label='Levee removal and\nexcavation areas'),
-    Patch(facecolor='tab:blue', alpha=0.5, label='Reconnected Floodplain'),
+    Patch(facecolor='red', edgecolor='red',alpha=0.5, label='Levee removal and\nexcavation areas'),
+    # Patch(facecolor='tab:blue', alpha=0.5, label='Reconnected Floodplain'),
+    Patch(facecolor='none',hatch='///', edgecolor='blue',  alpha=0.7, label='Reconnected Floodplain'),
     Line2D([0], [0],color='tab:blue',label='Cosumnes River'),
-    Line2D([0], [0], marker='.', linestyle='', color='blue', label='Monitoring Well'),
+    Line2D([0], [0], marker='.', linestyle='', color='black', label='Monitoring Well'),
 ]
+lgd_short = [
+    # Patch(facecolor='none', edgecolor='black', linestyle = '--', alpha=1., label='Watershed Extent'),
+    # Patch(facecolor='none', edgecolor='black',alpha=1., label='Model Extent'),
+    Patch(facecolor='red', edgecolor='red',alpha=0.5, label='Levee removal and\nexcavation areas'),
+    # Patch(facecolor='tab:blue', alpha=0.5, label='Reconnected Floodplain'),
+    # Line2D([0], [0],color='tab:blue',label='Cosumnes River'),
+    Line2D([0], [0], marker='.', linestyle='', color='black', label='Monitoring Well'),
+]
+
+
+# +
+
+def ref_map(axins, fontsize=10, lw=1):
+    ca.plot(ax = axins,alpha = 0.2, edgecolor='black')
+    axins.annotate(text='California', xy=lab_pnt(ca), 
+                xytext = (6,-30), textcoords = 'offset points', fontsize=fontsize, 
+                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw), zorder=1)
+    # second one is smaller inset
+    axins.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+    ws_gdf.plot(color='none',ax=axins, linestyle='--')
+    # ws_gdf.plot(color='none',ax=axins, linestyle='--')
+    m_domain.plot(color="none",edgecolor='black',ax=axins)
+    return axins
 
 
 
@@ -179,51 +226,130 @@ ca.plot(ax = axins,alpha = 0.2, edgecolor='black')
 axins.annotate(text='California', xy=lab_pnt(ca), 
             xytext = (6,6), textcoords = 'offset pixels',
             bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
-# soam.plot(ax = axins, edgecolor = 'black')
-# cos.plot(ax = axins, edgecolor = 'black')
 ws_gdf.plot(color='none',ax=axins, linestyle='--')
 m_domain.plot(color="none",edgecolor='black',ax=axins)
-
 
 # first one is CA map
 ax = inset_axes(axins, width="100%", height="100%", bbox_to_anchor=(0.8, -.1, 1.3, 1.3),
                   bbox_transform=axins.transAxes, loc=2)
-ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+# ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+def plt_arrow(ax, xoff = 0.7, yoff=0.15):
+    x, y, arrow_length = xoff, yoff, 0.1
+    ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
+                arrowprops=dict(facecolor='black', width=5, headwidth=15),
+                ha='center', va='center', fontsize=20, 
+                xycoords=ax.transAxes)
+def plt_scale(ax):
+    fontprops = fm.FontProperties(size=18)
+    scalebar = AnchoredSizeBar(ax.transData,
+                               2000, '2 km', 'lower right', pad=0.3, sep=2,color='black',
+                               frameon=False, size_vertical=1E2, fontproperties=fontprops)
+    ax.add_artist(scalebar)
+def main_map(ax):
+    ## main figure ##
+    ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
 
-plt_bnds = gdf_bnds(m_domain,ax=ax, buf=200)
-# plt_bnds.plot(ax=axins, color='none')
+    plt_bnds = gdf_bnds(m_domain,ax=ax, buf=200)
+    # plt_bnds.plot(ax=axins, color='none')
+    
+    # od_breach.plot(ax=ax)
+    # od_swale.plot(ax=ax)
+    
+    m_domain.plot(color="none",edgecolor='black',ax=ax)
+    
+    cr.plot(ax=ax, color='tab:blue')
+    mr.plot(ax=ax, color='tab:blue')
+    
+    # lak_extent.plot(ax=ax, color='tab:blue',  alpha=0.5)
+    lak_extent.plot(ax=ax, color='none',hatch='///', edgecolor='blue',  alpha=0.7)
+    # rm_t.plot(legend=False,ax=ax, color='blue', markersize=5)
+    rm_t.plot(legend=False,ax=ax, color='black', markersize=5) #Helen wanted non-blue markers
+    levee_removal.plot(ax=ax, color='red', edgecolor='red', alpha=0.5)
+    
+    ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
+                    crs = 'epsg:26910', alpha=0.7)
+    
 
-# od_breach.plot(ax=ax)
-# od_swale.plot(ax=ax)
+    
+ax.legend(handles=map_lgd, loc='upper left')
 
-m_domain.plot(color="none",edgecolor='black',ax=ax)
-
-cr.plot(ax=ax, color='tab:blue')
-mr.plot(ax=ax, color='tab:blue')
-
-lak_extent.plot(ax=ax, color='tab:blue',  alpha=0.5)
-rm_t.plot(legend=False,ax=ax, color='blue', markersize=1)
-levee_removal.plot(ax=ax, color='red', edgecolor='red', alpha=0.5)
-
-ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
-                crs = 'epsg:26910', alpha=0.8)
-
-x, y, arrow_length = 0.7, 0.15, 0.1
-ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
-            arrowprops=dict(facecolor='black', width=5, headwidth=15),
-            ha='center', va='center', fontsize=20, 
-            xycoords=ax.transAxes)
-
-fontprops = fm.FontProperties(size=18)
-scalebar = AnchoredSizeBar(ax.transData,
-                           2000, '2 km', 'lower right', pad=0.3, sep=2,color='black',
-                           frameon=False, size_vertical=1E2, fontproperties=fontprops)
-ax.add_artist(scalebar)
-
-ax.legend(handles=legend_elements, loc='upper left')
-
+main_map(ax)
+plt_arrow(ax)
+plt_scale(ax)
 mark_inset(axins, ax, loc1=2, loc2=3, fc="none", ec="black")
-fig.savefig(join(fig_dir, 'CA_domain_map.png'), bbox_inches='tight')
+# fig.savefig(join(fig_dir, 'CA_domain_map.png'), bbox_inches='tight')
+
+# +
+def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
+    lw = 1
+    ax.annotate(text, xy=(x, y), xytext=(x, y-arrow_length),
+                ha='center', va='center', fontsize=fontsize, #rotation =45,
+                xycoords=ax.transAxes,
+               bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+
+    ### gw flow directoin arrow approximation
+    ax.annotate('', xy=(x+dx, y+dy), xytext=(x, y),
+                arrowprops=dict(facecolor='black', width=1.5, alpha=1, headwidth=5),
+                ha='center', va='center', fontsize=10,xycoords=ax.transAxes, 
+               )
+
+# fig, ax =plt.subplots()
+# dir_arrow(ax, 0.8, 0.8, -0.2, -0.2, 0.2, 'Cosumnes River\nflow into the domain')
+
+
+# -
+
+def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
+    xy = gdf.geometry.unary_union.centroid.coords[0]
+    lw = 1
+    if exterior:
+        xy = gdf.geometry.unary_union.exterior.representative_point().centroid.coords[0]
+    if arrow:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
+                    bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+            bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+
+
+def xy_lab(xy, text, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
+    if bbox:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    bbox=dict(boxstyle="square,pad=0.3", fc=fc, ec=ec, lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize)
+
+
+# +
+fig, ax = plt.subplots(figsize=(6.5, 6.5), dpi=300)
+
+main_map(ax=ax)
+fontsize=10
+arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+arr_lab(lak_extent, 'Cosumnes\nRiver', ax, offset = (-150, -450), fontsize=fontsize)
+arr_lab(m_domain, 'Model\nDomain', ax, offset = (-600, -0), fontsize=fontsize)
+
+ax.legend(handles=lgd_short, loc='upper left')
+
+dir_arrow(ax, 0.8, 0.9, -0.075, -0.075, -0.05, 'Streamflow\nDirection', fontsize=8)
+
+plt_arrow(ax, 0.05, 0.15)
+make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
+
+## inset map
+axins = inset_axes(ax, width="35%", height="35%", 
+                   loc='lower right',
+                   # bbox_to_anchor=(-.01, .01, 1, 1),
+                   bbox_to_anchor=(-.01, .01, 1, 1),
+                  bbox_transform=ax.transAxes, 
+                   # loc=2
+                  )
+
+ref_map(axins, fontsize=8)
+arr_lab(m_domain, 'Cosumnes\nWatershed', axins, offset = (125, 40), arrow=False, fontsize=8)
+
+
 # -
 
 # ## Interior floodplain plot of wells
@@ -239,8 +365,8 @@ m_domain.plot(color="none",edgecolor='black',ax=ax)
 cr.plot(ax=ax, color='tab:blue')
 mr.plot(ax=ax, color='tab:blue')
 
-lak_extent.plot(ax=ax, color='tab:blue',  alpha=0.5)
-rm_t.plot(legend=False,ax=ax, color='blue', markersize=1)
+lak_extent.plot(ax=ax, color='none', hatch='///', edgecolor='blue',  alpha=0.7)
+rm_t.plot(legend=False,ax=ax, color='black', markersize=5)
 
 
 rm_t.apply(lambda x: ax.annotate(x.Sensor.replace('MW_',''), xy=x.geometry.coords[0], ha='center', fontsize=6,
@@ -310,7 +436,14 @@ rain_m = rain_in/1000
 rain_plt = rain_m['Fair Oaks'].loc[strt_date:end_date]
 rain_plt = rain_plt.reindex(inflow.index)
 
-flw_lgd = []
+flw_lgd =  [
+    # Patch(facecolor='none', edgecolor='black', linestyle = '--', alpha=1., label='Watershed Extent'),
+    Line2D([0], [0],color='tab:blue', alpha=0.6, label='Rainfall'),
+    Line2D([0], [0], color='brown', alpha=0.6,label='Streamflow'),
+    # Line2D([0], [0], linestyle='-.', color='black', label='23 cms'),
+    # Line2D([0], [0],  linestyle='--', color='black', label='71.6 cms'),
+]
+
 
 # +
 fig, ax = plt.subplots(figsize=(6.5,3))
@@ -319,7 +452,6 @@ dt = inflow.index.values
 ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
 ax.axhline(y=23, color='black', linestyle='--')
 ax.axhline(y=71.6, color='black', linestyle='-.')
-
 # Create second axes, in order to get the bars from the top you can multiply by -1
 ax2 = ax.twinx()
 # ax2.bar(dt, -rain_plt.values, 0.9)
@@ -334,11 +466,18 @@ ax2.set_yticklabels(y2_ticklabels)
 
 ax2.set_ylabel('Rainfall (m)')
 ax.set_ylabel('Streamflow ($m^3/s$)')
-ax.ticklabel_format(style='plain', axis='y') 
+# ax.ticklabel_format(style='plain', axis='y') 
+ax.set_yscale('log')
+ax.set_ylim(1,1E3)
 ax.set_xlabel('Date')
 
-# fig.legend(['Baseline','No Reconnection'], ncol=2, loc='outside upper center', bbox_to_anchor=(0.5, 1.05),)
+fig.legend(handles=flw_lgd, loc='outside upper center',ncol=2, bbox_to_anchor=(0.5, 1.0)) # with flow thresholds (0.5, 1.05)
+# arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
+xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
 
+
+fig.savefig(join(fig_dir, 'streamflow_hydrograph_with_rain.png'), bbox_inches='tight')
 plt.show()
 
 # -
@@ -372,24 +511,23 @@ wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
 # ax[0].set_yscale('log')
 # ax[0].yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: '{:,.1E}'.format(x)))
 
-
-
-
-fig,ax= plt.subplots(2,1, sharex=True, figsize=(6.5, 4), dpi=300)
+fig,ax= plt.subplots(2,1, sharex=True, figsize=(6.5, 6), dpi=300)
+scale = 1E6 # convert to millions
 # wb.plot(y='PERCENT_ERROR', ax=ax[0])
-wb.plot(y=out_cols, ax=ax[-2], legend=True, color=[color_dict[n] for n in out_cols], 
+wb[out_cols].multiply(1/scale).plot(y=out_cols, ax=ax[-2], legend=True, color=[color_dict[n] for n in out_cols], 
         label=[label_dict[n] for n in out_cols])
-wb.plot(y=in_cols, ax=ax[-1], legend=True, color= [color_dict[n] for n in in_cols], 
+wb[in_cols].multiply(1/scale).plot(y=in_cols, ax=ax[-1], legend=True, color= [color_dict[n] for n in in_cols], 
         label=[label_dict[n] for n in in_cols])
 plt.xlabel('Date')
 fig.supylabel('Flux ($m^3/d$)')
+fig.supylabel('Flux (million $m^3/d$)')
 fig.tight_layout()
+fig.savefig(join(fig_dir, 'water_budget_continuous.png'), bbox_inches='tight')
 
 # ## Map spatial coverage of boundary conditions
 
-gde_dir = join(uzf_dir,'shp_GDE_TFT')
-GDE_cell = gpd.read_file(join(gde_dir,'Oneto_Denier','GDE_cell.shp'))
-
+gde_row, gde_col = np.where(m.evt.exdp[0].array>2)
+gde_grid = grid_p.set_index(['row','column']).loc[list(zip(gde_row+1, gde_col+1))]
 
 
 # +
@@ -407,7 +545,6 @@ def spd_2_arr(sp_data, sp_col, dis):
     return(arr)
 
 
-
 # -
 
 wel_arr = spd_2_arr(m.wel.stress_period_data, 'flux', m.dis)
@@ -418,14 +555,24 @@ wel_row, wel_col = np.where(wel_rate.sum(axis=0)<0)
 
 wel_ss = pd.DataFrame(m.wel.stress_period_data[0])
 ag_grid_p = grid_p.set_index(['row','column']).loc[list(zip(wel_row+1, wel_col+1))].reset_index()
-GDE_grid_p = grid_p.join(GDE_cell.drop(columns='geometry').set_index(['node','row','column']), 
-                         on=['node','row','column'], how='inner')
+# Helen wants points not polygons
+ag_grid_p.geometry = ag_grid_p.geometry.centroid
+
 # save dataframe of stream reach data
 sfrdf = pd.DataFrame(m.sfr.reach_data)
-grid_sfr = grid_match.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index()
+sfrdf[['row','column']] = sfrdf[['i','j']]+1
+# grid_sfr = grid_match.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index()
+grid_sfr = grid_match.merge(sfrdf, on=['row','column']).sort_values('iseg')
+# for mapping only keep non-zero hydraulic conductivity reaches (stream-aquifer active)
+grid_sfr = grid_sfr[grid_sfr.strhc1!=0]
+grid_sfr['plt_seg'] = np.arange(1, len(grid_sfr)+1)
 
-lak_grid = gpd.overlay(grid_match,lak_extent)
+# -
 
+
+lakrow,lakcol = np.where(m.lak.lakarr[0].array[0]==1)
+lak_grid_p = grid_p.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
+lak_grid_union = gpd.GeoDataFrame([0], geometry = [lak_grid_p.geometry.unary_union], crs=grid_p.crs)
 
 # +
 from matplotlib.patches import Patch
@@ -434,30 +581,45 @@ from matplotlib.lines import Line2D
 legend_elements = [
     Patch(facecolor='brown',alpha=0.8,label='Boundary Groundwater Flow'),
     Patch(facecolor='aqua',alpha=0.8,label='GDE Evapotranspiration'),
-    Patch(facecolor='red', edgecolor='r',alpha=0.6,label='Agricultural Pumping Wells'),
+    # Patch(facecolor='red', edgecolor='r',alpha=0.6,label='Agricultural Pumping Wells'),
+    Line2D([0], [0],color='None', marker='.', markerfacecolor='black', label='Agricultural Pumping Wells', linewidth=4),
     # Patch(facecolor='red', edgecolor='r',alpha=0.6,label='Irrigated Lands'),
-    Patch(facecolor='none', edgecolor='tab:blue',alpha=1,label='Reconnected Floodplain'),
+    Patch(facecolor='none', edgecolor='blue',alpha=0.7, hatch="///", label='Floodplain Cells'),
 #     Line2D([0], [0],color='tab:blue',label='Stream Segments', linewidth=4),
     Patch(facecolor='tab:blue', label='Stream Segments'),
+    # Line2D([0],[0], color='none', markerfacecolor='black', marker='$10$', label='Stream Segments'),
                     ]
 
 
 # +
-# deepest ag wells are about 180 m below ground which would be below model bottom
-# and explains why some ag fields aren't plotted
+# # make square legend items
+# import matplotlib
+# matplotlib.rcParams['legend.handlelength'] = 1
+# matplotlib.rcParams['legend.handleheight'] = 1
+# -
+
+plt_segs = np.append(0,np.arange(9,91,10)) # sfr segments to label
 
 # +
-# ag_grid_p
-
-# +
-fig, ax = plt.subplots(figsize=(6.5,6.5))
-ag_grid_p.plot(ax=ax, color='red', alpha=0.6)
-GDE_grid_p.plot(ax=ax, color='aqua', alpha=0.6)
+fig, ax = plt.subplots(figsize=(6.5,6.5), dpi=300)
+# ag_grid_p.plot(ax=ax, color='red', alpha=0.6)
+gde_grid.plot(ax=ax, color='aqua', alpha=0.6)
+# GDE_grid_p.plot(ax=ax, color='aqua', alpha=0.6)
 bnd_cells.plot(ax=ax, color='brown')
 m_domain.plot(ax=ax, color='none', edgecolor='black')
 
+ag_grid_p.plot(ax=ax, color='black', markersize=5)
+
+# lak_extent.plot(ax=ax,color='none',edgecolor='blue',hatch="///", alpha=0.7)
+lak_grid_union.plot(ax=ax,color='none',edgecolor='blue',hatch="///", alpha=0.7)
 grid_sfr.plot(ax=ax, color='tab:blue')
-lak_extent.plot(ax=ax,color='none',edgecolor='tab:blue')
+grid_sfr.iloc[plt_segs].apply(lambda x: ax.annotate(str(x.plt_seg), xy=x.geometry.centroid.coords[0], ha='center', fontsize=6,
+                                    xytext = (1,1), textcoords='offset pixels',
+                                    bbox=dict(boxstyle="square,pad=0.1", fc="lightgrey", ec="none", lw=1, alpha=0.5) 
+                                               ),axis=1);
+
+# arr_lab(grid_sfr.iloc[[0]], 'Segment \nNumber', ax, offset = (120, 10), arrow=True, fontsize=8)
+arr_lab(grid_sfr.iloc[[9]], 'Segment \nNumber', ax, offset = (100, -180), arrow=True, fontsize=8)
 
 ax.legend(handles=legend_elements, loc='lower right')
 
@@ -465,8 +627,14 @@ ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=Fal
                 crs = 'epsg:26910', alpha=0.8)
 
 # drop axis labels for cleaner plot
-plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
-plt.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
+ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+## reference items
+
+# dir_arrow(ax, 0.8, 0.9, -0.075, -0.075, -0.05, 'Streamflow\nDirection', fontsize=8)
+plt_arrow(ax, 0.05, 0.15)
+make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
+
 # -
 
 # # TPROGs

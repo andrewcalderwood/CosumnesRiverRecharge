@@ -92,6 +92,13 @@ grid_sfr = pd.concat((grid_sfr,sfrdf),axis=1)
 
 # -
 
+# identify the different kind of facies
+coarse_cutoff = 70 # sandy mud is 20 m/d, sand is 120 m/d
+seep_vka = np.copy(m.upw.vka.array)
+coarse = (seep_vka > coarse_cutoff).astype(int)
+fine = (seep_vka < coarse_cutoff).astype(int)
+
+
 zon_color_dict = pd.read_excel('mf_wb_color_dict.xlsx',sheet_name='mf_wb_dict', header=0, index_col='flux',comment='#').color.to_dict()
 zon_name_dict = pd.read_excel('mf_wb_color_dict.xlsx',sheet_name='mf_wb_dict', header=0, index_col='flux',comment='#').name.to_dict()
 
@@ -145,8 +152,8 @@ def zone_clean(cbc,zon,  kstpkper):
     zb_df['GHB_NET'] = zb_df.TO_HEAD_DEP_BOUNDS - zb_df.FROM_HEAD_DEP_BOUNDS
     # to storage is gw increase (positive)
     stor_cols = zb_df.columns[zb_df.columns.str.contains('STORAGE')]
-    zb_df['dSTORAGE'] = (zb_df.TO_STORAGE + zb_df.FROM_STORAGE)
-    zb_df['dSTORAGE_sum'] = zb_df.dSTORAGE.cumsum()
+    zb_df['dSTORAGE'] = (zb_df.TO_STORAGE - zb_df.FROM_STORAGE)
+    zb_df['dSTORAGE_sum'] = zb_df.dSTORAGE.copy().cumsum()
     zb_df = zb_df.drop(columns=stor_cols)
     zb_df = zb_df.reset_index()
     strt_date = pd.to_datetime(m.dis.start_datetime)
@@ -163,26 +170,57 @@ def zone_clean(cbc,zon,  kstpkper):
 hdobj = flopy.utils.HeadFile(join(model_ws, 'MF.hds'))
 spd_stp = hdobj.get_kstpkper()
 
-cbc = join(model_ws, 'MF.cbc')
-zb_df, zb_mon = zone_clean(cbc, zon_lak, spd_stp)
-zb_df.to_csv(join(model_ws, 'MF_zonebud_floodplain_daily.csv'))
-zb_mon.to_csv(join(model_ws, 'MF_zonebud_floodplain_monthly.csv'))
-print('No reconnection floodplain zonebudget done')
-cbc = join(model_ws0, 'MF.cbc')
-zb_df0, zb_mon0 = zone_clean(cbc, zon_lak, spd_stp)
-zb_df0.to_csv(join(model_ws0, 'MF_zonebud_floodplain_daily.csv'))
-zb_mon0.to_csv(join(model_ws0, 'MF_zonebud_floodplain_monthly.csv'))
-print('Baseline floodplain zonebudget done')
+
+# +
+def make_zonebud(zon, name):
+    cbc = join(model_ws, 'MF.cbc')
+    zb_df, zb_mon = zone_clean(cbc, zon, spd_stp)
+    zb_df.to_csv(join(model_ws, 'MF_zonebud_'+name+'_daily.csv'))
+    zb_mon.to_csv(join(model_ws, 'MF_zonebud_'+name+'_monthly.csv'))
+    print('No reconnection '+name+' facies zonebudget done')
+    cbc = join(model_ws0, 'MF.cbc')
+    zb_df0, zb_mon0 = zone_clean(cbc, zon, spd_stp)
+    zb_df0.to_csv(join(model_ws0, 'MF_zonebud_'+name+'_daily.csv'))
+    zb_mon0.to_csv(join(model_ws0, 'MF_zonebud_'+name+'_monthly.csv'))
+    print('Baseline '+name+' zonebudget done')
+
+# 
 
 
-cbc = join(model_ws, 'MF.cbc')
-zb_df, zb_mon = zone_clean(cbc, zon_rip, spd_stp)
-zb_df.to_csv(join(model_ws, 'MF_zonebud_riparian_daily.csv'))
-zb_mon.to_csv(join(model_ws, 'MF_zonebud_riparian_monthly.csv'))
-print('No reconnection riparian zonebudget done')
-cbc = join(model_ws0, 'MF.cbc')
-zb_df0, zb_mon0 = zone_clean(cbc, zon_rip, spd_stp)
-zb_df0.to_csv(join(model_ws0, 'MF_zonebud_riparian_daily.csv'))
-zb_mon0.to_csv(join(model_ws0, 'MF_zonebud_riparian_monthly.csv'))
-print('Baseline riparian zonebudget done')
+# -
 
+make_zonebud(zon_lak, 'floodplain')
+
+# +
+# cbc = join(model_ws, 'MF.cbc')
+# zb_df, zb_mon = zone_clean(cbc, zon_lak, spd_stp)
+# zb_df.to_csv(join(model_ws, 'MF_zonebud_floodplain_daily.csv'))
+# zb_mon.to_csv(join(model_ws, 'MF_zonebud_floodplain_monthly.csv'))
+# print('No reconnection floodplain zonebudget done')
+# cbc = join(model_ws0, 'MF.cbc')
+# zb_df0, zb_mon0 = zone_clean(cbc, zon_lak, spd_stp)
+# zb_df0.to_csv(join(model_ws0, 'MF_zonebud_floodplain_daily.csv'))
+# zb_mon0.to_csv(join(model_ws0, 'MF_zonebud_floodplain_monthly.csv'))
+# print('Baseline floodplain zonebudget done')
+# -
+
+
+make_zonebud(zon_rip, 'riparian')
+
+# +
+# cbc = join(model_ws, 'MF.cbc')
+# zb_df, zb_mon = zone_clean(cbc, zon_rip, spd_stp)
+# zb_df.to_csv(join(model_ws, 'MF_zonebud_riparian_daily.csv'))
+# zb_mon.to_csv(join(model_ws, 'MF_zonebud_riparian_monthly.csv'))
+# print('No reconnection riparian zonebudget done')
+# cbc = join(model_ws0, 'MF.cbc')
+# zb_df0, zb_mon0 = zone_clean(cbc, zon_rip, spd_stp)
+# zb_df0.to_csv(join(model_ws0, 'MF_zonebud_riparian_daily.csv'))
+# zb_mon0.to_csv(join(model_ws0, 'MF_zonebud_riparian_monthly.csv'))
+# print('Baseline riparian zonebudget done')
+# -
+
+
+make_zonebud(fine, 'fine')
+
+make_zonebud(coarse, 'coarse')

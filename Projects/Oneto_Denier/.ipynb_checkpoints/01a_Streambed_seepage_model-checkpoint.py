@@ -257,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-model_nam = 'oneto_denier_homogeneous'
+# model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -486,6 +486,9 @@ seep_vka = np.copy(vka)
 coarse_cutoff = vka_quants.loc[2,'vka_min'] # sand minimum
 seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue']
 print('coarse cutoff %.1f' %coarse_cutoff)
+
+# %%
+coarse_cutoff
 
 # %%
 # after upscaling each layer horizontally the values are very similar (all same order of magnitude)
@@ -1273,9 +1276,11 @@ grid_sfr = grid_p.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))
 grid_sfr = pd.concat((grid_sfr,sfrdf),axis=1)
 # group sfrdf by vka quantiles
 sfr_vka = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
+# grid_sfr['facies'] = 'Mud'
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
-    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies
+    # grid_sfr.loc[(sfr_vka<= facies.vka_max)&(sfr_vka> facies.vka_min),'facies'] = facies.facies # makes more sense to include max to previous
+    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies # original version
 #     # add color for facies plots
 grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
 grid_sfr.to_csv(model_ws+'/grid_sfr.csv')
@@ -2354,7 +2359,6 @@ nwt.__dict__ = nwt_dict
 # %%
 # Writing the MODFLOW data files
 m.write_input()
-
 
 
 

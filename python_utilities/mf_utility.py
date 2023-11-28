@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import os
 from os.path import join, exists
+import flopy
 #%% Model development
 
 
@@ -136,9 +137,9 @@ def read_gage(gagenam):
     return(gage)
     
     
-def clean_sfr_df(model_ws, pd_sfr=None):
+def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     """Load sfr.out file and create new columns """
-    sfrout = flopy.utils.SfrFile(join(model_ws, m.name+'.sfr.out'))
+    sfrout = flopy.utils.SfrFile(join(model_ws, name+'.sfr.out'))
     sfrdf = sfrout.get_dataframe()
     sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
     # convert from sub-daily to daily using mean, lose kstpkper
@@ -152,7 +153,7 @@ def clean_sfr_df(model_ws, pd_sfr=None):
     # add column to track days with flow
     sfrdf['flowing'] = 1
     sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
-    if pd_sfr != None:
+    if pd_sfr is not None:
         sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
 
     # create different column for stream losing vs gaining seeapge
