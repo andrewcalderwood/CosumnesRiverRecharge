@@ -43,7 +43,8 @@ doc_dir = join(usr_dir, 'Documents')
 map_dir = join(gwfm_dir,'Mapping')
 sfr_dir = join(gwfm_dir,'SFR_data')
 
-fig_dir = join(map_dir,'figures')
+
+plt_dir = join(map_dir,'figures')
 
 # %%
 from importlib import reload
@@ -114,41 +115,7 @@ def regional_arrow(ax, xoff, yoff):
                 ha='center', va='center', fontsize=20,
                 xycoords=ax.transAxes)
     
-# from shapely.geometry import box
-# # minx, miny = ax.get_xlim()[1], ax.get_ylim()[1]
-# # plot extents
-# def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1]):
-#     """ Plot legend with multi distances (3) at fractional axes offset
-#     A typical scalebar has distance and two time distances and half the distance
-#     With labels for just the distance and two times
-#     """
-#     minx, maxx = ax.get_xlim()
-#     miny, maxy = ax.get_ylim()
-#     # translate to actual coordinates
-#     lx = (maxx-minx)*xoff + minx
-#     ly = (maxy-miny)*yoff + miny
-#     height = (maxy-miny)*0.02 # height of bar
-#     km = 1E3
-#     for n, adj in enumerate(scales):
-#         color='black'
-#         if n%2==1:
-#             color='white'
-#         rect = box(lx, ly, lx +dist*adj, ly+height)
-#         gpd.GeoSeries(rect).plot(color=color, edgecolor='black', ax=ax)
-        
-#         ax.annotate(str(int(dist*adj/km)), (lx+dist*adj-dist*0.2,ly-2*height), xycoords='data')
-#     adj = scales[0]
-#     ax.annotate('km', (lx+dist*adj+dist*0.4,ly-2*height), xycoords='data')
 
-
-# %%
-# fig,ax = plt.subplots(figsize=(6.5,6.5))
-# m_domain.plot(ax=ax)
-
-# make_multi_scale(ax, 0.75,0.1, dist=2E3)
-# 
-
-# %%
 fig,ax = plt.subplots(figsize=(6.5,6.5), dpi=300)
 
 m_domain.plot(ax=ax,color="none",edgecolor='black')
