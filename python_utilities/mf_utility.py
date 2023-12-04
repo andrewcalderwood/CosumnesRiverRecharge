@@ -143,8 +143,8 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     sfrdf = sfrout.get_dataframe()
     sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
     # convert from sub-daily to daily using mean, lose kstpkper
-    sfrdf = sfrdf.groupby('segment').resample('D').mean(numeric_only=True)
-    sfrdf = sfrdf.reset_index('segment', drop=True)
+    sfrdf = sfrdf.groupby(['segment','reach']).resample('D').mean(numeric_only=True)
+    sfrdf = sfrdf.reset_index(['segment','reach'], drop=True)
     sfrdf[['row','column']]-=1 # convert to python
     # cmd2cfs = 1/((0.3048**3)*86400) # cubic meters per day to cfs
     sfrdf['month'] = sfrdf.index.month
