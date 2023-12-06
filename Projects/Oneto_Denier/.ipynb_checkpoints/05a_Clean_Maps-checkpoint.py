@@ -79,14 +79,14 @@ from mf_utility import get_dates, get_layer_from_elev, clean_wb
 # reload(mf_utility)
 
 # +
-fig, ax = plt.subplots()
-m_domain.plot(ax=ax, color='none', edgecolor='black')
-plt_arrow(ax)
-plt_scale(ax)
+# fig, ax = plt.subplots()
+# m_domain.plot(ax=ax, color='none', edgecolor='black')
+# plt_arrow(ax)
+# plt_scale(ax)
 
-plt_arrow(ax, 0.05, 0.15)
-make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
-# make_multi_scale(ax, 0.1, 0.1, dist = 1E3, scales = [3,2,1])
+# plt_arrow(ax, 0.05, 0.15)
+# make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
+# # make_multi_scale(ax, 0.1, 0.1, dist = 1E3, scales = [3,2,1])
 
 # -
 
@@ -255,13 +255,13 @@ def main_map(ax):
     # od_breach.plot(ax=ax)
     # od_swale.plot(ax=ax)
     
-    m_domain.plot(color="none",edgecolor='black',ax=ax)
+    m_domain.plot(color="none", edgecolor='black',ax=ax)
     
     cr.plot(ax=ax, color='tab:blue')
     mr.plot(ax=ax, color='tab:blue')
     
     # lak_extent.plot(ax=ax, color='tab:blue',  alpha=0.5)
-    lak_extent.plot(ax=ax, color='none',hatch='///', edgecolor='blue',  alpha=0.7)
+    lak_extent.plot(ax=ax, color='none',hatch='///', edgecolor='white',  alpha=0.7)
     # rm_t.plot(legend=False,ax=ax, color='blue', markersize=5)
     rm_t.plot(legend=False,ax=ax, color='black', markersize=5) #Helen wanted non-blue markers
     levee_removal.plot(ax=ax, color='red', edgecolor='red', alpha=0.5)
@@ -376,7 +376,7 @@ rm_t.apply(lambda x: ax.annotate(x.Sensor.replace('MW_',''), xy=x.geometry.coord
 
 ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
                 crs = 'epsg:26910', alpha=0.7)
-fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
+# fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
 # -
 
 # ### Need to identify extent of floodplain on channel
@@ -482,6 +482,37 @@ plt.show()
 
 # -
 
+# ### Precipitation only to show WY type
+
+# +
+plt_strt = '2014-10-1'
+plt_end = '2018-9-30'
+fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
+rain_mon = rain_plt.resample('MS').sum()
+rain_mon = rain_mon.loc[plt_strt:plt_end]
+
+ax.bar(np.arange(0, len(rain_mon)), rain_mon.values)
+ax.set_xticks(np.arange(0, len(rain_mon))[3::12], rain_mon.index[3::12].year);
+
+ax.set_ylabel('Monthly Rainfall Total (m)')
+ax.set_xlabel('Date')
+plt.savefig(join(fig_dir, 'monthly_rainfall.png'), bbox_inches='tight')
+plt.close()
+
+# +
+fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
+
+inflow_plt = inflow.loc[plt_strt:plt_end]
+
+inflow_plt.plot(y='flow_cms', ax=ax, legend=False)
+plt.yscale('log')
+plt.ylim(1,1.2E3)
+ax.set_ylabel('Daily Streamflow ($m^3/s$)')
+ax.set_xlabel('Date')
+plt.savefig(join(fig_dir, 'daily_streamflow.png'), bbox_inches='tight')
+plt.close()
+# -
+
 # #### Identify general hydrologic characteristics
 
 print('Days above 23 cms:',(inflow.flow_cms>23).sum())
@@ -571,8 +602,9 @@ grid_sfr['plt_seg'] = np.arange(1, len(grid_sfr)+1)
 
 
 lakrow,lakcol = np.where(m.lak.lakarr[0].array[0]==1)
-lak_grid_p = grid_p.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
-lak_grid_union = gpd.GeoDataFrame([0], geometry = [lak_grid_p.geometry.unary_union], crs=grid_p.crs)
+# lak_grid = grid_p.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
+lak_grid = grid_match.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
+lak_grid_union = gpd.GeoDataFrame([0], geometry = [lak_grid.geometry.unary_union], crs=grid_p.crs)
 
 # +
 from matplotlib.patches import Patch
@@ -677,33 +709,43 @@ tprogs_lay = tc.elev_to_tprogs_layers(elev=dem_data, tprogs_info=tprogs_info)
 arr_dim = (320, 100, 230)
 
 
+# Rename pyvista.UniformGrid to pyvista.ImageData, wrap the new class as a shell UniformGrid class and issue a Deprecation warning in its __init__
+
 def mfarr2grid(arr):
-    grid = pv.UniformGrid()
+    # grid = pv.UniformGrid()
+    grid = pv.ImageData()
     # Set the grid dimensions: shape because we want to inject our values on the
     # I have to add 1 to each dimension to have it be built on the cells
     grid.dimensions = [101, 231, 321]
     # real origin, but incorrect because of no rotation
     # simple origin that allows easier data output cleaning
     grid.origin = (0, 0, 0) # bottom left corner of the dataset
-    grid.spacing = (200,200,0.5)
-    arr_in = np.moveaxis(arr,0,2).flatten(order='F').astype(int)
+    grid.spacing = (200, 200, 0.5)
+    arr_in = np.moveaxis(arr, 0, 2).flatten(order='F').astype(int)
     grid.cell_data["facies"] = arr_in
 
     return(grid)
 
 
+grid_sfr_p = gpd.read_file(join(gwfm_dir, 'SFR_data', 'final_grid_sfr', 'grid_sfr.shp'))
+grid_sfr_p = grid_sfr_p.rename(columns={'row':'row_p','column':'column_p'})
+
 
 # +
-river_arr = np.zeros(arr_dim)
-r_lay = tprogs_lay[grid_sfr.row_p.astype(int)-1, grid_sfr.column_p.astype(int)-1]
-river_arr[r_lay-2, grid_sfr.row_p.astype(int)-1, grid_sfr.column_p.astype(int)-1] = 1
-lak_lay = tprogs_lay[lak_grid.row_p.astype(int)-1, lak_grid.column_p.astype(int)-1]
-river_arr[lak_lay-2, lak_grid.row_p.astype(int)-1, lak_grid.column_p.astype(int)-1] = 1
+def make_river(grid_sfr, lak_grid, tprogs_lay):
+    river_arr = np.zeros(arr_dim)
+    r_lay = tprogs_lay[grid_sfr.row_p.astype(int)-1, grid_sfr.column_p.astype(int)-1]
+    river_arr[r_lay-4, grid_sfr.row_p.astype(int)-1, grid_sfr.column_p.astype(int)-1] = 1
+    
+    lak_lay = tprogs_lay[lak_grid.row_p.astype(int)-1, lak_grid.column_p.astype(int)-1]
+    river_arr[lak_lay-2, lak_grid.row_p.astype(int)-1, lak_grid.column_p.astype(int)-1] = 1
+    
+    river_arr = np.flip(river_arr, axis=0)
+    river = mfarr2grid(river_arr)
+    river = river.threshold(value = [0.9, 1.1], scalars='facies') #, preference='cell'
+    return(river)
 
-river_arr = np.flip(river_arr, axis=0)
-river = mfarr2grid(river_arr)
-river = river.threshold(value = [0.9, 1.1], scalars='facies') #, preference='cell'
-
+river = make_river(grid_sfr, lak_grid, tprogs_lay)
 # -
 
 # array to multiply others
@@ -711,18 +753,19 @@ local_cells = np.zeros(tprogs_arr.shape).astype(bool)
 local_cells[:,grid_match.row_p-1, grid_match.column_p-1] = True
 
 
-def pv_rot(mesh):
+# y-rotation: 20 degree is better for regional, 10 for oneto-denier local
+def pv_rot(mesh, y_rot = 20):
     mesh.rotate_z(90)
     mesh.rotate_x(10)
     # it seems that the tprogs data is somehow flipped when importing it into pyvista
     # because it requires an extra 180 degree rotation
-    mesh.rotate_y(10)
+    mesh.rotate_y(y_rot)
 #     mesh.rotate_y(200)
 
 
 # +
 
-def grid_plt(grid, fig_nam, grid2=None):
+def grid_plt(grid, fig_nam, grid2=None, z_scale = 50, y_rot = 20):
     plotter = pv.Plotter(notebook=False, 
 #                          lighting=None,
                          off_screen=True # if true then screenshots work
@@ -733,13 +776,14 @@ def grid_plt(grid, fig_nam, grid2=None):
     plotter.background_color='white'
     # show_egdes should be done locally but not regionally
     # but if I add lighting then I might not need edges
-    mesh = plotter.add_mesh(grid, scalars="facies", cmap='viridis', lighting=True)
-    pv_rot(mesh)
+    # switched to viridis_r to match hot as high k and cold as low k (gravel is 1 and mud is 4)
+    mesh = plotter.add_mesh(grid, scalars="facies", cmap='viridis_r', lighting=False)
+    pv_rot(mesh, y_rot = y_rot)
     # 50 x is good for regional, 20x is good for local
-    plotter.set_scale(1, 1, 20)
+    plotter.set_scale(1, 1, z_scale)
     if grid2 is not None:
-        mesh = plotter.add_mesh(grid2, color='black')
-        pv_rot(mesh)
+        mesh = plotter.add_mesh(grid2, color='white')
+        pv_rot(mesh, y_rot = y_rot)
     plotter.show(screenshot=fig_nam + '.png')
     
 
@@ -750,7 +794,8 @@ tprogs_figs = join(fig_dir, 'tprogs')
 
 t = 0
 # 11 was a realization with good fit
-for t in [11]:#[0,1,2]:
+for t in [11]:
+# for t in [0,1,2]:
     tprogs_line = np.loadtxt(tprogs_files[t])
     # convert any negatives representing input data to same value
     tprogs_arr = np.abs(np.reshape(tprogs_line, (320, 100,230)))
@@ -769,13 +814,13 @@ for t in [11]:#[0,1,2]:
 
     tprogs_grid = mfarr2grid(tprogs_in)
     tprogs_active = tprogs_grid.threshold(value = [0.9, 4.1], scalars='facies') #, preference='cell'
-    grid_plt(tprogs_local_active, join(tprogs_figs,'tprogs_local_facies_r'+str(t).zfill(3)), river)
-    grid_plt(tprogs_active, join(tprogs_figs,'tprogs_facies_r'+str(t).zfill(3)), river)
+    grid_plt(tprogs_local_active, join(tprogs_figs,'tprogs_local_facies_r'+str(t).zfill(3)), river, z_scale = 20, y_rot = 10)
+    grid_plt(tprogs_active, join(tprogs_figs,'tprogs_facies_r'+str(t).zfill(3)), make_river(grid_sfr_p, lak_grid, tprogs_lay))
 
 
 # +
-grid_plt(tprogs_local_active, join(tprogs_figs,'tprogs_local_facies_r'+str(t).zfill(3)), river)
-grid_plt(tprogs_active, join(tprogs_figs,'tprogs_facies_r'+str(t).zfill(3)), river)
+grid_plt(tprogs_local_active, join(tprogs_figs,'tprogs_local_facies_r'+str(t).zfill(3)), river, z_scale = 20, y_rot = 10)
+grid_plt(tprogs_active, join(tprogs_figs,'tprogs_facies_r'+str(t).zfill(3)), make_river(grid_sfr_p, lak_grid, tprogs_lay))
 
 # on the local scale we can start to distinguish paths but it isn't very clear still
 # -

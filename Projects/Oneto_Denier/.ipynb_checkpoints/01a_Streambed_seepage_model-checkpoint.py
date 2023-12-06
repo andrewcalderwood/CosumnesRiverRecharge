@@ -774,153 +774,17 @@ lak_grid = lak_grid.loc[lak_grid.geometry.area > (delr*delc*0.5)]
 # ## XS pre-processing
 
 # %%
-# cross sections sampled using NHD lines at regular 100 m intervals (not aligned with any grid)
-xs_all = pd.read_csv(dat_dir+'XS_point_elevations.csv',index_col=0)
-xs_all = gpd.GeoDataFrame(xs_all,geometry = gpd.points_from_xy(xs_all.Easting,xs_all.Northing), crs='epsg:32610')
-
-# find XS that are in the modeled domain by thalweg point
-thalweg = xs_all[xs_all.dist_from_right_m==100]
-thalweg = gpd.overlay(thalweg, grid_p)
-# thalweg = gpd.sjoin_nearest(grid_p, thalweg, how='inner')
-# thalweg = thalweg.cx[xmin:xmax, ymin:ymax]
-# with XS every 100m I need to choose whether the first or second is used in a cell
-# thalweg = thalweg.dissolve(by='node', aggfunc='first')
-
-# pivot based on XS number and save only elevation in z_m
-xs_all_df = pd.read_csv(dat_dir+'Elevation_by_XS_number_meters.csv',index_col=0)
-xs_all_df = xs_all_df.dropna(axis=0,how='any')
-
-# filter XS by those that are within the domain bounds
-xs_all = xs_all[xs_all.xs_num.isin(thalweg.xs_num.values)]
-xs_all_df = xs_all_df.loc[:, thalweg.xs_num.astype(str)]
-
-# renumber XS
-thalweg.xs_num = np.arange(0,thalweg.shape[0])
-xs_all.xs_num = np.repeat(thalweg.xs_num.values,xs_all.dist_from_right_m.max()+1)
-xs_all_df.columns = thalweg.xs_num
-
-# %%
-from shapely.geometry import LineString
-i = 0
-# Number of cross sections
-numxs = int(len(xs_all_df.columns))
-# i is the cross-section number
-lp = pd.DataFrame(np.linspace(1,int(numxs),int(numxs)))
-lp['geometry'] = LineString([(0,0),(0,1)])
-
-for i in np.arange(0,numxs): #numxs
-    # Number of points in each cross section
-    numl = np.sum(pd.notna(xs_all_df.iloc[:,i]))
-    # Create empty array to fill with coordinates
-    lines = np.zeros((numl,2))
-    # j is the number of points in each individual cross-section
-    lm = LineString(list(zip(xs_all_df.index.values, xs_all_df.iloc[:,i].values)))
-    tol = 0.6
-    deltol = 0.1
-    count = 0
-    lms = LineString(lm).simplify(tolerance = tol)
-    while len(list(lms.coords))>8:
-        if len(list(lms.coords)) <5:
-            deltol = 0.001
-        temp = lms
-        lms = LineString(lm).simplify(tolerance = tol)
-        tol += deltol
-#         if count drops below 8 then reduce deltol
-#         if len(list(lms.coords)) <6:
-#             lms = temp
-#             tol -= deltol
-#             deltol *= 0.5     
-        count += 1
-
-    print(i,':',len(list(lms.coords)),end = ' - ') #count, 
-    lp.geometry.iloc[int(i)] = LineString(lms)
-    
-# some segments will never be able to match the ideal number of points despite very fine loops
-
-# %%
-# create summary of XS for creating SFR inputs
-xs_wide = xs_all.pivot_table(index='dist_from_right_m',values='z_m',columns='xs_num')
-thalweg_pts = xs_wide.idxmin().values.astype(int)
-xs_mins = xs_all.set_index(['dist_from_right_m','xs_num']).loc[list(zip(thalweg_pts, xs_wide.columns))]
-XSg_in = xs_mins.reset_index('dist_from_right_m')
-
-# join segment data to grid
-XSg_in = gpd.sjoin(XSg_in, grid_p, predicate='within', how='inner')
-# if multiple points in one cell take first, not a big deal since there are points every 100 m
-XSg_in = XSg_in.reset_index().groupby(['row','column'], as_index=False).first()
-XSg_in = XSg_in.sort_values('xs_num')
-# create segment numbers, starting at 1 to allow for first segment defined by michigan bar criteria
-XSg_in['iseg'] = np.arange(1, XSg_in.shape[0]+1) # add the segment that corresponds to each cross section
-XSg_in.crs = xs_all.crs
-
-
-# %%
-# filter cross sections to those that matched in the grid
-xs_all = xs_all[xs_all.xs_num.isin(XSg_in.xs_num)]
-xs_all_df = xs_all_df.loc[:, XSg_in.xs_num]
-
-# %%
-XS8pt = pd.DataFrame(np.zeros((numxs*8, 3)), columns=['xs_num','dist_from_right_m','z_m'])
-XS8pt.xs_num = np.repeat(np.arange(0,numxs), 8)
-
-# lpg = gpd.GeoDataFrame(lp[:])
-xscoords = np.zeros((8, numxs))
-filler = np.zeros(2)
-filler[:] = np.nan
-for i in np.arange(0, numxs):
-    coordtemp = np.array(list(lp.geometry.iloc[i].coords))
-    coordtemp = coordtemp[~np.isnan(coordtemp[:,0])]
-    # if missing points add to make 8
-    while len(coordtemp) < 8:
-        endfill = np.copy(coordtemp[-1,:]) # take last and add new point
-        endfill[0] += 1 # offset with different x
-        coordtemp = np.vstack((coordtemp, endfill))
-    # reset distance from right to start at 0
-    coordtemp[:,0] -= coordtemp[0,0]
-    XS8pt.loc[XS8pt.xs_num==i,['dist_from_right_m','z_m']] = coordtemp   
-
-# filter for XS in final segments
-XS8pt = XS8pt.loc[XS8pt.xs_num.isin(XSg_in.xs_num)]
-XS8pt.to_csv(proj_dir + '8pointXS_'+model_nam+'.csv', index = False)
-XS8pt = XS8pt.set_index('xs_num')
-
-
-# %%
 XS8pt = pd.read_csv(join(proj_dir, 'SFR', '8pointXS_oneto_denier.csv'), index_col='xs_num')
 
 
 # %%
+n_xs = XS8pt.index.unique().values
+n_plt = 4
+
 # even plotting all XS they show the same triangular shape
-fig,ax = plt.subplots()
-for n in XS8pt.index.unique()[::10]:
+fig,ax = plt.subplots(figsize=(6.5,3))
+for n in XS8pt.index.unique()[np.arange(0, len(n_xs), int(len(n_xs)/n_plt))]:
     XS8pt.loc[n].plot(x='dist_from_right_m',y='z_m', ax=ax,legend=False)
-
-# %%
-XSg_z = XSg_in.copy().set_index('iseg')
-
-# find minimum value in XS related to thalweg
-XSg_z['z_m_min'] = xs_all.dissolve('xs_num','min').z_m
-#roling mean of 6 window centered removes any negative slope
-XSg_z['z_m_min_cln'] = XSg_z.z_m_min.rolling(6,center=False).mean()
-
-# calculate slope and fill NAs, fill slope with nearby
-z_cln_diff = XSg_z.z_m_min_cln.diff().bfill()
-XSg_z['slope'] = z_cln_diff.abs()/delr
-# correct slope less than 1E-4
-XSg_z.loc[XSg_z.slope<1E-4,'slope'] = 1E-4
-
-# fix str bot so all is downward sloping
-for i in XSg_z.index[-2::-1]:
-# fill NAs due to rolling mean, with backward filling
-    if np.isnan(XSg_z.loc[i,'z_m_min_cln']):
-        XSg_z.loc[i,'z_m_min_cln'] = XSg_z.loc[i+1,'z_m_min_cln'] + XSg_z.loc[i,'slope']*delr
-
-for i in XSg_z.index[:-1]:
-    if XSg_z.loc[i+1,'z_m_min_cln'] >= XSg_z.loc[i,'z_m_min_cln']:
-        XSg_z.loc[i+1,'z_m_min_cln'] = XSg_z.loc[i,'z_m_min_cln'] - XSg_z.loc[i,'slope']*delr
-
-
-# XSg_z.slope.plot(secondary_y = True)
 
 # %%
 # load pre-cleaned thalweg data
@@ -934,13 +798,10 @@ XSg_z = gpd.GeoDataFrame(XSg_z, geometry = gpd.points_from_xy(XSg_z.easting, XSg
 # **After updating to 1 cross-section every 4 reaches, I need to make sure there is a proper segment downstream at the diversion**
 
 # %%
-# od_breach
-
-# %%
 # if scenario != 'no_reconnection':
 # identify XS to be copied for diversion reaches
 fp_grid_xs = fp_grid[['Logger Location','geometry']].copy()
-fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg_z.reset_index().drop(columns=['index_right']), how='inner') #.drop(columns=['index_right'])
+fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg_z.reset_index(), how='inner') #.drop(columns=['index_right'])
 # od_breach is the sensor location where the breach was made in the levees for flow to leave the river
 od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
 od_breach['xs_num'] -= 0.2 # adjust xs_num to set sorting order
@@ -952,11 +813,11 @@ od_swale['ireach'] = 1
 # need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
 od_return = od_breach.copy()
 od_return['xs_num'] += 0.1 # adjust xs_num to set sorting order
-od_return.z_m_min_cln = XSg[XSg.xs_num==int(np.ceil(od_return.xs_num).values[0])].z_m_min_cln.max() + od_return.slope*delr
+od_return.z_m_final = XSg_z[XSg_z.xs_num==int(np.ceil(od_return.xs_num).values[0])].z_m_final.max() + od_return.slope*delr
 # need another segment to transfer water between the breach and lake to avoid doubling
 od_lake = od_return.copy()
 od_lake['xs_num'] -= 0.05
-od_lake.z_m_min_cln = od_breach.z_m_min_cln - od_lake.slope*delr
+od_lake.z_m_final = od_breach.z_m_final - od_lake.slope*delr
 
 # add reaches for diversion
 # XSg = pd.concat((XSg_z.reset_index(), od_breach, od_return, od_swale)) #, od_swale (old)
@@ -1017,7 +878,7 @@ sfr_cols = (XSg.column.values-1).astype(int)
 # since the if statement only checks whether the first layer is greater than the streambed elevation, 
 # owhm default raises layer to topmost active which is 1
 strthick = 1
-strtop = XSg.z_m_min_cln.values 
+strtop = XSg.z_m_final.values 
 strbot = strtop - strthick
 
 
@@ -1037,14 +898,11 @@ sfr_lay = get_layer_from_elev(strbot, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
 # flopy seems to think the layer bottom for layer 3 is 0.727
 
 # %%
-# XSg
-
-# %%
 x = XSg.reach_order.values
 
-plt.plot(x, XSg.z_m_min_cln, label='Str Top')
+plt.plot(x, XSg.z_m_final, label='Str Top')
 plt.plot(x, XSg.z_m_min, label='min')
-plt.plot(x, (XSg.z_m_min_cln-strthick), label='Str Bot')
+plt.plot(x, (XSg.z_m_final-strthick), label='Str Bot')
 
 plt.plot(x, m.dis.top.array[ sfr_rows, sfr_cols], label='Model Top', ls='--',color='green')
 # plt.plot(x, m.dis.botm.array[0, sfr_rows, sfr_cols], label='Lay 1 Bottom', ls='--',color='brown')
@@ -1148,8 +1006,9 @@ sfr.reach_data.j = sfr_cols
 sfr.reach_data.iseg = XSg.index
 # sfr.reach_data.ireach = 1 
 sfr.reach_data.ireach = XSg.ireach
+# mean length is 100 m, std dev is 15 m
 sfr.reach_data.rchlen = 100 #xs_sfr.length_m.values
-sfr.reach_data.strtop = XSg.z_m_min_cln.values
+sfr.reach_data.strtop = XSg.z_m_final.values
 sfr.reach_data.slope = XSg.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = strthick
@@ -1333,6 +1192,7 @@ for k in XSg.xs_num.round(): # round is fix for subtracting to id diversion segm
 # %%
 # sfr.check()
 
+
 # %%
 # sfr.write_file()
 
@@ -1356,7 +1216,8 @@ grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
 grid_sfr.to_csv(model_ws+'/grid_sfr.csv')
 
 # %%
-grid_sfr.plot()
+# grid_sfr.plot()
+pd.DataFrame(sfr.reach_data).slope.plot()
 
 # %% [markdown]
 # ## SFR Tab File
