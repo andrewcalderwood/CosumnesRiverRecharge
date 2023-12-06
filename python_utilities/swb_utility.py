@@ -68,6 +68,26 @@ def calc_pc(wc, soil_por, soil_Ks, soil_m):
     pc = soil_Ks*(sat)*(1- (1-(sat)**(1/soil_m))**soil_m)**2
     return(pc)
 
+# for y in np.arange(strt_date.year, end_date.year+1):
+def yr_lim_from_dates(y, strt_date, end_date):
+    """ For data that starts/ends with WY
+    return the indexes for a year given a start and end date
+    """
+    # set start and end date for range for the year to be iterated over
+    wy_strt = pd.to_datetime(str(y)+'-10-1')
+    yr_strt = pd.to_datetime(str(y)+'-10-01')
+    yr_end = pd.to_datetime(str(y+1)+'-9-30')
+    # get the length of the date range needed for that year
+    yearlen = len(pd.date_range(yr_strt, yr_end))
+    if yr_strt < strt_date:
+        yr_strt = strt_date
+    if yr_end > end_date:
+        yr_end = end_date
+    yr_len = len(pd.date_range(yr_strt, yr_end))
+    ind_strt = (yr_strt-wy_strt).days
+    ind_end = (yr_end-wy_strt).days+1
+    return ind_strt, ind_end
+
 def load_swb_data(strt_date, end_date, param, uzf_dir):
     """Returns data in an array format with the first dimension for time
     and then either a 1D or 2D array representing fields or model grid cells"""
@@ -77,10 +97,13 @@ def load_swb_data(strt_date, end_date, param, uzf_dir):
     # years and array index, include extra year in index to fully index years
     years = pd.date_range(strt_date,end_date+pd.DateOffset(years=1),freq='AS-Oct')
     yr_ind = (years-strt_date).days
-    years= years[:-1]
+    years= years[:-1].year
     # need separte hdf5 for each year because total is 300MB
-    for n in np.arange(0,len(yr_ind)-1):
-        fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(years[n].year+1)+".hdf5")
+    for n, y in enumerate(years):
+    # for n in np.arange(0,len(yr_ind)-1):
+        ind_strt, ind_end = yr_lim_from_dates(y, strt_date, end_date)
+        # fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(years[n].year+1)+".hdf5")
+        fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(y+1)+".hdf5")
         with h5py.File(fn, "r") as f:
             # load first dataset then allocate array
             if n == 0:
@@ -88,5 +111,7 @@ def load_swb_data(strt_date, end_date, param, uzf_dir):
                 dim[0] = nper_tr
                 param_arr = np.zeros(dim)
             arr = f['array']['WY'][:]
-            param_arr[yr_ind[n]:yr_ind[n+1]] = arr
+            # print(y)
+            # print(yr_ind[n]+ind_strt, yr_ind[n]+ind_end)
+            param_arr[yr_ind[n]+ind_strt:yr_ind[n]+ind_end] = arr[ind_strt:ind_end]
     return(param_arr)
