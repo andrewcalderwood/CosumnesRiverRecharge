@@ -106,8 +106,8 @@ ss_bool = False # false = no steady state
 # Transient -> might want to think about making SP1 steady
 ss_strt = pd.to_datetime('2010-10-01')
 strt_date = pd.to_datetime('2014-10-01')
-# end_date = pd.to_datetime('2018-09-30') # end date for validation
-end_date = pd.to_datetime('2020-9-30') # end time for analysis
+end_date = pd.to_datetime('2018-09-30') # end date for validation
+# end_date = pd.to_datetime('2020-9-30') # end time for analysis
 
 dates = pd.date_range(strt_date, end_date)
 # The number of periods is the number of dates 
