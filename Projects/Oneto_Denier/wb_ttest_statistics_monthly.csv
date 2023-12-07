@@ -2,15 +2,18 @@ term,season,statistic,pvalue,perc_diff_in_means
 Cumulative Storage Change,Wet,7.253,0.0,6.14
 Cumulative Storage Change,Dry,6.746,0.0,6.58
 Cumulative Storage Change,Fall,4.13,0.0001,8.16
-Evapotranspiration,Wet,3.762,0.0004,8.38
-Evapotranspiration,Dry,2.412,0.0184,11.96
-Evapotranspiration,Fall,2.836,0.0059,5.04
-Stream Leakage,Wet,-5.471,0.0,-4.29
-Stream Leakage,Dry,-2.916,0.0047,-2.62
-Stream Leakage,Fall,-1.713,0.0911,-
 Floodplain Recharge,Wet,4.863,0.0,56.02
 Floodplain Recharge,Dry,1.722,0.0894,-
 Floodplain Recharge,Fall,1.0,0.3207,-
+Evapotranspiration,Wet,3.762,0.0004,8.38
+Evapotranspiration,Dry,2.412,0.0184,11.96
+Evapotranspiration,Fall,2.836,0.0059,5.04
+Net Groundwater Flow,Wet,-7.359,0.0,-4.79
+Net Groundwater Flow,Dry,-7.212,0.0,-13.09
+Net Groundwater Flow,Fall,-4.153,0.0001,-6.02
+Stream Leakage,Wet,-5.471,0.0,-4.29
+Stream Leakage,Dry,-2.916,0.0047,-2.62
+Stream Leakage,Fall,-1.713,0.0911,-
 Baseflow,Wet,4.039,0.0001,171.12
 Baseflow,Dry,1.673,0.0987,-
 Baseflow,Fall,,,

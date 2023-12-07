@@ -127,6 +127,131 @@
 # %%
 # sns.relplot(mw_chk,x='dt',y='gwe',col='Well', hue='type', col_wrap=4)
 
-# %%
+# %% [markdown]
+# ## Load WB
 
 # %%
+# switch to module function 10/12/2023
+# def clean_wb(model_ws, dt_ref, name='flow_budget.txt'):
+#     # load summary water budget
+#     wb = pd.read_csv(join(model_ws, name), delimiter=r'\s+')
+#     # wb = pd.read_csv(loadpth+'/oneto_denier_upscale8x_2014_2018'+'/flow_budget.txt', delimiter=r'\s+')
+
+#     wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
+#     wb = wb.merge(dt_ref, on='kstpkper')
+#     wb = wb.set_index('dt')
+#     # calculate change in storage
+#     wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
+#     # calculate the cumulative storage change
+#     wb['dSTORAGE_sum'] = wb.dSTORAGE.cumsum()
+#     # calculate net groundwater flow
+#     wb['GHB_NET'] = wb.GHB_IN - wb.GHB_OUT
+#     # identify relevant columns
+#     wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
+#     wb_cols = wb_cols[~wb_cols.str.contains('STORAGE')]
+#     wb_out_cols= wb_cols[wb_cols.str.contains('_OUT')]
+#     wb_in_cols = wb_cols[wb_cols.str.contains('_IN')]
+#     # only include columns with values used
+#     wb_out_cols = wb_out_cols[np.sum(wb[wb_out_cols]>0, axis=0).astype(bool)]
+#     wb_in_cols = wb_in_cols[np.sum(wb[wb_in_cols]>0, axis=0).astype(bool)]
+#     return(wb, wb_out_cols, wb_in_cols)
+
+# %% [markdown]
+# ## t-test
+
+# %%
+
+# switched to multiple functions
+# def run_stats(wb, wb0, term, season=None, freq='monthly', plot=False):
+#     if season == 'Wet':
+#         wet_months = [11,12,1,2,3,4]
+#         wb = wb[wb.index.month.isin(wet_months)]
+#         wb0 = wb0[wb0.index.month.isin(wet_months)]
+#     elif season =='Dry':
+#         dry_months = [5,6,7,8,9,10]
+#         wb = wb[wb.index.month.isin(dry_months)]
+#         wb0 = wb0[wb0.index.month.isin(dry_months)]
+#     elif season=='Fall':
+#         fall_months=[9,10,11]
+#         wb = wb[wb.index.month.isin(fall_months)]
+#         wb0 = wb0[wb0.index.month.isin(fall_months)]
+#     if freq=='annual':
+#         a = wb0.resample('AS-Oct').sum()[term].values
+#         b = wb.resample('AS-Oct').sum()[term].values
+#     elif freq=='monthly':
+#         a = wb0.resample('MS').sum()[term].values
+#         b = wb.resample('MS').sum()[term].values
+#     elif freq=='daily':
+#         a = wb0.resample('D').sum()[term].values
+#         b = wb.resample('D').sum()[term].values
+        
+#     t_out = ttest_rel(a, b)
+
+#     t_df = pd.DataFrame([t_out.statistic, t_out.pvalue]).transpose()
+#     t_df.columns=['statistic','pvalue']
+#     t_df['term'] = term
+#     t_df['freq'] = freq
+#     t_df['season'] = season
+#     t_df['mean_a'] = np.mean(a)
+#     t_df['mean_b'] = np.mean(b)
+#     t_df['perc_diff_in_means'] = 100*(np.mean(a)-np.mean(b))/np.abs((np.mean(a)+np.mean(b))/2)
+
+#     # rounding to clean up output
+#     t_df.statistic = t_df.statistic.round(3)
+#     t_df.pvalue = t_df.pvalue.round(4)
+#     t_df.perc_diff_in_means = t_df.perc_diff_in_means.round(2)
+
+#     # if pvalue is insignificant then don't include
+#     t_df.loc[t_df.pvalue>=0.05,'perc_diff_in_means'] = '-'
+    
+#     if plot:
+#         slope, intercept, r_value, p_value, std_err = linregress(a, b)
+#         print('T-test statistic: %.2f' %t_out.statistic, 'and pvalue: %.4f' %t_out.pvalue)
+
+#         plt.scatter(a, b)
+#         x_range = np.array([[np.min((a,b))], [np.max((a,b))]])
+#         plt.plot(x_range, slope*x_range + intercept, color='black', linewidth=1)
+#         plt.annotate('y = '+str(np.round(slope,3))+'x + '+ str(np.round(intercept,2)), (0.1,0.8), xycoords='axes fraction')
+#         plt.title(term)
+#         plt.ylabel('No Reconnection')
+#         plt.xlabel('Baseline')
+#     return(t_df)
+
+# %% [markdown]
+# ## Load SFR
+
+# %%
+# grid_sfr = pd.DataFrame().from_records(m.sfr.reach_data).rename(columns={'i':'row','j':'column'})
+# grid_sfr[['row','column']] += 1 # convert to 1 based to match with SFR output
+# pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies']]
+# pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
+
+# switch to module function 10/12/2023
+# def clean_sfr_df(model_ws, pd_sfr=None):
+#     sfrout = flopy.utils.SfrFile(join(model_ws, m.name+'.sfr.out'))
+#     sfrdf = sfrout.get_dataframe()
+#     sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
+#     # convert from sub-daily to daily using mean, lose kstpkper
+#     sfrdf = sfrdf.groupby('segment').resample('D').mean(numeric_only=True)
+#     sfrdf = sfrdf.reset_index('segment', drop=True)
+#     sfrdf[['row','column']]-=1 # convert to python
+#     sfrdf['month'] = sfrdf.index.month
+#     sfrdf['WY'] = sfrdf.index.year
+#     sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
+#     # add column to track days with flow
+#     sfrdf['flowing'] = 1
+#     sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
+#     if pd_sfr is not None:
+#     #     sfrdf = pd_sfr.join(sfrdf.set_index(['row','column']),on=['row','column'],how='inner',lsuffix='_all')
+#         sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
+
+#     # create different column for stream losing vs gaining seeapge
+#     sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
+#     sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
+#     # booleans for plotting
+#     sfrdf['gaining'] = (sfrdf.gradient == 0)
+#     sfrdf['losing'] = (sfrdf.gradient >= 0)
+#     sfrdf['connected'] = (sfrdf.gradient < 1)
+#     return(sfrdf)
+
+

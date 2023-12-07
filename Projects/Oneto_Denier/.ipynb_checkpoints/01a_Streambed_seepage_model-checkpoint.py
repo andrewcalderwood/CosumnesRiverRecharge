@@ -257,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-model_nam = 'oneto_denier_homogeneous'
+# model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -486,6 +486,9 @@ seep_vka = np.copy(vka)
 coarse_cutoff = vka_quants.loc[2,'vka_min'] # sand minimum
 seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue']
 print('coarse cutoff %.1f' %coarse_cutoff)
+
+# %%
+coarse_cutoff
 
 # %%
 # after upscaling each layer horizontally the values are very similar (all same order of magnitude)
@@ -771,166 +774,55 @@ lak_grid = lak_grid.loc[lak_grid.geometry.area > (delr*delc*0.5)]
 # ## XS pre-processing
 
 # %%
-# cross sections sampled using NHD lines at regular 100 m intervals (not aligned with any grid)
-xs_all = pd.read_csv(dat_dir+'XS_point_elevations.csv',index_col=0)
-xs_all = gpd.GeoDataFrame(xs_all,geometry = gpd.points_from_xy(xs_all.Easting,xs_all.Northing), crs='epsg:32610')
-
-# find XS that are in the modeled domain by thalweg point
-thalweg = xs_all[xs_all.dist_from_right_m==100]
-thalweg = gpd.overlay(thalweg, grid_p)
-# thalweg = gpd.sjoin_nearest(grid_p, thalweg, how='inner')
-# thalweg = thalweg.cx[xmin:xmax, ymin:ymax]
-# with XS every 100m I need to choose whether the first or second is used in a cell
-# thalweg = thalweg.dissolve(by='node', aggfunc='first')
-
-# pivot based on XS number and save only elevation in z_m
-xs_all_df = pd.read_csv(dat_dir+'Elevation_by_XS_number_meters.csv',index_col=0)
-xs_all_df = xs_all_df.dropna(axis=0,how='any')
-
-# filter XS by those that are within the domain bounds
-xs_all = xs_all[xs_all.xs_num.isin(thalweg.xs_num.values)]
-xs_all_df = xs_all_df.loc[:, thalweg.xs_num.astype(str)]
-
-# renumber XS
-thalweg.xs_num = np.arange(0,thalweg.shape[0])
-xs_all.xs_num = np.repeat(thalweg.xs_num.values,xs_all.dist_from_right_m.max()+1)
-xs_all_df.columns = thalweg.xs_num
-
-# %%
-from shapely.geometry import LineString
-i = 0
-# Number of cross sections
-numxs = int(len(xs_all_df.columns))
-# i is the cross-section number
-lp = pd.DataFrame(np.linspace(1,int(numxs),int(numxs)))
-lp['geometry'] = LineString([(0,0),(0,1)])
-
-for i in np.arange(0,numxs): #numxs
-    # Number of points in each cross section
-    numl = np.sum(pd.notna(xs_all_df.iloc[:,i]))
-    # Create empty array to fill with coordinates
-    lines = np.zeros((numl,2))
-    # j is the number of points in each individual cross-section
-    lm = LineString(list(zip(xs_all_df.index.values, xs_all_df.iloc[:,i].values)))
-    tol = 0.6
-    deltol = 0.1
-    count = 0
-    lms = LineString(lm).simplify(tolerance = tol)
-    while len(list(lms.coords))>8:
-        if len(list(lms.coords)) <5:
-            deltol = 0.001
-        temp = lms
-        lms = LineString(lm).simplify(tolerance = tol)
-        tol += deltol
-#         if count drops below 8 then reduce deltol
-#         if len(list(lms.coords)) <6:
-#             lms = temp
-#             tol -= deltol
-#             deltol *= 0.5     
-        count += 1
-
-    print(i,':',len(list(lms.coords)),end = ' - ') #count, 
-    lp.geometry.iloc[int(i)] = LineString(lms)
-    
-# some segments will never be able to match the ideal number of points despite very fine loops
-
-# %%
-# create summary of XS for creating SFR inputs
-xs_wide = xs_all.pivot_table(index='dist_from_right_m',values='z_m',columns='xs_num')
-thalweg_pts = xs_wide.idxmin().values.astype(int)
-xs_mins = xs_all.set_index(['dist_from_right_m','xs_num']).loc[list(zip(thalweg_pts, xs_wide.columns))]
-XSg_in = xs_mins.reset_index('dist_from_right_m')
-
-# join segment data to grid
-XSg_in = gpd.sjoin(XSg_in, grid_p, predicate='within', how='inner')
-# if multiple points in one cell take first, not a big deal since there are points every 100 m
-XSg_in = XSg_in.reset_index().groupby(['row','column'], as_index=False).first()
-XSg_in = XSg_in.sort_values('xs_num')
-# create segment numbers, starting at 1 to allow for first segment defined by michigan bar criteria
-XSg_in['iseg'] = np.arange(1, XSg_in.shape[0]+1) # add the segment that corresponds to each cross section
-XSg_in.crs = xs_all.crs
+XS8pt = pd.read_csv(join(proj_dir, 'SFR', '8pointXS_oneto_denier.csv'), index_col='xs_num')
 
 
 # %%
-# filter cross sections to those that matched in the grid
-xs_all = xs_all[xs_all.xs_num.isin(XSg_in.xs_num)]
-xs_all_df = xs_all_df.loc[:, XSg_in.xs_num]
+n_xs = XS8pt.index.unique().values
+n_plt = 4
 
-# %%
-XS8pt = pd.DataFrame(np.zeros((numxs*8, 3)), columns=['xs_num','dist_from_right_m','z_m'])
-XS8pt.xs_num = np.repeat(np.arange(0,numxs), 8)
-
-# lpg = gpd.GeoDataFrame(lp[:])
-xscoords = np.zeros((8, numxs))
-filler = np.zeros(2)
-filler[:] = np.nan
-for i in np.arange(0, numxs):
-    coordtemp = np.array(list(lp.geometry.iloc[i].coords))
-    coordtemp = coordtemp[~np.isnan(coordtemp[:,0])]
-    # if missing points add to make 8
-    while len(coordtemp) < 8:
-        endfill = np.copy(coordtemp[-1,:]) # take last and add new point
-        endfill[0] += 1 # offset with different x
-        coordtemp = np.vstack((coordtemp, endfill))
-    # reset distance from right to start at 0
-    coordtemp[:,0] -= coordtemp[0,0]
-    XS8pt.loc[XS8pt.xs_num==i,['dist_from_right_m','z_m']] = coordtemp   
-
-# filter for XS in final segments
-XS8pt = XS8pt.loc[XS8pt.xs_num.isin(XSg_in.xs_num)]
-XS8pt.to_csv(proj_dir + '8pointXS_'+model_nam+'.csv', index = False)
-XS8pt = XS8pt.set_index('xs_num')
-
-
-# %%
 # even plotting all XS they show the same triangular shape
-fig,ax = plt.subplots()
-for n in XS8pt.index.unique()[::10]:
+fig,ax = plt.subplots(figsize=(6.5,3))
+for n in XS8pt.index.unique()[np.arange(0, len(n_xs), int(len(n_xs)/n_plt))]:
     XS8pt.loc[n].plot(x='dist_from_right_m',y='z_m', ax=ax,legend=False)
 
 # %%
-XSg_z = XSg_in.copy().set_index('iseg')
+# load pre-cleaned thalweg data
+XSg_z = pd.read_csv(join(proj_dir, 'SFR', 'reach_data_cleaned.csv'))
+XSg_z = gpd.GeoDataFrame(XSg_z, geometry = gpd.points_from_xy(XSg_z.easting, XSg_z.northing), crs = grid_p.crs)
 
-# find minimum value in XS related to thalweg
-XSg_z['z_m_min'] = xs_all.dissolve('xs_num','min').z_m
-#roling mean of 6 window centered removes any negative slope
-XSg_z['z_m_min_cln'] = XSg_z.z_m_min.rolling(6,center=False).mean()
-
-# calculate slope and fill NAs, fill slope with nearby
-z_cln_diff = XSg_z.z_m_min_cln.diff().bfill()
-XSg_z['slope'] = z_cln_diff.abs()/delr
-# correct slope less than 1E-4
-XSg_z.loc[XSg_z.slope<1E-4,'slope'] = 1E-4
-
-# fix str bot so all is downward sloping
-for i in XSg_z.index[-2::-1]:
-# fill NAs due to rolling mean, with backward filling
-    if np.isnan(XSg_z.loc[i,'z_m_min_cln']):
-        XSg_z.loc[i,'z_m_min_cln'] = XSg_z.loc[i+1,'z_m_min_cln'] + XSg_z.loc[i,'slope']*delr
-
-for i in XSg_z.index[:-1]:
-    if XSg_z.loc[i+1,'z_m_min_cln'] >= XSg_z.loc[i,'z_m_min_cln']:
-        XSg_z.loc[i+1,'z_m_min_cln'] = XSg_z.loc[i,'z_m_min_cln'] - XSg_z.loc[i,'slope']*delr
-
-
-# XSg_z.slope.plot(secondary_y = True)
+# %% [markdown]
+# Need to have flow diverst from the Cosumnes River to a segment when above the floodplain flow threshold. Another segment needs to divert 50% of this flow to a segment before returning it to the main channel. And another segment is needed downstream of the initial floodplain diversion to avoid issues.
+# - Need an extra segment after the diversion and before the lake and between the diversion split and the main channel return.
+#
+# **After updating to 1 cross-section every 4 reaches, I need to make sure there is a proper segment downstream at the diversion**
 
 # %%
 # if scenario != 'no_reconnection':
 # identify XS to be copied for diversion reaches
 fp_grid_xs = fp_grid[['Logger Location','geometry']].copy()
-fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg_z.reset_index().drop(columns=['index_right']), how='inner')
+fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg_z.reset_index(), how='inner') #.drop(columns=['index_right'])
 # od_breach is the sensor location where the breach was made in the levees for flow to leave the river
 od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
 od_breach['xs_num'] -= 0.2 # adjust xs_num to set sorting order
+od_breach['ireach'] = 1
 od_swale = fp_grid_xs[fp_grid_xs['Logger Location']=='SwaleBreach_1'].copy()
 od_swale['xs_num'] -= 0.2 # adjust xs_num to set sorting order
+od_swale['ireach'] = 1
+
 # need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
 od_return = od_breach.copy()
 od_return['xs_num'] += 0.1 # adjust xs_num to set sorting order
-od_return.z_m_min_cln += od_return.slope*delr
+od_return.z_m_final = XSg_z[XSg_z.xs_num==int(np.ceil(od_return.xs_num).values[0])].z_m_final.max() + od_return.slope*delr
+# need another segment to transfer water between the breach and lake to avoid doubling
+od_lake = od_return.copy()
+od_lake['xs_num'] -= 0.05
+od_lake.z_m_final = od_breach.z_m_final - od_lake.slope*delr
+
 # add reaches for diversion
-XSg = pd.concat((XSg_z.reset_index(), od_breach, od_return, od_swale)) #, od_swale
+# XSg = pd.concat((XSg_z.reset_index(), od_breach, od_return, od_swale)) #, od_swale (old)
+# need a segment to control diversion to lake to avoid doubling water
+XSg = pd.concat((XSg_z.reset_index(), od_breach, od_return, od_lake, od_swale)) #, od_swale
 # else:
 #     XSg = XSg_z.reset_index().copy()
 
@@ -940,9 +832,36 @@ XSg = pd.concat((XSg_z.reset_index(), od_breach, od_return, od_swale)) #, od_swa
 # %%
 
 # redefine xs_num/iseg
-XSg  = XSg.sort_values('xs_num')
-XSg['iseg'] = np.arange(1,XSg.shape[0]+1)
+XSg  = XSg.sort_values(['xs_num','ireach'])
+XSg['reach_order'] = np.arange(0, len(XSg)) # fix reach order
+# old version with simple XS
+# XSg['iseg'] = np.arange(1,XSg.shape[0]+1)
+
+
+# %%
+# iterate over the added segments to fix reach ordering
+for xsn in XSg[~XSg['Logger Location'].isna()].xs_num:
+    rn = XSg.loc[XSg.xs_num==xsn,'reach_order'].values[0]
+    if XSg.loc[XSg.reach_order==rn-1, 'iseg'].values== XSg.loc[XSg.reach_order==rn, 'iseg'].values:
+        XSg.loc[XSg.xs_num>=xsn, 'iseg'] += 1
+# # now make sure to add 1 to downstream segments only if theyare equal
+for xsn in XSg[~XSg['Logger Location'].isna()].xs_num:
+    rn = XSg.loc[XSg.xs_num==xsn,'reach_order'].values[0]
+    if XSg.loc[XSg.reach_order==rn, 'iseg'].values== XSg.loc[XSg.reach_order==rn+1, 'iseg'].values:
+        XSg.loc[XSg.reach_order>rn, 'iseg'] += 1
+# need to fix reach numbering after fixing segment numbers
+min_reach = XSg.groupby('iseg').min(numeric_only=True)['ireach']
+for ns in min_reach[min_reach!=1].index:
+    XSg.loc[XSg.iseg==ns,'ireach'] = np.arange(1,np.sum(XSg.iseg==ns)+1)
+
 XSg = XSg.set_index('iseg')
+
+# %% [markdown]
+# Had to add extra if statements for if the previous segment ends at diversion
+
+# %%
+# XSg.head()
+# XSg.iloc[26:35]
 
 # %%
 # fill upstream with parameters from sensors
@@ -959,7 +878,7 @@ sfr_cols = (XSg.column.values-1).astype(int)
 # since the if statement only checks whether the first layer is greater than the streambed elevation, 
 # owhm default raises layer to topmost active which is 1
 strthick = 1
-strtop = XSg.z_m_min_cln.values 
+strtop = XSg.z_m_final.values 
 strbot = strtop - strthick
 
 
@@ -979,14 +898,16 @@ sfr_lay = get_layer_from_elev(strbot, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
 # flopy seems to think the layer bottom for layer 3 is 0.727
 
 # %%
-(XSg.z_m_min_cln).plot(label='Str Top')
-XSg.z_m_min.plot(label='min')
-(XSg.z_m_min_cln-strthick).plot(label='Str Bot')
+x = XSg.reach_order.values
 
-plt.plot(m.dis.top.array[ sfr_rows, sfr_cols], label='Model Top', ls='--',color='green')
-# plt.plot(m.dis.botm.array[0, sfr_rows, sfr_cols], label='Lay 1 Bottom', ls='--',color='brown')
-plt.plot(botm[sfrt_lay, sfr_rows, sfr_cols], label='SFRT Lay Bot', ls='--',color='black')
-plt.plot(botm[sfr_lay, sfr_rows, sfr_cols], label='SFRB Lay Bot', ls='-.',color='grey')
+plt.plot(x, XSg.z_m_final, label='Str Top')
+plt.plot(x, XSg.z_m_min, label='min')
+plt.plot(x, (XSg.z_m_final-strthick), label='Str Bot')
+
+plt.plot(x, m.dis.top.array[ sfr_rows, sfr_cols], label='Model Top', ls='--',color='green')
+# plt.plot(x, m.dis.botm.array[0, sfr_rows, sfr_cols], label='Lay 1 Bottom', ls='--',color='brown')
+plt.plot(x, botm[sfrt_lay, sfr_rows, sfr_cols], label='SFRT Lay Bot', ls='--',color='black')
+plt.plot(x, botm[sfr_lay, sfr_rows, sfr_cols], label='SFRB Lay Bot', ls='-.',color='grey')
 
 plt.legend()
 
@@ -1004,8 +925,8 @@ if scenario !='no_reconnection':
 
     # fp_logger[fp_logger['Logger Type']=='Breach'].plot('Logger Location',ax=ax, legend=True, legend_kwds={'loc':(1,0.3)})
     lak_extent.plot(ax=ax, color='none')
-    ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
-                    crs = 'epsg:26910', alpha=0.8)
+    # ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
+    #                 crs = 'epsg:26910', alpha=0.8)
 
 # %% [markdown]
 # ## SFR input
@@ -1015,8 +936,8 @@ if scenario !='no_reconnection':
 NSTRM = -len(XSg)
 # There should a be a stream segment if there are major changes
 # in variables in Item 4 or Item 6
-# 1st segment is for the usgs Michigan Bar rating curve, one for each XS, plus 2 for the floodplain diversion
-NSS = len(XSg) 
+# one for each XS, plus 2 for the floodplain diversion
+NSS = len(XSg.index.unique()) 
 # NSS = 2
 # nparseg (int) number of stream-segment definition with all parameters, must be zero when nstrm is negative
 NPARSEG = 0
@@ -1083,9 +1004,11 @@ sfr.reach_data.k = sfr_lay.astype(int)
 sfr.reach_data.i = sfr_rows
 sfr.reach_data.j = sfr_cols
 sfr.reach_data.iseg = XSg.index
-sfr.reach_data.ireach = 1 
+# sfr.reach_data.ireach = 1 
+sfr.reach_data.ireach = XSg.ireach
+# mean length is 100 m, std dev is 15 m
 sfr.reach_data.rchlen = 100 #xs_sfr.length_m.values
-sfr.reach_data.strtop = XSg.z_m_min_cln.values
+sfr.reach_data.strtop = XSg.z_m_final.values
 sfr.reach_data.slope = XSg.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = strthick
@@ -1109,7 +1032,7 @@ plt.ylabel('VKA (m/s)')
 plt.yscale('log')
 
 # %%
-mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
+# mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
 
 
 # %%
@@ -1121,7 +1044,7 @@ sfr_seg.nseg = np.arange(1,NSS+1)
 
 sfr_seg.icalc = 2 # Mannings and 8 point channel XS is 2 with plain MF, 5 with SAFE
 # sfr_seg.icalc[0] = 4 # use stage, discharge width method for Michigan Bar (nseg=1)
-sfr_seg.nstrpts[sfr_seg.icalc==4] = len(mb4rl) # specify number of points used for flow calcs
+# sfr_seg.nstrpts[sfr_seg.icalc==4] = len(mb4rl) # specify number of points used for flow calcs
 sfr_seg.outseg = sfr_seg.nseg+1 # the outsegment will typically be the next segment in the sequence
 sfr_seg.iupseg = 0 # iupseg is zero for no diversion
 
@@ -1143,12 +1066,12 @@ sfr_seg.roughbk[(sfr_seg.icalc==2) | (sfr_seg.icalc==5)] = 0.083# higher due to 
     # diversion segment
 od_div = XSg[XSg['xs_num']==od_breach.xs_num.values[0]]
 od_ret = XSg[XSg['xs_num']==od_return.xs_num.values[0]]
+od_lak = XSg[XSg['xs_num']==od_lake.xs_num.values[0]]
 # downstream channel segment
 od_sfr = XSg[XSg.xs_num==np.round(od_div.xs_num.values[0])]
 od_sfr = od_sfr[od_sfr['Logger Location'].isna()]
 # upstream segment to diversion and channel
 up_div = XSg[XSg.xs_num == od_div.xs_num.values[0]-1]
-
 
 # outflow from floodplain
 od_out = XSg[XSg['Logger Location']=='SwaleBreach_1']
@@ -1156,8 +1079,12 @@ od_sfr_out = XSg[XSg.xs_num==od_out.xs_num.values[0]]
 # pull segments for easier indexing
 div_seg = od_div.index[0]
 ret_seg = od_ret.index[0]
+lak_seg = od_lak.index[0]
 chan_seg = od_sfr.index[0]
 up_seg = div_seg - 1
+
+# %%
+#up_seg, div_seg, lak_seg, ret_seg, chan_seg
 
 # %% [markdown]
 # For the new no reconnection scheme it is just as fast to copy the same model input files and just replace the diversion flow (FLOW with IPRIOR=-1) and fraction of return flow (FLOW with IPRIOR=-2)
@@ -1186,7 +1113,10 @@ if scenario == 'no_reconnection':
     sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_no_reconnection # 71.6 cms is floodplain threshold in 2014
 else:
     sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow_baseline # 23 cms is floodplain threshold per Whipple in the Cosumnes
-sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain
+# sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain (old version)
+# outflow from the segment is a downstream segment then the lake to avoid diverison routing issues
+sfr_seg.outseg[sfr_seg.nseg==div_seg] = lak_seg
+sfr_seg.outseg[sfr_seg.nseg==lak_seg] = -1
 
 # adjust for flow from diversion segment back to  channel
 sfr_seg.iupseg[sfr_seg.nseg==ret_seg] = div_seg
@@ -1205,6 +1135,10 @@ sfr_seg.outseg[sfr_seg.nseg==od_out.index[0]] = od_out.index[0]+1 # outflow segm
 
 
 # %%
+# troubleshooting
+# sfr_seg[(sfr_seg.nseg>=29)&(sfr_seg.nseg<35)]
+
+# %%
 sfr.segment_data[0] = sfr_seg
 
 # %% [markdown]
@@ -1217,6 +1151,7 @@ sfr.segment_data[0] = sfr_seg
 # if scenario != 'no_reconnection':
     # need to remove conductance from dviersion reach routing flow to floodplain
 sfr.reach_data.strhc1[sfr.reach_data.iseg== od_div.index[0]] = 0
+sfr.reach_data.strhc1[sfr.reach_data.iseg== od_lak.index[0]] = 0
 sfr.reach_data.strhc1[sfr.reach_data.iseg== od_ret.index[0]] = 0
 sfr.reach_data.strhc1[sfr.reach_data.iseg== od_out.index[0]] = 0
 
@@ -1238,13 +1173,10 @@ if scenario != 'no_reconnection':
 
 # %%
 # Change column name to float type for easier referencing in iteration
-# XS8pt.columns = XS8pt.columns.astype('float')
-# XS8pt
-# must start at 0 if only at teichert
 xsnum = 1
 
 # Pre-create dictionary to be filled in loop
-sfr.channel_geometry_data = {0:{j:[] for j in np.arange(xsnum,len(XSg)+xsnum)}  }
+sfr.channel_geometry_data = {0:{j:[] for j in XSg.index.unique()}  }
 
 
 for k in XSg.xs_num.round(): # round is fix for subtracting to id diversion segments
@@ -1260,6 +1192,7 @@ for k in XSg.xs_num.round(): # round is fix for subtracting to id diversion segm
 # %%
 # sfr.check()
 
+
 # %%
 # sfr.write_file()
 
@@ -1273,12 +1206,18 @@ grid_sfr = grid_p.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))
 grid_sfr = pd.concat((grid_sfr,sfrdf),axis=1)
 # group sfrdf by vka quantiles
 sfr_vka = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
+# grid_sfr['facies'] = 'Mud'
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
-    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies
+    # grid_sfr.loc[(sfr_vka<= facies.vka_max)&(sfr_vka> facies.vka_min),'facies'] = facies.facies # makes more sense to include max to previous
+    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies # original version
 #     # add color for facies plots
 grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
 grid_sfr.to_csv(model_ws+'/grid_sfr.csv')
+
+# %%
+# grid_sfr.plot()
+pd.DataFrame(sfr.reach_data).slope.plot()
 
 # %% [markdown]
 # ## SFR Tab File
