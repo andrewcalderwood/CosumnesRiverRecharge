@@ -71,8 +71,10 @@ add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/python_utilities')
 
 import map_cln
 reload(map_cln)
-from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, make_multi_scale
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, xy_lab, make_multi_scale
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
+from flopy_utilities import reach_data_gdf
+from tprogs_review import get_tprogs_quants
 
 # +
 # import mf_utility
@@ -287,7 +289,7 @@ def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
                 xycoords=ax.transAxes,
                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
 
-    ### gw flow directoin arrow approximation
+    ### gw flow direction arrow approximation
     ax.annotate('', xy=(x+dx, y+dy), xytext=(x, y),
                 arrowprops=dict(facecolor='black', width=1.5, alpha=1, headwidth=5),
                 ha='center', va='center', fontsize=10,xycoords=ax.transAxes, 
@@ -297,8 +299,7 @@ def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
 # dir_arrow(ax, 0.8, 0.8, -0.2, -0.2, 0.2, 'Cosumnes River\nflow into the domain')
 
 
-# -
-
+# +
 def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
     xy = gdf.geometry.unary_union.centroid.coords[0]
     lw = 1
@@ -312,13 +313,14 @@ def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsi
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
             bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
 
-
 def xy_lab(xy, text, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
     if bbox:
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
                     bbox=dict(boxstyle="square,pad=0.3", fc=fc, ec=ec, lw=lw))
     else:
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize)
+# -
+
 
 
 # +
@@ -365,7 +367,7 @@ m_domain.plot(color="none",edgecolor='black',ax=ax)
 cr.plot(ax=ax, color='tab:blue')
 mr.plot(ax=ax, color='tab:blue')
 
-lak_extent.plot(ax=ax, color='none', hatch='///', edgecolor='blue',  alpha=0.7)
+lak_extent.plot(ax=ax, color='none', hatch='///', edgecolor='white',  alpha=0.7)
 rm_t.plot(legend=False,ax=ax, color='black', markersize=5)
 
 
@@ -590,21 +592,27 @@ ag_grid_p = grid_p.set_index(['row','column']).loc[list(zip(wel_row+1, wel_col+1
 ag_grid_p.geometry = ag_grid_p.geometry.centroid
 
 # save dataframe of stream reach data
-sfrdf = pd.DataFrame(m.sfr.reach_data)
-sfrdf[['row','column']] = sfrdf[['i','j']]+1
-# grid_sfr = grid_match.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index()
-grid_sfr = grid_match.merge(sfrdf, on=['row','column']).sort_values('iseg')
+# sfrdf = pd.DataFrame(m.sfr.reach_data)
+# sfrdf[['row','column']] = sfrdf[['i','j']]+1
+# # grid_sfr = grid_match.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index()
+# grid_sfr = grid_match.merge(sfrdf, on=['row','column']).sort_values('iseg')
+
+grid_sfr = reach_data_gdf(m.sfr, grid_p)
+grid_sfr_full = grid_sfr.copy()
 # for mapping only keep non-zero hydraulic conductivity reaches (stream-aquifer active)
 grid_sfr = grid_sfr[grid_sfr.strhc1!=0]
 grid_sfr['plt_seg'] = np.arange(1, len(grid_sfr)+1)
+
+
 
 # -
 
 
 lakrow,lakcol = np.where(m.lak.lakarr[0].array[0]==1)
-# lak_grid = grid_p.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
-lak_grid = grid_match.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index()
+lak_grid = grid_p.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index() # drops interior lines
+# lak_grid = grid_match.set_index(['row','column']).loc[list(zip(lakrow+1, lakcol+1))].reset_index() # keeps interior lines of regional grid
 lak_grid_union = gpd.GeoDataFrame([0], geometry = [lak_grid.geometry.unary_union], crs=grid_p.crs)
+
 
 # +
 from matplotlib.patches import Patch
@@ -616,7 +624,7 @@ legend_elements = [
     # Patch(facecolor='red', edgecolor='r',alpha=0.6,label='Agricultural Pumping Wells'),
     Line2D([0], [0],color='None', marker='.', markerfacecolor='black', label='Agricultural Pumping Wells', linewidth=4),
     # Patch(facecolor='red', edgecolor='r',alpha=0.6,label='Irrigated Lands'),
-    Patch(facecolor='none', edgecolor='blue',alpha=0.7, hatch="///", label='Floodplain Cells'),
+    Patch(facecolor='none', edgecolor='white',alpha=0.7, hatch="///", label='Floodplain Cells'),
 #     Line2D([0], [0],color='tab:blue',label='Stream Segments', linewidth=4),
     Patch(facecolor='tab:blue', label='Stream Segments'),
     # Line2D([0],[0], color='none', markerfacecolor='black', marker='$10$', label='Stream Segments'),
@@ -630,7 +638,15 @@ legend_elements = [
 # matplotlib.rcParams['legend.handleheight'] = 1
 # -
 
-plt_segs = np.append(0,np.arange(9,91,10)) # sfr segments to label
+# identify reaches where floodplain connects
+fp_in_reach = grid_sfr[grid_sfr.iseg == grid_sfr_full[grid_sfr_full.outseg==-1].iseg.values[0]-2].plt_seg.max()-1
+fp_out_reach = grid_sfr[grid_sfr.iseg == grid_sfr_full[grid_sfr_full.iupseg==-1].iseg.values[0]+1].plt_seg.max()-1
+fp_in_reach, fp_out_reach
+
+plt_segs = np.append(0,np.arange(9,80,10)) # sfr segments to label
+plt_segs = np.sort(np.unique(np.append(plt_segs, (fp_in_reach, fp_out_reach))))
+plt_segs
+# plt_segs = [0,9,19, fp_in_reach, 39, fp_out_reach, 59,69,79]
 
 # +
 fig, ax = plt.subplots(figsize=(6.5,6.5), dpi=300)
@@ -642,16 +658,18 @@ m_domain.plot(ax=ax, color='none', edgecolor='black')
 
 ag_grid_p.plot(ax=ax, color='black', markersize=5)
 
-# lak_extent.plot(ax=ax,color='none',edgecolor='blue',hatch="///", alpha=0.7)
-lak_grid_union.plot(ax=ax,color='none',edgecolor='blue',hatch="///", alpha=0.7)
+# lak_extent.plot(ax=ax,color='none',edgecolor='white',hatch="///", alpha=0.7)
+lak_grid_union.plot(ax=ax,color='none',edgecolor='white',hatch="///", alpha=0.7)
 grid_sfr.plot(ax=ax, color='tab:blue')
-grid_sfr.iloc[plt_segs].apply(lambda x: ax.annotate(str(x.plt_seg), xy=x.geometry.centroid.coords[0], ha='center', fontsize=6,
-                                    xytext = (1,1), textcoords='offset pixels',
+grid_sfr.iloc[plt_segs].apply(lambda x: ax.annotate(str(x.plt_seg), xy=x.geometry.centroid.coords[0], ha='center', fontsize=8,
+                                    xytext = (1,1), textcoords='offset pixels', 
                                     bbox=dict(boxstyle="square,pad=0.1", fc="lightgrey", ec="none", lw=1, alpha=0.5) 
                                                ),axis=1);
 
 # arr_lab(grid_sfr.iloc[[0]], 'Segment \nNumber', ax, offset = (120, 10), arrow=True, fontsize=8)
-arr_lab(grid_sfr.iloc[[9]], 'Segment \nNumber', ax, offset = (100, -180), arrow=True, fontsize=8)
+arr_lab(grid_sfr.iloc[[fp_in_reach]], 'Floodplain\nInflow', ax, offset = (180, -100), arrow=True, fontsize=8)
+arr_lab(grid_sfr.iloc[[fp_out_reach]], 'Floodplain\nOutflow', ax, offset = (180, -100), arrow=True, fontsize=8)
+arr_lab(grid_sfr.iloc[[9]], 'Reach \nNumber', ax, offset = (100, -180), arrow=True, fontsize=8)
 
 ax.legend(handles=legend_elements, loc='lower right')
 
@@ -668,6 +686,8 @@ plt_arrow(ax, 0.05, 0.15)
 make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
 
 # -
+
+# I don't think I ever scaled ET by the area it covers in each cell so it potentially overestimates the ET
 
 # # TPROGs
 

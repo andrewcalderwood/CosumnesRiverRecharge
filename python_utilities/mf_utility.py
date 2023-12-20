@@ -44,6 +44,20 @@ def param_load(model_ws, file_dir, file_name):
 
 #%% Post-processing
 
+def clean_hob(model_ws, dt_ref):
+    hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
+                         dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
+    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split('p',n=2, expand=True)
+    hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
+    hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
+    hobout.loc[hobout.sim_val.isin([-1e30, -999.99,-9999]), 'sim_val'] = np.nan
+    hobout = hobout.dropna(subset='sim_val')
+    hobout['error'] = hobout.obs_val - hobout.sim_val
+    hobout['sq_error'] = hobout.error**2
+    
+    return(hobout)
+
+
 def get_dates(dis, ref='end'):
     """ Given a MODFLOW DIS file return datetimes given the model start datetime
     input:
@@ -164,3 +178,4 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     sfrdf['losing'] = (sfrdf.gradient >= 0)
     sfrdf['connected'] = (sfrdf.gradient < 1)
     return(sfrdf)
+

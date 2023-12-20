@@ -98,6 +98,9 @@ model_nam = 'oneto_denier_upscale4x_2014_2020_no_reconnection'
 
 model_ws = loadpth+ model_nam
 
+ws_out = join(loadpth, 'repeat_hydrology')
+
+
 # %% [markdown]
 # # Script goals
 # 1. Load the existing model.
@@ -134,7 +137,6 @@ steady = np.repeat(dis0.steady.array, ncycle)
 strt_date = pd.to_datetime(dis0.start_datetime) +pd.DateOffset(days=dis0.nper)
 
 # %%
-ws_out = join(loadpth, 'repeat_hydrology')
 
 m = flopy.modflow.Modflow(modelname = 'MF', exe_name = 'mf-owhm', 
                           version = 'mfnwt', model_ws=ws_out)
@@ -273,6 +275,9 @@ ghb = flopy.modflow.ModflowGhb(m, stress_period_data=ghb_dict, ipakcb=55)
 
 # %% [markdown]
 # ## SFR
+# Floodplain flow threshold ($m^3/d$)  
+# Baseline: 9417600.0  
+# Restoration: 1987200.0  
 
 # %%
 # could reuse SFR as is, but need to update dataset 5
@@ -283,7 +288,7 @@ ghb = flopy.modflow.ModflowGhb(m, stress_period_data=ghb_dict, ipakcb=55)
 sfr0 = m0.sfr
 
 sfr = flopy.modflow.ModflowSfr2(model = m,
-    nstrm = sfr0.nstrm, nss = sfr0.nss, const = sfr0.const, dleak = sfr0.dleak, isfropt = sfr0.isfropt, ipakcb = 55,
+    nstrm = sfr0.nstrm, nss = sfr0.nss, const = sfr0.const, dleak = sfr0.dleak, isfropt = sfr0.isfropt, ipakcb = 55, istcb2 = 54,
     irtflg =sfr0.irtflg, numtim = sfr0.numtim, flwtol = sfr0.flwtol, weight = sfr0.weight,
     reachinput=True, transroute=True, tabfiles=True, tabfiles_dict={1: {'numval': nper, 'inuit': 56}},
     reach_data = sfr0.reach_data, segment_data = sfr0.segment_data[0], channel_geometry_data = sfr0.channel_geometry_data)
@@ -298,9 +303,9 @@ sfr.options = tab_option
 tab = np.loadtxt(join(model_ws, 'MF.tab'))
 
 # %%
-tab1 = np.repeat(tab[:,1], ncycle)
-tab0 = np.repeat(tab[:,0], ncycle)+ np.repeat(np.arange(0, nper, dis0.nper), dis0.nper)
-np.savetxt(join(m.model_ws, 'MF.tab'), np.transpose((tab0, tab1)))
+tab1 = np.tile(tab[:,1], ncycle)
+tab0 = np.tile(tab[:,0], ncycle)+ np.repeat(np.arange(0, nper, dis0.nper), dis0.nper)
+np.savetxt(join(ws_out, 'MF.tab'), np.transpose((tab0, tab1)))
 
 # %% [markdown]
 # ## LAK
