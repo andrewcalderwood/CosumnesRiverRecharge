@@ -130,24 +130,6 @@ drop_iseg = XSg[~XSg['Logger Location'].isna()].iseg.values
 # XS_params = sensor_dict.join(params.set_index('Sensor'), on='Sensor')
 
 # %%
-sfr = m.sfr
-sfrdf = pd.DataFrame(sfr.reach_data)
-grid_sfr = grid_p.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index(drop=True)
-grid_sfr = pd.concat((grid_sfr,sfrdf),axis=1)
-
-# characterize streambed into different hydrofacies
-tprogs_quants = np.array([0.590, 0.155, 0.197, 0.058]).cumsum()
-# use facies of vka just below stream
-vka_sfr = m.upw.vka.array[sfrdf.k, sfrdf.i, sfrdf.j]
-vka_quants = pd.DataFrame(np.quantile(vka_sfr, tprogs_quants))
-vka_quants.index=['mud','sandy mud','sand','gravel']
-grid_sfr['facies'] = 'mud'
-for n in np.arange(0,len(vka_quants)-1):
-    grid_sfr.loc[vka_sfr > vka_quants.iloc[n].values[0],'facies'] = vka_quants.index[n+1]
-# remove stream segments for routing purposes only
-grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
-
-# %%
 params = pd.read_csv(model_ws+'/ZonePropertiesInitial.csv', index_col='Zone')
 # convert from m/s to m/d
 params['K_m_d'] = params.K_m_s * 86400 
@@ -162,23 +144,9 @@ vka_quants['vka_max'] = np.quantile(vka, tprogs_quants[:-1])
 vka_quants['facies'] = params.loc[tprogs_vals].Lithology.values
 
 # %%
-sfrdf = pd.DataFrame(sfr.reach_data)
-grid_sfr = grid_p.set_index(['row','column']).loc[list(zip(sfrdf.i+1,sfrdf.j+1))].reset_index(drop=True)
-grid_sfr = pd.concat((grid_sfr,sfrdf),axis=1)
-# group sfrdf by vka quantiles
-sfr_vka = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-for p in vka_quants.index:
-    facies = vka_quants.loc[p]
-    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies
-#     # add color for facies plots
-# grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
-
-# %%
-grid_sfr.plot('facies', legend=True)
-
-# %%
-# lak_shp = join(gwfm_dir,'LAK_data/floodplain_delineation')
-# lak_extent = gpd.read_file(join(lak_shp,'LCRFR_ModelDom_2017/LCRFR_2DArea_2015.shp' )).to_crs('epsg:32610')
+grid_sfr = pd.read_csv(join(model_ws,'grid_sfr.csv'),index_col=0)
+grid_sfr = grid_sfr[grid_sfr.strhc1!=0]
+grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
 
 
 # %% [markdown]
@@ -209,58 +177,18 @@ rm_elev = gpd.sjoin_nearest(XSg, rm_grid, how='right',lsuffix='xs', rsuffix='rm'
 rm_elev = rm_elev.drop_duplicates(['Sensor'])
 rm_elev = rm_elev.sort_values('iseg')
 
-# %%
-# elevation check for Graham to show the difference between wells and the river
-# fig,ax=plt.subplots()
-# # rm_elev
-# rm_elev.plot(x='Sensor',y='z_m_min', ax=ax, kind='scatter', color='red',label='River Min')
-# rm_elev.plot(x='Sensor',y='z_m_min_cln',ax=ax, kind='scatter', color='black', label='River Min adj')
-# rm_elev.plot(x='Sensor',y='MPE (meters)',ax=ax, kind='scatter', color='brown', label='Well MPE')
-# plt.ylabel('Elevation (m AMSL)')
-# plt.xticks(rotation=90);
-# rm_elev.
-
 # %% [markdown]
 # ## Model output - time variant
 
 # %%
 strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 
-
 # %%
 # chk_ws = join(loadpth,'parallel_oneto_denier_upscale4x_2014_2018','realization011')
 # chk_ws
 
 # %%
-
-def clean_wb(flow_name, dt_ref):
-    # load summary water budget
-    wb = pd.read_csv(flow_name, delimiter=r'\s+')
-
-    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
-    wb = wb.merge(dt_ref, on='kstpkper').set_index('dt')
-
-    # calculate change in storage
-    wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
-    wb['dSTORAGE_sum'] = wb.dSTORAGE.cumsum()
-    # calculate total gw flow, sum GHB, CHD
-    # wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
-    # wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
-    # wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
-    
-    wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
-    wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
-    wb_out_cols= wb_cols[wb_cols.str.contains('_OUT')]
-    wb_in_cols = wb_cols[wb_cols.str.contains('_IN')]
-    # only include columns with values used
-    wb_out_cols = wb_out_cols[np.sum(wb[wb_out_cols]>0, axis=0).astype(bool)]
-    wb_in_cols = wb_in_cols[np.sum(wb[wb_in_cols]>0, axis=0).astype(bool)]
-
-    return(wb, wb_out_cols, wb_in_cols)
-
-
-# %%
-wb, wb_out_cols, wb_in_cols = clean_wb(model_ws+'/flow_budget.txt', dt_ref)
+wb, wb_out_cols, wb_in_cols = clean_wb(model_ws, dt_ref)
 # manual columns
 wb_out_cols  =['WEL_OUT','ET_OUT','GHB_OUT','SFR_OUT','LAK_OUT']
 wb_in_cols = ['RCH_IN','GHB_IN','SFR_IN','LAK_IN']
@@ -526,46 +454,41 @@ for n, wb_n in enumerate(wb_out_cols):
 # ## SFR Plotting
 
 # %%
+import mf_utility
+from importlib import reload
+reload(mf_utility)
+from mf_utility import clean_sfr_df
+
+# %%
 # grid_sfr = pd.DataFrame().from_records(m.sfr.reach_data).rename(columns={'i':'row','j':'column'})
 # grid_sfr[['row','column']] += 1 # convert to 1 based to match with SFR output
-pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies']]
+pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'strthick', 'slope']]
 pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
-
-def clean_sfr_df(model_ws):
-    sfrout = flopy.utils.SfrFile(join(model_ws, m.name+m_ver+'.sfr.out'))
-    sfrdf = sfrout.get_dataframe()
-    sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
-    # convert from sub-daily to daily using mean, lose kstpkper
-    sfrdf = sfrdf.groupby('segment').resample('D').mean(numeric_only=True)
-    sfrdf = sfrdf.reset_index('segment', drop=True)
-    sfrdf[['row','column']]-=1 # convert to python
-    cmd2cfs = 1/((0.3048**3)*86400) # cubic meters per day to cfs
-    sfrdf['month'] = sfrdf.index.month
-    sfrdf['WY'] = sfrdf.index.year
-    sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
-    # add column to track days with flow
-    sfrdf['flowing'] = 1
-    sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
-#     sfrdf = pd_sfr.join(sfrdf.set_index(['row','column']),on=['row','column'],how='inner',lsuffix='_all')
-    sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
-    # dependent on number of time steps
-    sfrdf['Qin_cfs'] = sfrdf.Qin * cmd2cfs
-    sfrdf['Qout_cfs'] = sfrdf.Qout * cmd2cfs
-    sfrdf['Qaquifer_cfs'] = sfrdf.Qaquifer * cmd2cfs
-    
-    # create different column for stream losing vs gaining seeapge
-    sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
-    sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    # booleans for plotting
-    sfrdf['gaining'] = (sfrdf.gradient == 0)
-    sfrdf['losing'] = (sfrdf.gradient >= 0)
-    sfrdf['connected'] = (sfrdf.gradient < 1)
-    return(sfrdf)
-
 
 
 # %%
-sfrdf =  clean_sfr_df(model_ws)
+sfrdf =  clean_sfr_df(model_ws, dt_ref, pd_sfr)
+
+# %% [markdown]
+# ## Flow obs
+
+# %%
+# # # troubleshooting
+# # # review of stream stage and slope
+plt_date = '2017-6-1'
+fig,ax = plt.subplots(5,1,figsize=(6.5,6), sharex=True)
+sfrdf.loc[plt_date].plot(x='Total distance (m)', y='Qin', ax=ax[0])
+
+sfrdf.loc[plt_date].plot(x='Total distance (m)', y=['stage', 'strtop'], ax=ax[1])
+sfrdf.loc[plt_date].plot(x='Total distance (m)', y='depth', ax=ax[2])
+sfrdf.loc[plt_date].plot(x='Total distance (m)', y='slope', ax=ax[3])
+ax[3].set_ylabel('Bed\nslope')
+ax[4].plot(sfrdf.loc[plt_date]['Total distance (m)'], sfrdf.loc[plt_date].stage.diff().bfill().multiply(-1/100))
+ax[4].set_ylabel('Friction\nslope')
+ax[4].set_ylim(-0.01, 0.01)
+# ax.set_aspect(500)
+
+# %%
 
 # %%
 # find last day of flow
