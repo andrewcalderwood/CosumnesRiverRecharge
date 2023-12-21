@@ -28,6 +28,8 @@ import contextily as ctx
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 # %%
 ## Set up directory referencing
@@ -44,7 +46,7 @@ map_dir = join(gwfm_dir,'Mapping')
 sfr_dir = join(gwfm_dir,'SFR_data')
 
 
-plt_dir = join(map_dir,'figures')
+fig_dir = join(map_dir,'figures')
 
 # %%
 from importlib import reload
@@ -67,6 +69,12 @@ from mf_utility import get_layer_from_elev
 from map_cln import gdf_bnds, plt_cln, make_multi_scale
 
 # %%
+import map_cln
+reload(map_cln)
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, make_multi_scale
+from mf_utility import get_dates, get_layer_from_elev, clean_wb
+
+# %%
 # reload(map_cln)
 
 # %%
@@ -86,6 +94,20 @@ rivers_clip = gpd.clip(rivers, m_domain)
 soam = gpd.read_file(map_dir+"/so_am_subbasin/so_am_subbasin.shp").to_crs(m_domain.crs)
 cos = gpd.read_file(map_dir+"/cos_subbasin/cos_subbasin.shp").to_crs(m_domain.crs)
 ca = gpd.read_file(map_dir+"/ca_state_boundary/CA_State_TIGER2016.shp").to_crs(m_domain.crs)
+
+# %%
+prms_gis = join(gwfm_dir,'PRMS','GIS')
+ws_gdf = gpd.read_file(join(prms_gis, "NHD_H_18040013_HU8_Shape\Shape\WBDHU8.shp"))
+ws_gdf=ws_gdf.to_crs(m_domain.crs)
+
+# %%
+teichert = gpd.read_file(gwfm_dir+'/Mapping/Kautz_shapefiles/Kautz Property.shp')
+rooney = gpd.read_file(gwfm_dir+'/Mapping/Kautz_shapefiles/Kautz Property2.shp')
+mosher = gpd.read_file(gwfm_dir+'/Mapping/Kautz_shapefiles/MosherProperty.shp')
+vineyard = pd.concat((teichert, rooney, mosher))
+
+vineyard=vineyard.to_crs('epsg:32610')
+teichert = teichert.to_crs('epsg:32610')
 
 
 # %%
@@ -108,6 +130,23 @@ def regional_scale_arrow(ax):
 
 
 # %%
+
+def ref_map(axins, fontsize=10, lw=1):
+    ca.plot(ax = axins,alpha = 0.2, edgecolor='black')
+    axins.annotate(text='California', xy=lab_pnt(ca), 
+                xytext = (6,-30), textcoords = 'offset points', fontsize=fontsize, 
+                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw), zorder=1)
+    # second one is smaller inset
+    axins.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+    ws_gdf.plot(color='none',ax=axins, linestyle='--')
+    # ws_gdf.plot(color='none',ax=axins, linestyle='--')
+    m_domain.plot(color="none",edgecolor='black',ax=axins)
+    return axins
+
+
+
+# %%
 def regional_arrow(ax, xoff, yoff):
     x, y, arrow_length = xoff, yoff, 0.1
     ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
@@ -118,20 +157,31 @@ def regional_arrow(ax, xoff, yoff):
 
 fig,ax = plt.subplots(figsize=(6.5,6.5), dpi=300)
 
-m_domain.plot(ax=ax,color="none",edgecolor='black')
-gdf_bnds(m_domain,ax)
 
-rivers.loc[rivers.GNIS_Name.isin(['Mokelumne River','South Mokelumne River'])].plot(ax=ax)
-cr = rivers.loc[rivers.GNIS_Name=='Cosumnes River']
-cr.plot( ax=ax,label='Cosumnes River')
+def main_map(ax):
 
-ax.annotate(text='Cosumnes\n River', xy=list(cr.geometry.iloc[10].centroid.coords)[0], 
-            xytext = (6,6), textcoords = 'offset pixels',
-            bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
+    m_domain.plot(ax=ax,color="none",edgecolor='black')
+    gdf_bnds(m_domain,ax)
+    
+    rivers.loc[rivers.GNIS_Name.isin(['Mokelumne River','South Mokelumne River'])].plot(ax=ax)
+    cr = rivers.loc[rivers.GNIS_Name=='Cosumnes River']
+    cr.plot( ax=ax,label='Cosumnes River')
+    
+    ax.annotate(text='Cosumnes\n River', xy=list(cr.geometry.iloc[10].centroid.coords)[0], 
+                xytext = (6,6), textcoords = 'offset pixels',
+                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
+    
+    
+    vineyard.plot(ax=ax, label='Vineyards', color='green', alpha = 0.7,edgecolor='black')
+    ax.annotate(text='Vineyard\nMAR', xy=list(vineyard.iloc[0].geometry.centroid.coords)[0], 
+                xytext = (60,-20), textcoords = 'offset pixels',
+                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
+    
+    ctx.add_basemap(ax, source = ctx.providers.Esri.WorldImagery, crs='epsg:26910', alpha = 0.8, attribution=False)
 
 
-ctx.add_basemap(ax, source = ctx.providers.Esri.WorldImagery, crs='epsg:26910', alpha = 0.8, attribution=False)
 
+main_map(ax=ax)
 # regional_scale_arrow(ax=ax)
 regional_arrow(ax, 0.65, 0.15)
 make_multi_scale(ax, 0.75,0.1, dist=2E3)
@@ -157,6 +207,71 @@ m_domain.plot(ax = axins2, edgecolor = 'black', color = 'none')
 
 # plt.savefig(join(fig_dir, 'regional_domain_map.png'),  bbox_inches='tight')
 
+
+
+# %%
+def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
+    xy = gdf.geometry.unary_union.centroid.coords[0]
+    lw = 1
+    if exterior:
+        xy = gdf.geometry.unary_union.exterior.representative_point().centroid.coords[0]
+    if arrow:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
+                    bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+            bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+
+def xy_lab(xy, text, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
+    if bbox:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    bbox=dict(boxstyle="square,pad=0.3", fc=fc, ec=ec, lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize)
+
+
+# %%
+lgd_short = [
+    Patch(facecolor='red', edgecolor='red',alpha=0.5, label='Levee removal and\nexcavation areas'),
+    Line2D([0], [0], marker='.', linestyle='', color='black', label='Monitoring Well'),
+]
+
+# %%
+
+# %%
+fig, ax = plt.subplots(figsize=(6.5, 6.5), dpi=300)
+
+main_map(ax=ax)
+fontsize=10
+# arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+# arr_lab(lak_extent, 'Cosumnes\nRiver', ax, offset = (-150, -450), fontsize=fontsize)
+# arr_lab(m_domain, 'Model\nDomain', ax, offset = (-600, -0), fontsize=fontsize)
+
+# ax.legend(handles=lgd_short, loc='upper left')
+# ax.legend(handles=lgd_short, loc='upper right')
+
+# dir_arrow(ax, 0.8, 0.9, -0.075, -0.075, -0.05, 'Streamflow\nDirection', fontsize=8)
+
+regional_arrow(ax, 0.65, 0.15)
+make_multi_scale(ax, 0.75,0.1, dist=2E3)
+# regional_arrow(ax, 0.05, 0.15)
+# make_multi_scale(ax, 0.1, 0.1, dist = 2E3, scales = [4,2,1])
+plt_cln(ax=ax)
+
+## inset map
+axins = inset_axes(ax, width="35%", height="35%", 
+                   loc='upper left',
+                   bbox_to_anchor=(0, 0, 1, 1), 
+                   # bbox_to_anchor=(-.01, .01, 1, 1),
+                  bbox_transform=ax.transAxes, 
+                   # loc=2
+                  )
+
+ref_map(axins, fontsize=8)
+arr_lab(m_domain, 'Cosumnes\nWatershed', axins, offset = (125, 40), arrow=False, fontsize=8)
+
+plt.savefig(join(fig_dir, 'regional_domain_map.png'),  bbox_inches='tight')
 
 
 # %% [markdown]

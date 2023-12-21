@@ -37,12 +37,43 @@ def lab_pnt(geom, scale = None, xscale = None, yscale = None):
         xy = tuple(map((scale).__mul__, xy ))
     return(xy)
 
-def arr_lab(gdf, text, offset = (0,0)):
+# def arr_lab(gdf, text, offset = (0,0)):
+#     xy = gdf.geometry.unary_union.centroid.coords[0]
+#     ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels',
+#                 arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
+#                 bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
+def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
     xy = gdf.geometry.unary_union.centroid.coords[0]
-    ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels',
-                arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
-                bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
+    lw = 1
+    if exterior:
+        xy = gdf.geometry.unary_union.exterior.representative_point().centroid.coords[0]
+    if arrow:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
+                    bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+            bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
 
+def xy_lab(xy, text, ax, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
+    if bbox:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
+                    bbox=dict(boxstyle="square,pad=0.3", fc=fc, ec=ec, lw=lw))
+    else:
+        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize)
+
+def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
+    lw = 1
+    ax.annotate(text, xy=(x, y), xytext=(x, y-arrow_length),
+                ha='center', va='center', fontsize=fontsize, #rotation =45,
+                xycoords=ax.transAxes,
+               bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+
+    ### gw flow direction arrow approximation
+    ax.annotate('', xy=(x+dx, y+dy), xytext=(x, y),
+                arrowprops=dict(facecolor='black', width=1.5, alpha=1, headwidth=5),
+                ha='center', va='center', fontsize=10,xycoords=ax.transAxes, 
+               )
 
 def plt_cln(ax):
     """ Set basic xy axis labels, reduce axis clutter"""
@@ -54,8 +85,12 @@ def plt_cln(ax):
     plt.locator_params(axis='y', nbins=5)
     plt.yticks(rotation=90, verticalalignment = "center")
 
-    
-from shapely.geometry import box
+def plt_arrow(ax, xoff = 0.7, yoff=0.15):
+    x, y, arrow_length = xoff, yoff, 0.1
+    ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
+                arrowprops=dict(facecolor='black', width=5, headwidth=15),
+                ha='center', va='center', fontsize=20, 
+                xycoords=ax.transAxes)
 
 def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
     """ Plot legend with multi distances (3) at fractional axes offset
