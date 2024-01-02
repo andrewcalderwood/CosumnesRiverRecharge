@@ -452,8 +452,6 @@ fig, ax = plt.subplots(figsize=(6.5,3))
 
 dt = inflow.index.values
 ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
-ax.axhline(y=23, color='black', linestyle='--')
-ax.axhline(y=71.6, color='black', linestyle='-.')
 # Create second axes, in order to get the bars from the top you can multiply by -1
 ax2 = ax.twinx()
 # ax2.bar(dt, -rain_plt.values, 0.9)
@@ -475,9 +473,12 @@ ax.set_xlabel('Date')
 
 fig.legend(handles=flw_lgd, loc='outside upper center',ncol=2, bbox_to_anchor=(0.5, 1.0)) # with flow thresholds (0.5, 1.05)
 # arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
-xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
-xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
-
+def flow_threshold_lines(ax):
+    ax.axhline(y=23, color='black', linestyle='--')
+    ax.axhline(y=71.6, color='black', linestyle='-.')
+    xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
+    xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
+flow_threshold_lines(ax=ax)
 
 fig.savefig(join(fig_dir, 'streamflow_hydrograph_with_rain.png'), bbox_inches='tight')
 plt.show()
@@ -486,18 +487,41 @@ plt.show()
 
 # ### Precipitation only to show WY type
 
+wyt_sac = pd.read_csv(join(gwfm_dir, 'GHB_data', 'sacramento_WY_types.txt'))
+color_dict = {'C':'tab:purple','D':'tab:red','BN':'tab:orange','AN':'yellow','W':'tab:green'}
+name_dict = {'C':'Critical','D':'Dry', 'BN':'Below Normal', 'AN':'Above Normal','W':'Wet'}
+wyt_sac['color'] = [color_dict[yt] for yt in wyt_sac['Yr-type']]
+wyt_sac['name'] = [name_dict[yt] for yt in wyt_sac['Yr-type']]
+
+
+# wyt for plotting
+wy = dt_ref.wy.unique()
+wyt = wyt_sac[wyt_sac.WY.isin(wy)].copy()
+wyt['plt_date'] = wyt.WY.astype(str)+'-1-1'
+wyt = wyt.set_index('WY')
+
+annual_rain = rain_m['Fair Oaks'].resample('AS-Oct').sum()
+# look at data from last 20 years
+annual_rain = annual_rain[annual_rain.index.year>annual_rain.index.year.max()-20]
+# # summarize typical rainfall and devication
+print('Avg rain %.3f m' %annual_rain.mean())
+annual_rain[annual_rain.index.year.isin([2016,2018])] - annual_rain.mean()
+
 # +
 plt_strt = '2014-10-1'
-plt_end = '2018-9-30'
+plt_end = '2020-9-30'
 fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
 rain_mon = rain_plt.resample('MS').sum()
 rain_mon = rain_mon.loc[plt_strt:plt_end]
 
 ax.bar(np.arange(0, len(rain_mon)), rain_mon.values)
 ax.set_xticks(np.arange(0, len(rain_mon))[3::12], rain_mon.index[3::12].year);
+for n in wy:
+    xy_lab((np.where(rain_mon.index==wyt.loc[n, 'plt_date'])[0][0], rain_mon.quantile(0.95))
+           ,wyt.loc[n, 'name'].replace(' ','\n'), offset = (0,2), fontsize=10, bbox=True)
 
-ax.set_ylabel('Monthly Rainfall Total (m)')
-ax.set_xlabel('Date')
+ax.set_ylabel('Monthly Rainfall Total (m)');
+ax.set_xlabel('Date');
 plt.savefig(join(fig_dir, 'monthly_rainfall.png'), bbox_inches='tight')
 plt.close()
 
@@ -511,6 +535,8 @@ plt.yscale('log')
 plt.ylim(1,1.2E3)
 ax.set_ylabel('Daily Streamflow ($m^3/s$)')
 ax.set_xlabel('Date')
+flow_threshold_lines(ax=ax)
+
 plt.savefig(join(fig_dir, 'daily_streamflow.png'), bbox_inches='tight')
 plt.close()
 # -
@@ -540,9 +566,11 @@ label_dict = wb_color.set_index('flux')['name'].to_dict()
 
 wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
 
+# +
 # import matplotlib.ticker as ticker
 # ax[0].set_yscale('log')
 # ax[0].yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: '{:,.1E}'.format(x)))
+# -
 
 fig,ax= plt.subplots(2,1, sharex=True, figsize=(6.5, 6), dpi=300)
 scale = 1E6 # convert to millions

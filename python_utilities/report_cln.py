@@ -8,6 +8,12 @@ Author: Andrew Calderwood
 import numpy as np
 import matplotlib.pyplot as plt
 
+def dt_2_wy(dt):
+    dt = pd.Series(dt)
+    yr = dt.dt.year
+    wy = np.where(dt.dt.month>=10, yr+1, yr)
+    return(wy)
+
 def base_round(x, base=1):
     """ Round to different numeric bases (e.g.,5, 20)
     Ex: base_round(11, 5) = 10 or base_round(14,5) = 15

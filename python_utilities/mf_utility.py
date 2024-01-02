@@ -99,6 +99,10 @@ def get_dates(dis, ref='end'):
 
     dt_ref = pd.DataFrame(dates_stps, columns=['dt'])
     dt_ref['kstpkper'] = kstpkper
+    # add column to specify water year
+    dt_ref['wy'] = dt_ref.dt.dt.year
+    dt_ref.loc[dt_ref.dt.dt.month>=10, 'wy']+=1
+
     return(strt_date, end_date, dt_ref)
     
 def clean_wb(model_ws, dt_ref):
