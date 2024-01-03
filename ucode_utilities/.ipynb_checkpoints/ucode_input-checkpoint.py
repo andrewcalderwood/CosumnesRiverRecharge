@@ -45,7 +45,7 @@ def prep_gel_pdata(pdata):
     pdata['LowerConstraint'] = pdata.LowerValue
     pdata['UpperConstraint'] = pdata.UpperValue
     return(pdata)
-
+    
 def pdata_by_facies(pdata, params):
     """ Translate cleaned pdata dataframe to be grouped by the geologic facies """
     pdata_zone = pdata[pdata.GroupName.isin(['Kx','vani','Ss','Sy'])].copy()
