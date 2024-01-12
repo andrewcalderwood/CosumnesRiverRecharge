@@ -258,8 +258,6 @@ bnd_rows, bnd_cols = bnd_cells.row.values, bnd_cells.column.values
 
 # %%
 # Based on Maribeth's grid aligned with Alisha's TPROGS model
-# dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_nearest.tsv', delimiter = '\t')
-# dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_linear.tsv', delimiter = '\t')
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # import seaborn as sns
