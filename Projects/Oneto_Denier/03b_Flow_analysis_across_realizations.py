@@ -55,17 +55,17 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 out_dir = join(proj_dir, 'output')
 fig_dir = join(proj_dir, 'figures')
 
-
 # %%
+git_dir = join(doc_dir,'GitHub')
 def add_path(fxn_dir):
     """ Insert fxn directory into first position on path so local functions supercede the global"""
     if fxn_dir not in sys.path:
         sys.path.insert(0, fxn_dir)
 # flopy github path - edited
-add_path(doc_dir+'/GitHub/flopy')
+add_path(join(git_dir,'flopy'))
 import flopy
 
-py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
+py_dir = join(git_dir,'CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
@@ -153,180 +153,7 @@ grid_sfr = grid_sfr.join(gel_color.set_index('geology')[['color']], on='facies')
 grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
 
 # %%
-strt_date = pd.to_datetime(m.dis.start_datetime)
-end_date = (strt_date + pd.Series(m.dis.perlen.array.sum()).astype('timedelta64[D]'))[0]
-# with SS period near 0 no longer minus one
-dates_per = strt_date + (m.dis.perlen.array.cumsum()).astype('timedelta64[D]')
-stplen = m.dis.perlen.array/m.dis.nstp.array
-# astype timedelta64 results in save days
-hrs_from_strt = ((np.append([0], np.repeat(stplen, m.dis.nstp.array)[:-1])).cumsum()*24).astype('timedelta64[h]')
-dates_stps = strt_date + hrs_from_strt
-
-# get ALL stress periods and time steps list, not just those in the output
-kstpkper = []
-for n,stps in enumerate(m.dis.nstp.array):
-    kstpkper += list(zip(np.arange(0,stps),np.full(stps,n)))
-
-dt_ref = pd.DataFrame(dates_stps, columns=['dt'])
-dt_ref['kstpkper'] = kstpkper
-
-
-# %% [markdown]
-# # Obs checking
-
-# %%
-def nse(targets,predictions):
-    return 1-(np.sum((targets-predictions)**2)/np.sum((targets-np.mean(predictions))**2))
-
-# hob metadata
-rm_grid = pd.read_csv(join(proj_dir, 'mw_hob_cleaned.csv'))
-
-
-# %%
-def clean_hob(model_ws):
-    hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
-                         dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
-    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split('p',n=2, expand=True)
-    hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
-    hobout.loc[hobout.sim_val.isin([-1e30, -999.99,-9999]), 'sim_val'] = np.nan
-    hobout = hobout.dropna(subset='sim_val')
-    hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
-    hobout['error'] = hobout.obs_val - hobout.sim_val
-    hobout['sq_error'] = hobout.error**2
-    return(hobout)
-
-
-# %%
-# 
-sum_stats = pd.DataFrame(columns=['r2','RMSE','NSE'], dtype=np.float64)
-mw_stats = pd.DataFrame(columns=['realization','SOSE','RMSE','NSE'], dtype=np.float64)
-hob_err_chk = pd.DataFrame()
-for t in np.arange(0,100):
-    model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
-    hobout = clean_hob(model_ws)
-    # removing oneto ag because of large depth offset
-    hobout = hobout[hobout.Sensor != 'MW_OA']
-    hob_3m = hobout.set_index('dt').groupby('Sensor').resample('3MS').mean(numeric_only=True).reset_index('dt')
-    hob_err_chk = pd.concat((hob_err_chk, hob_3m.groupby('dt').mean()))
-    # summary stats by well
-    mw_stats['realization'] = t
-    for s in hobout.Sensor.unique():
-        df_s = hobout[hobout.Sensor==s]
-        mw_stats.loc[s,'SOSE'] = hobout[['Sensor','sq_error']].groupby('Sensor').sum()
-        mw_stats.loc[s,'r2'] = r2_score(df_s.obs_val, df_s.sim_val)
-        mw_stats.loc[s,'RMSE'] = mean_squared_error(df_s.obs_val, df_s.sim_val, squared=True)
-        mw_stats.loc[s,'NSE'] = nse(df_s.obs_val, df_s.sim_val)
-
-    # summary statistics
-    sum_stats.loc[t,'r2'] = r2_score(hobout.obs_val, hobout.sim_val)
-    sum_stats.loc[t,'RMSE'] = np.sqrt(hobout.sq_error.sum()/len(hobout))
-    sum_stats.loc[t,'NSE'] = nse(hobout.obs_val, hobout.sim_val)
-
-
-# %%
-# filter out realizations who haven't finished running yet
-stats_done = sum_stats[sum_stats.NSE!=sum_stats.NSE.min()].copy()
-
-# %%
-stats_done.to_csv(join(out_dir, 'hob_fit_stats.csv'))
-
-
-# %%
-# review to see if error is generally similar between realizations
-# review hydrographs for realization with worst error
-fig,ax = plt.subplots(1,2, figsize=(12,4))
-stats_done.plot(y='NSE', ax=ax[0])
-stats_done.plot(y='RMSE', ax=ax[1])
-
-
-# %%
-# identify the 10 realizations with the best accuracy
-# calculate best score, r2 is tiebreak
-stats_done['score'] = (stats_done.NSE >= stats_done.NSE.quantile([0.9]).values[0]).astype(float)
-stats_done.score += (stats_done.RMSE <= stats_done.RMSE.quantile([0.1]).values[0]).astype(float)
-stats_done.score += (stats_done.r2 >= stats_done.r2.quantile([0.9]).values[0]).astype(float)*0.25
-# pull 10 best realizations 
-best_realizations = stats_done[stats_done.score >= stats_done.score.quantile([0.9]).values[0]]
-print('best realizations', best_realizations.index)
-best_realizations.to_csv(join(proj_dir,upscale_txt+'top_10_accurate_realizations.csv'))
-
-
-# %%
-# it seems like in the summer the average error is -1 to -2.75 m with it more sever in the drought
-
-hob_err_chk = hob_err_chk.assign(month=hob_err_chk.index.month, year = hob_err_chk.index.year)
-hob_err_chk[hob_err_chk.month==7].boxplot(by='year', column='error')
-
-# %%
-# check hydrographs with worst error
-# t = sum_stats['RMSE'].idxmax()
-t = sum_stats['RMSE'].idxmin()
-# approximate median location
-# t = sum_stats.sort_values('RMSE').iloc[int(len(sum_stats)/2)].name
-# t=11
-# t = 45
-print(t)
-print(sum_stats.loc[t])
-def mak_hob_long(t):
-    hobout = clean_hob(join(all_model_ws, 'realization'+ str(t).zfill(3)))
-    # removing oneto ag because of large depth offset
-    hobout = hobout[hobout.Sensor != 'MW_OA']
-    hob_long = hobout.melt(id_vars=['dt', 'Sensor'],value_vars=['sim_val','obs_val'], value_name='gwe')
-    return(hob_long)
-hob_long = mak_hob_long(t)
-# hob_long
-
-# %%
-hob_h = clean_hob(homogeneous_ws)
-t = sum_stats['RMSE'].idxmin()
-hob_min = clean_hob(join(all_model_ws, 'realization'+ str(t).zfill(3)))
-t=sum_stats['RMSE'].idxmax()
-hob_max = clean_hob(join(all_model_ws, 'realization'+ str(t).zfill(3)))
-t= sum_stats.sort_values('RMSE').iloc[int(len(sum_stats)/2)].name
-hob_med = clean_hob(join(all_model_ws, 'realization'+ str(t).zfill(3)))
-
-
-# %%
-cols = ['dt', 'sim_val','Sensor']
-hob_comp = pd.concat((
-    hob_med[cols].assign(var='Median'),
-    hob_max[cols].assign(var='Max'),
-    hob_min[cols].assign(var='Min'),
-    hob_h[cols].assign(var='Homogeneous'),
-    hob_h[['dt','obs_val','Sensor']].rename(columns={'obs_val':'sim_val'}).assign(var='Observations')
-    ))
-
-
-# %%
-nx=4
-wells = hob_med.Sensor.unique()
-ny = int(np.round(len(wells)/nx))
-fig,ax = plt.subplots(4,4, sharex=True, sharey=True, figsize=(6.5, 8), dpi=300)
-for n, w in enumerate(wells):
-    ax_n = ax[int(n/ny), n%ny]
-    hob_med[hob_med.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_max[hob_max.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_min[hob_min.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_h[hob_h.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_h[hob_h.Sensor==w].plot(x='dt',y='obs_val', ax=ax_n, legend=False, marker='x', linestyle='', color='black',markersize=0.5)
-fig.supylabel('Groundwater Elevation (m)')
-fig.supxlabel('Date')
-
-fig.tight_layout(h_pad=0.1, w_pad=-0.5)
-
-for n in np.arange(0,nx):
-    ax_n = ax[-1,n]
-    ax_n.set_xlabel(None)
-    ax_n.set_xticks(pd.date_range(strt_date, end_date, freq='AS'), 
-                         pd.date_range(strt_date, end_date, freq='AS').year.astype(str).values, rotation=45)
-    ax_n.set_xticks(pd.date_range(strt_date, end_date, freq='3MS'), minor=True)
-
-# %%
-# in the wrost case the dynamics match but the magnitude is off (levels start much too low)
-# import seaborn as sns
-# g = sns.relplot(hob_long, x='dt',y='gwe',col='Sensor',hue='variable', col_wrap=4);
-
-
+strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 
 # %%
 gage_cols = ['time','stage','volume','conc','inflows','outflows','conductance','error']
@@ -349,51 +176,9 @@ def read_gage(gagenam):
 
 
 # %% [markdown]
-# ## Water Budget check
-
-# %%
-# manual columns
-wb_out_cols  =['WEL_OUT','ET_OUT','GHB_OUT','SFR_OUT','LAK_OUT']
-wb_in_cols = ['RCH_IN','GHB_IN','SFR_IN','LAK_IN']
-
-# %%
-wb_all = pd.DataFrame()
-for t in np.arange(0,100):
-    model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
-    # load summary water budget
-    wb = pd.read_csv(model_ws+'/flow_budget.txt', delimiter=r'\s+')
-    # wb = pd.read_csv(loadpth+'/oneto_denier_upscale8x_2014_2018'+'/flow_budget.txt', delimiter=r'\s+')
-    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
-    wb = wb.merge(dt_ref, on='kstpkper')
-    wb['realization'] = t
-    wb_all = pd.concat((wb_all, wb))
-
-
-# %%
-# wb_plt.mean(axis=1)
-# need to update homogeneous run for layering and
-wb_h = pd.read_csv(homogeneous_ws+'/flow_budget.txt', delimiter=r'\s+')
-wb_h['kstpkper'] = list(zip(wb_h.STP-1,wb_h.PER-1))
-wb_h = wb_h.merge(dt_ref, on='kstpkper')
-
-# %%
-fig,ax = plt.subplots(5,1, sharex=True, layout='constrained')
-for n, wb_n in enumerate(wb_out_cols):
-    wb_plt = wb_all.pivot_table(index='dt',columns='realization',values=wb_n)
-    wb_plt.plot(legend=False, color='gray', ax=ax[n]) 
-    wb_plt.mean(axis=1).plot(color='red',linestyle='--',ax=ax[n])
-    wb_h.plot(x='dt', y=wb_out_cols[n], color='black',linestyle='--',ax=ax[n])
-    ax[n].set_ylabel(wb_out_cols[n].split('_')[0])
-
-# %%
-wb_chk_plt = wb_all[wb_all.realization==t]
-fig,ax= plt.subplots(3,1, sharex=True)
-wb_chk_plt.plot(y='PERCENT_ERROR', ax=ax[0])
-wb_chk_plt.plot(y=wb_out_cols, ax=ax[1], legend=True)
-wb_chk_plt.plot(y=wb_in_cols, ax=ax[2], legend=True)
-
-# %% [markdown]
 # # Stream seepage plots
+# Grouping must be done by segment and reach or by total distance (m).  
+#
 
 # %%
 # slightly different version of clean_sfr_df is used here to help with realization comparison
@@ -401,71 +186,21 @@ wb_chk_plt.plot(y=wb_in_cols, ax=ax[2], legend=True)
 # from importlib import reload
 # reload(mf_utility)
 # from mf_utility import clean_sfr_df
+from OD_utility import clean_sfr_df
 
 # %%
-# rewrite = False
-rewrite = True
-
-
-# %%
-# grid_sfr = pd.read_csv(join(model_ws,'grid_sfr.csv'),index_col=0)
-# # grid_sfr = grid_sfr[grid_sfr.strhc1!=0]
-# # grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-
-# pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'strthick']]
-# pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
-# sfrdf =  clean_sfr_df(model_ws, dt_ref, pd_sfr, name='MF')
-# # gradient is stage - Ha/str thick, and strthick=1
-# sfrdf['h_aquifer'] = -(sfrdf.gradient*sfrdf.strthick - sfrdf.stage)
+rewrite = False
+# rewrite = True
 
 # %%
-# pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'color']]
-# pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
-
-def clean_sfr_df(model_ws, drop_iseg):
-    ## load sfr reach data ##
-    grid_sfr = pd.read_csv(model_ws+'/grid_sfr.csv')
-    # remove stream segments for routing purposes only
-    grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
-    pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'color']]
-    pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
-    num_coarse = int(grid_sfr.facies.isin(['Gravel','Sand']).sum())
-    
-    ## load sfr out file ##
-    sfrout = flopy.utils.SfrFile(join(model_ws, m.name+m_ver+'.sfr.out'))
-    sfrdf = sfrout.get_dataframe()
-    sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
-    # convert from sub-daily to daily using mean, lose kstpkper
-    sfrdf = sfrdf.groupby(['segment','reach']).resample('D').mean(numeric_only=True)
-    sfrdf = sfrdf.reset_index(['segment','reach'], drop=True)
-    sfrdf[['row','column']] = sfrdf[['row','column']].astype(int) - 1 # convert to python
-    
-    ## join sfr out to reach data ##
-    sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
-    sfrdf['num_coarse'] = num_coarse
-    
-    ## data transformation for easier manipulation ##
-    sfrdf['month'] = sfrdf.index.month
-    sfrdf['WY'] = sfrdf.index.year
-    sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
-    # create column to calculate days flowing
-    sfrdf['flowing'] = 1
-    sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
-    
-    # create different column for stream losing vs gaining seeapge
-    sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
-    sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    # booleans for plotting
-    sfrdf['gaining'] = (sfrdf.gradient <= 0)
-    sfrdf['losing'] = (sfrdf.gradient >= 0)
-    sfrdf['connected'] = (sfrdf.gradient < 1)
-    return(sfrdf)
-
-
+# from importlib import reload
+# import OD_utility
+# reload(OD_utility)
+# from OD_utility import clean_sfr_df
 
 # %%
-sfrdf =  clean_sfr_df(base_model_ws, drop_iseg)
-h_sfrdf =  clean_sfr_df(homogeneous_ws, drop_iseg)
+sfrdf =  clean_sfr_df(base_model_ws, drop_iseg, dt_ref)
+h_sfrdf =  clean_sfr_df(homogeneous_ws, drop_iseg, dt_ref)
 
 
 
@@ -478,14 +213,14 @@ facies_vals = ['Mud','Sandy Mud','Sand','Gravel']
 
 # %% [markdown]
 # # Aggregate stream data
-# 1. Aggregate across all segments  but save all dates
-# 2. Aggregate across dates but save all segments
+# 1. Aggregate across all reaches  but save all dates
+# 2. Aggregate across dates but save all reaches
 #
 
 # %% [markdown]
 # ## Gradient plots (spatial)
 # 1. Seepage averaged across the year (or between dry and wet season) and the rows could be realizations instead which would help indicate consistency across realizations  
-# 2. Heat map of columns with stream segments, rows of dates and the color blue to red for gaining or losing with the seepage averaged across all realizations
+# 2. Heat map of columns with stream reaches, rows of dates and the color blue to red for gaining or losing with the seepage averaged across all realizations
 #
 # When the gradient is greater than 1 we know we have disconnected conditions, I need to represent the count of days where the system is connected.
 # - Since I've focused more baseflow/seepage and streamflow/flowing days the connected/gaining gradient plots tend to repeat the information on baseflow/seepage and are usual lower correlations because they are slightly less impacted by the coarse vs fine conductivity.
@@ -499,7 +234,7 @@ if rewrite:
     for t in np.arange(0,100):
         model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
         # remove stream segments for routing purposes
-        sfrdf =  clean_sfr_df(model_ws, drop_iseg)
+        sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
         # summing by facies makes sense for seepage
         sfr_facies_sum = sfrdf.groupby(['dt','facies']).sum(numeric_only=True)
         sfr_facies_sum['realization'] = t
@@ -521,13 +256,14 @@ sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
 # fig,ax = plt.subplots()
 
 # days connected
-# df_plt = sfrdf.groupby('segment').sum(numeric_only=True)[['connected']]
+# grp_col = 'Total distance (m)'
+# df_plt = sfrdf.groupby(grp_col).sum(numeric_only=True)[['connected']]
 # ax_conn = df_plt.plot(legend=False)
 # plt.ylabel('Connected Days')
-# plt.xlabel('Segment')
+# plt.xlabel(grp_col)
 
 # for f in sfrdf.facies.unique():
-#     ax_conn.fill_between(sfrdf.segment, 0, df_plt.max(), where = sfrdf.facies==f,
+#     ax_conn.fill_between(sfrdf[grp_col], 0, df_plt.max(), where = sfrdf.facies==f,
 #                     color=gel_color.loc[gel_color.geology==f,'color'], alpha=0.5)
 
 # %% [markdown]
@@ -558,7 +294,7 @@ ts_lgd = [
 ]
 
 # %% [markdown]
-# Despite being only a small percentage of the stream segments, the sand and gravel produce a significant portion of the stream seepage.
+# Despite being only a small percentage of the stream reaches, the sand and gravel produce a significant portion of the stream seepage.
 
 # %%
 value = 'Qbase'
@@ -577,7 +313,6 @@ def plt_dt_facies(value, ylabel):
     # plot homogeneous case
     h_sfr_facies_sum = h_sfrdf.groupby(['dt','facies']).sum(numeric_only=True)
     # plot mean of heterogeneous
-#     sfr_facies_mean = sfr_facies_all.groupby(['dt', 'facies','realization']).sum(numeric_only=True)
     sfr_facies_mean = sfr_facies_all.groupby(['dt', 'facies']).mean().reset_index('facies')
     # set axis labels
     for n,f in enumerate(facies):
@@ -612,13 +347,18 @@ def plt_dt_facies(value, ylabel):
 # No need to aggregate by facies, instead show impact at downstream end in terms of time step and cumulative
 
 # %%
+
+grp_col = 'Total distance (m)'
+
+
+# %%
 if rewrite:
     sfr_last_all = pd.DataFrame()
     for t in np.arange(0,100):
         model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
-        sfrdf =  clean_sfr_df(model_ws, drop_iseg)
+        sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
         # plot from last segment (shows cumulative effects)
-        sfr_last = sfrdf[sfrdf.segment==sfrdf.segment.max()].copy()
+        sfr_last = sfrdf[sfrdf[grp_col] == sfrdf[grp_col].max()].copy()
         sfr_last['realization'] = t
         sfr_last_all = pd.concat((sfr_last_all, sfr_last))
 
@@ -661,8 +401,6 @@ def plt_ts_quants(sfr_facies_all, sfr_last_all, ax):
 
 
 # %%
-t0 = time.time()
-fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
 
 def plt_ts_100(sfr_facies_all, sfr_last_all, ax):
     for t in np.arange(0,100):
@@ -672,11 +410,12 @@ def plt_ts_100(sfr_facies_all, sfr_last_all, ax):
         # sfr_seg.plot(y='Qaquifer', ax=ax[0], legend=False, color='gray')
         sfr_seg.plot(y='Qrech', ax=ax[0], legend=False, color='gray')
         sfr_seg.plot(y='Qbase', ax=ax[1], legend=False, color='gray')
+    return None
 
-plt_ts_100(sfr_facies_all, sfr_last_all, ax)
+
 # plt_ts_quants(sfr_facies_all, sfr_last_all, ax)
 # # # plot homogeneous case
-# h_sfr_last = h_sfrdf[h_sfrdf.segment==h_sfrdf.segment.max()]
+# h_sfr_last = h_sfrdf[h_sfrdf[grp_col]==h_sfrdf[grp_col].max()]
 # h_sfr_last.plot(y='Qin', ax=ax[-1], legend=False, color='black',linestyle='--')
 # # h_sfrdf.groupby('dt').sum(numeric_only=True).plot(y='Qaquifer', ax=ax[0], legend=False, color='black', linestyle='--')
 # h_sfrdf.groupby('dt').sum(numeric_only=True).plot(y='Qrech', ax=ax[0], legend=False, color='black', linestyle='--')
@@ -701,15 +440,21 @@ def plt_ts_axes(ax):
     ax[0].set_yscale('log')
     ax[1].set_yscale('log')
     ax[-1].set_yscale('log')
+    return None
 
-plt_ts_axes(ax)
-fig.legend(handles=legend_elements, loc='outside upper center', ncol = 3)
-# fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 3)
+# t0 = time.time()
+# fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
 
-# fig.tight_layout()
-# plt.savefig(join(fig_dir, 'time_series_seepage_flow.png'), bbox_inches='tight')
-t1 = time.time()
-print('Time: %.2f min' % ((t1-t0)/60))
+# plt_ts_100(sfr_facies_all, sfr_last_all, ax)
+
+# plt_ts_axes(ax)
+# fig.legend(handles=legend_elements, loc='outside upper center', ncol = 3)
+# # fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 3)
+
+# # fig.tight_layout()
+# # plt.savefig(join(fig_dir, 'time_series_seepage_flow.png'), bbox_inches='tight')
+# t1 = time.time()
+# print('Time: %.2f min' % ((t1-t0)/60))
 
 
 # %%
@@ -725,6 +470,9 @@ fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 4)
 # plt.savefig(join(fig_dir, 'time_series_seepage_flow_quantiles.png'), bbox_inches='tight')
 
 
+
+# %% [markdown]
+# ### In-text numbers, KEEP
 
 # %%
 # how does baseflow persist into the summer by WY
@@ -804,7 +552,7 @@ if rewrite:
     for t in np.arange(0,100):
         model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
         # clean sfr output
-        sfrdf =  clean_sfr_df(model_ws, drop_iseg)
+        sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
         sfrdf['realization'] = t
         num_coarse = sfrdf['num_coarse'].mean()
         # aggregate to seasonal values, since model starts in october it groups as oct-dec, jan-mar, apr-jun, jul-sep
@@ -812,8 +560,8 @@ if rewrite:
         sfrdf_mon['realization'] = t
         sfrdf_mon['num_coarse'] = num_coarse
         sfr_3mon_all = pd.concat((sfr_3mon_all, sfrdf_mon))
-        # aggregate to annual values for each segment
-        sfrdf_yr_sum = sfrdf.groupby(['WY','segment']).sum(numeric_only=True)
+        # aggregate to annual values for each segment, reach
+        sfrdf_yr_sum = sfrdf.groupby(['WY','segment', 'reach']).sum(numeric_only=True)
         sfrdf_yr_sum['realization'] = t
         sfrdf_yr_sum['num_coarse'] = num_coarse
         sfr_yr_sum_all = pd.concat((sfr_yr_sum_all, sfrdf_yr_sum))
@@ -830,19 +578,51 @@ if rewrite:
 sfr_3mon_all = pd.read_csv(join(out_dir, 'sfrdf_3month_mean.csv'), parse_dates=['dt'], index_col='dt')
 # fix issue where this was averaged
 sfr_3mon_all.month = sfr_3mon_all.index.month
-sfr_yr_sum_all = pd.read_csv(join(out_dir, 'sfrdf_annual_sum_by_segment.csv'), index_col=['WY','segment'])
+sfr_yr_sum_all = pd.read_csv(join(out_dir, 'sfrdf_annual_sum_by_segment.csv'), index_col=['WY','segment','reach'])
+
+# %%
+grid_sfr['Total distance (m)'] = grid_sfr.rchlen.cumsum()
+
+# fix total distance broken with sum
+sfr_dist = grid_sfr[['iseg','ireach','Total distance (m)']].rename(columns={'iseg':'segment','ireach':'reach'})
+sfr_yr_sum_all = sfr_yr_sum_all.drop(columns=['Total distance (m)']).reset_index().merge(sfr_dist).set_index(['WY','segment','reach'])
+
+
+# %%
+## troubleshooting changes in output
+# old_folder = 'old_segments'
+# sfr_3mon_all = pd.read_csv(join(out_dir, old_folder, 'sfrdf_3month_mean.csv'), parse_dates=['dt'], index_col='dt')
+# sfr_yr_sum_all = pd.read_csv(join(out_dir, old_folder, 'sfrdf_annual_sum_by_segment.csv'), index_col=['WY','segment'])
+# sfr_facies_all = pd.read_hdf(join(out_dir, old_folder,'sfrdf_facies_sum.hdf5'))
+
 
 # %%
 # after resampling if need to re-identify the number of coarse in a stream
 coarse_ref = sfr_3mon_all.groupby('realization').mean(numeric_only=True)[['num_coarse']]
-coarse_ref.to_csv(join(proj_dir, 'num_sfr_coarse.csv'))
+# coarse_ref.to_csv(join(proj_dir, 'num_sfr_coarse.csv'))
 
 # %%
 # relating coarse segments to days of flow
-median, std = coarse_ref.loc[zero_flow.flowing==len(plt_dates)].median(), coarse_ref.loc[zero_flow.flowing==len(plt_dates)].std()
-print('No flow cessation had %i coarse segments' %median.iloc[0], 'with a std dev of %.2f' %std.iloc[0])
-median, std = coarse_ref.loc[zero_flow.flowing<0.5*len(plt_dates)].median(), coarse_ref.loc[zero_flow.flowing<0.5*len(plt_dates)].std()
-print('Segments with >50%% dry had %i coarse segments' %median.iloc[0], 'with a std dev of %.2f' %std.iloc[0])
+# median, std = coarse_ref.loc[zero_flow.flowing==len(plt_dates)].median(), coarse_ref.loc[zero_flow.flowing==len(plt_dates)].std()
+# print('No flow cessation had %i coarse segments' %median.iloc[0], 'with a std dev of %.2f' %std.iloc[0])
+def flow_summary(flw_frac, dry_frac, zero_flow, coarse_ref, plt_dates):
+    # look at wetted days
+    df = coarse_ref.loc[zero_flow.flowing>=flw_frac*len(plt_dates)]
+    if len(df)>0:
+        median, std = df.median(), df.std()
+        print(len(df),'Realizations with >%i' %(flw_frac*100), '%% flow had %i coarse reaches' %median.iloc[0], 
+              'with a std dev of %.2f' %std.iloc[0])    
+        # look at drying days
+    df = coarse_ref.loc[len(plt_dates)-zero_flow.flowing > dry_frac*len(plt_dates)]
+    if len(df)>0:
+        median, std = df.median(), df.std()
+        print(len(df), 'Realizations with >%i' %(dry_frac*100), '%% dry had %i coarse reaches' %median.iloc[0], 
+              'with a std dev of %.2f' %std.iloc[0])
+    return None
+    
+flow_summary(.75, 0.75, zero_flow, coarse_ref, plt_dates)
+flow_summary(1, 0.5, zero_flow, coarse_ref, plt_dates)
+
 
 
 # %%
@@ -853,13 +633,15 @@ norm = mpl.colors.Normalize(vmin=0, vmax=99)
 # plt.cmap='gray'
 
 # %%
-
-def plt_wy_seg(value, ylabel, log=False):
+def plt_wy_seg(value, ylabel, grp_col, log=False):
+    grp_col = 'Total distance (m)'
+    # grp_col = ['segment','reach']
+    grp_wy = np.append(['WY'], grp_col).tolist()
     fig,ax = plt.subplots(2,2, figsize=(8,8), sharex=True, sharey=True, layout='constrained')
     wy_unique = sfr_yr_sum_all.index.get_level_values('WY').unique()
 
     for t in np.arange(0,100):
-        sfr_yr_sum = sfr_yr_sum_all[sfr_yr_sum_all.realization==t].reset_index('WY')
+        sfr_yr_sum = sfr_yr_sum_all[sfr_yr_sum_all.realization==t].reset_index('WY').set_index(grp_col)
         for n,f in enumerate(wy_unique):
             ax_n = ax[int(n/2), n%2]
             df_plt = sfr_yr_sum[sfr_yr_sum.WY==f]
@@ -870,9 +652,9 @@ def plt_wy_seg(value, ylabel, log=False):
                                          )
 
     # plot homogeneous case
-    h_sfr_yr_sum = h_sfrdf.groupby(['WY', 'segment']).sum(numeric_only=True).reset_index('WY')
+    h_sfr_yr_sum = h_sfrdf.groupby(grp_wy).sum(numeric_only=True).reset_index('WY')
     # plot mean of heterogeneous
-    sfr_yr_sum_mean = sfr_yr_sum_all.groupby(['WY','segment']).mean().reset_index('WY')
+    sfr_yr_sum_mean = sfr_yr_sum_all.groupby(grp_wy).mean().reset_index('WY')
     # set axis labels
     for n,f in enumerate(wy_unique):
         ax_n = ax[int(n/2), n%2]
@@ -880,13 +662,18 @@ def plt_wy_seg(value, ylabel, log=False):
         sfr_yr_sum_mean[sfr_yr_sum_mean.WY==f].plot(y=value, ax=ax_n, legend=False, color='red', linestyle='--')
         ax_n.set_title(f)
         ax_n.set_ylabel(ylabel)
-        ax_n.set_xlabel('Segment')
+        ax_n.set_xlabel('Total distance (m)')
         if log:
             ax_n.set_yscale('log')
 #     fig.tight_layout()
 #     fig.legend(handles=legend_elements, loc='center', bbox_to_anchor=[0.55, 1.03], ncol = 3)
     fig.legend(handles=legend_elements, loc='outside upper center', ncol = 3)
+    return ax
 
+
+# %%
+# h_sfr_yr_sum =  h_sfrdf.groupby(['WY', grp_col]).sum(numeric_only=True).reset_index('WY')
+# h_sfr_yr_sum[h_sfr_yr_sum.WY==2016].plot(y=value, legend=False, color='black', linestyle='--')
 
 # %%
 # grid_sfr_all.groupby('iseg').mean(numeric_only=True).strhc1.plot(label='Mean')
@@ -915,7 +702,7 @@ def plt_wy_seg(value, ylabel, log=False):
 # plt.yscale('log')
 
 # %%
-# sfr_base = sfr_yr_sum_all.groupby(['segment','realization']).mean().reset_index('realization')
+# sfr_base = sfr_yr_sum_all.groupby(['segment', 'reach','realization']).mean().reset_index('realization')
 # # sfr_base.plot(y='Qbase')
 # value='Qbase'
 # fig, ax_n = plt.subplots()
@@ -928,9 +715,9 @@ def plt_wy_seg(value, ylabel, log=False):
 #                )
    
 # # plot homogeneous case
-# # h_sfr_yr_sum = h_sfrdf.groupby(['segment']).sum(numeric_only=True).plot(y=value, ax=ax_n, legend=False, color='black', linestyle='--')
+# # h_sfr_yr_sum = h_sfrdf.groupby(['segment', 'reach']).sum(numeric_only=True).plot(y=value, ax=ax_n, legend=False, color='black', linestyle='--')
 # # # plot mean of heterogeneous
-# # sfr_yr_sum_mean = sfr_yr_sum_all.groupby(['segment']).mean().plot(y=value, ax=ax_n, legend=False, color='red', linestyle='--')
+# # sfr_yr_sum_mean = sfr_yr_sum_all.groupby(['segment','reach']).mean().plot(y=value, ax=ax_n, legend=False, color='red', linestyle='--')
 # plt.xlabel('Segment')
 # plt.ylabel('Average Annual Baseflow ($m^3/day$)')
 
@@ -952,10 +739,13 @@ def plt_wy_seg(value, ylabel, log=False):
 # Also the key conversation between longitudinal days with flow and streamflow at the outlet over time is that by the last segment we see the cumulative effect of the baseflow while intermediate segments may see more or less flow due to high seepage rates and the floodplain.
 
 # %%
+# ax[0,0].get_xticks()
+
+# %%
 value = 'flowing'
 ylabel = 'Days with Flow'
-plt_wy_seg(value, ylabel)
-plt.savefig(join(fig_dir, 'days_with_flow_by_WY.png'), bbox_inches='tight')
+ax = plt_wy_seg(value, ylabel, grp_col)
+# plt.savefig(join(fig_dir, 'days_with_flow_by_WY.png'), bbox_inches='tight')
 
 # %%
 # sfr_yr_sum_all.groupby(['segment']).std(numeric_only=True).plot(y='flowing')
@@ -1003,7 +793,7 @@ plt.savefig(join(fig_dir, 'days_with_flow_by_WY.png'), bbox_inches='tight')
 
 # %%
 # the connected and gaining variables are interesting from a box plot perspective but the correlations tend to be insignificant or NAs
-variables = {'Qbase':'Baseflow','Qrech':'Recharge', 'flowing':'Flowing',
+variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses', 'flowing':'No. Days\nwith flow',
              # 'connected':'Connected', 'gaining':'Gaining',
             'Qout':'Streamflow'}
 tests = ['Pearson','Spearman','Kendall']
@@ -1011,19 +801,52 @@ tests = ['Pearson']
 var_names = list(variables.keys())
 
 # %%
-# ref_out = pd.read_csv(join(proj_dir, 'coarse_reference.csv'), index_col=0)
-ref_out = pd.read_csv(join(proj_dir, 'num_sfr_coarse.csv'), index_col=0)
+# ref_out = pd.read_csv(join(proj_dir, 'num_sfr_coarse.csv'), index_col=0)
+ref_out = pd.read_csv(join(proj_dir, 'coarse_reference.csv'), index_col=0)
 ref_out=ref_out.rename(columns={'num_coarse':'num_sfr'})
+# ref_out
+
+
+# %%
+lak_head_all = pd.read_csv(join(out_dir, 'lak_head_timeseries.csv')).set_index('totim')
+
+# %%
+
+# %%
+wb_all = pd.DataFrame()
+
+for r in np.arange(0,100):
+    model_ws = join(all_model_ws, 'realization'+ str(r).zfill(3))
+    # load summary water budget
+    wb = pd.read_csv(model_ws+'/flow_budget.txt', delimiter=r'\s+')
+    wb['GHB_NET'] = wb['GHB_IN'] - wb['GHB_OUT']
+    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
+    wb_all = pd.concat((wb_all, wb.assign(realization=r)))
+
+# %%
+wb_avg = wb_all.groupby('realization').mean(numeric_only=True)
+
+# %%
+git_proj = join(git_dir, 'CosumnesRiverRecharge','Projects', 'Oneto_Denier')
+wb_dict = pd.read_excel(join(git_proj, 'mf_wb_color_dict.xlsx'), sheet_name = 'owhm_wb_dict', comment='#')
+sfr_dict = pd.read_excel(join(git_proj, 'mf_wb_color_dict.xlsx'), sheet_name = 'plt_ref', comment='#')
+plt_names = pd.concat((sfr_dict, wb_dict)).set_index('flux')
+# # pd.read_excel?
 
 # %% [markdown]
 # ## Correlations for all time
+# I didn't know this when I first did the statistics but pandas has a function .corr() built in that allows you to compare across all columns the pearson, spearman or kendall correlation coefficient matrix. .corrwith() is pairwise correlations if desired in a specific pairing.
 
 # %%
-# the data is already summed across the year and should be averaged across segments
-corr_bool = sfr_yr_sum_all.groupby(['realization', 'segment']).sum().groupby('realization').mean()
+# the data is already summed across the year and should be averaged across reaches
+corr_bool = sfr_yr_sum_all.groupby(['realization', 'segment', 'reach']).sum().groupby('realization').mean()
 corr_bool = corr_bool[['flowing','connected','gaining']]
 # seepage data just needs to be summed again 
 corr_seep = sfr_yr_sum_all.groupby('realization').sum(numeric_only=True)[['Qbase','Qrech']]
+# the baseflow needs a log transform represent properly
+corr_seep.loc[corr_seep.Qbase==0, 'Qbase'] = 1 # convert 0 values to 1 for log transform
+corr_seep.Qbase = np.log10(corr_seep.Qbase)
+
 # flow data should be averaged
 # i tried log10 transform but was problematic with zeros and replacement value, also had lower correlation
 corr_flow = sfr_last_all[['realization','Qout']]
@@ -1033,6 +856,44 @@ corr_flow = corr_flow.groupby('realization').mean(numeric_only=True)[['Qout']]
 corr_all = corr_seep.join(corr_bool).join(corr_flow)
 
 corr_all = corr_all[var_names]
+
+# %%
+# corr_matrix_in.hist() # all variables are relatively normally distributed
+
+# %% [markdown]
+# Showing that baseflow is correlated with groundwater elevations in the floodplain or stream helps break down further that it is groundwater levels that drive the baseflow.
+
+# %%
+# I should present the correlation matrix in the appendix
+# helps show potential relationships
+corr_matrix_in = corr_all.copy()
+corr_matrix_in['num_sfr_coarse'] = ref_out.num_sfr.values
+corr_matrix_in['num_lak_coarse'] = ref_out.num_lak.values
+# corr_matrix_in['lak_gwe_mean'] = lak_head_all.mean(axis=0).values
+# check for correlation with other water budget components
+wb_cols = ['LAK_IN', 'ET_OUT','GHB_NET'] 
+# wb_avg[wb_cols]
+corr_matrix_in = pd.concat((corr_matrix_in, wb_avg[wb_cols]), axis=1)
+corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
+
+# %%
+corr = corr_matrix_in.corr('pearson')
+# Fill diagonal and upper half with NaNs
+mask = np.zeros_like(corr, dtype=bool)
+mask[np.triu_indices_from(mask)] = True
+corr[mask] = np.nan
+corr.style.background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1).highlight_null(color='#f1f1f1').format(precision=3)
+
+# %% [markdown]
+# The full simulation correlations should be included to help explain cross-correlations and the potential influence of multiple inputs. The key takeaway is that we should consider the correlations due to the number of coarse reaches because of the consistent higher pearson's r across all areas. For water availability we could use streamflow, stream recharge or ET as an observation since they are all tightly correlated.
+# - because streamflow and losses and ET are so correlated then it might not be needed to show pearson's r individually for stream flow and losses.
+
+# %%
+# check gaussian distribution
+# v = 'Qout'
+# fig,ax = plt.subplots(1,2, figsize=(9,3))
+# (corr_all[v]+1).apply(np.log10).hist(ax=ax[0])
+# (corr_all[v]+1).hist(ax=ax[1])
 
 
 # %%
@@ -1087,48 +948,12 @@ plt.ylabel('Correlation Coefficient')
 #
 # I recalculated these with the Fair Oaks station and found 15.2, 17.2, 37 and 23 inches of rainfall each Water Year
 
-# %%
-# yearly
-# the data is already summed across the year and should be averaged across segments
-# corr_bool = sfr_yr_sum_all.groupby(['realization', 'WY']).mean()
-# corr_bool = corr_bool[['flowing','connected','gaining']]
-# # seepage data just needs to be summed again 
-# corr_seep = sfr_yr_sum_all.groupby(['realization', 'WY']).sum(numeric_only=True)[['Qbase','Qrech']]
-# # flow data should be averaged
-# corr_flow = sfr_last_all.groupby(['realization','WY']).mean(numeric_only=True)[['Qout']]
-# # join together the data for correlations
-# corr_all = corr_seep.join(corr_bool).join(corr_flow).reset_index('WY')
-
-# %%
-# corr_out = pd.DataFrame()
-# for n_wy in wy_vals:
-# # corr_all.groupby('WY').apply(lambda x : pearsonr(coarse_ref.num_coarse, x))
-#     corr_wy = corr_all[corr_all.WY==n_wy].drop(columns=['WY'])
-#     corr_out = pd.concat((corr_out, calc_corr_stats(corr_wy, coarse_ref.num_coarse).assign(WY=n_wy)))
-
-
-# %%
-# the applicability of certain variables is questionable since Qrech, flowing, Qout have median
-# p values of > 0.05
-# corr_out.loc['p']
-
-# %%
-# fig, ax = plt.subplots(3,2, figsize=(8,5.3), sharex=True, sharey=True, layout='constrained')
-# for n, v in enumerate(variables.keys()):
-#     ax_n = ax[int(n/2), n%2]
-#     corr_plt = corr_out.loc['r'][[v,'type','WY']].pivot_table(index='WY', values=v, columns='type')
-#     # correct order of tests which were resorted
-#     corr_plt[tests].plot(kind='bar', ax=ax_n, legend=False, rot=0)
-#     ax_n.set_title(variables[v])
-# ax[0,1].legend(loc='best')
-
-
-# %% [markdown]
-# When aggregated to a yearly level the correlations don't really change between water years.
-
 # %% [markdown]
 # ## Correlations grouped by season and year
 # Need to be careful with p-values because the plots with low correlations tend to have p-values greater than 0.05 and the plots with no correlation occur when the value is constant for all realizations (e.g., no baseflow or flow in any realization in WY2015 month 7).
+
+# %% [markdown]
+# Apply a log transform to baseflow to improve normality.
 
 # %%
 # yearly
@@ -1139,14 +964,51 @@ corr_seep = sfr_facies_all.groupby('realization').resample('3MS').sum(numeric_on
 # flow data should be averaged
 corr_flow = sfr_last_all.groupby(['realization']).resample('3MS').mean(numeric_only=True)[['Qout']]
 # join together the data for correlations
-corr_all = corr_seep.join(corr_bool).join(corr_flow).reset_index('dt')
+corr_all_in = corr_seep.join(corr_bool).join(corr_flow).reset_index('dt')
 
 # %%
-corr_all['month'] = corr_all.dt.dt.month
-corr_all['wy'] = corr_all.dt.dt.year
-corr_all.loc[corr_all.month==10,'wy'] +=1
+corr_all_in['month'] = corr_all_in.dt.dt.month
+corr_all_in['wy'] = corr_all_in.dt.dt.year
+corr_all_in.loc[corr_all_in.month==10,'wy'] +=1
 
-corr_all = corr_all[var_names+['dt','month','wy']]
+corr_all_in = corr_all_in[var_names+['dt','month','wy']]
+
+
+# %%
+# goal is to present the data used to calculate the correlations in box plot format
+# box plot can't seem to handle the xtick formatting and throws an error even though there should only be 4 xticks, it thinks tehre are 8
+m_cols=[10,1,4,7]
+# m_cols = corr_all.month.unique()
+fig, ax = plt.subplots(len(var_names),4, figsize=(8,5.3), sharex='col', sharey='row', layout='constrained')
+for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
+    corr_plt = corr_all_in[[v,'wy','month']] 
+    ax[nv, 0].set_ylabel(variables[v])
+
+    for nwy, wy in enumerate(corr_plt.wy.unique()):
+        ax_n = ax[nv, nwy]
+        corr_wy = corr_plt[corr_plt.wy==wy].drop(columns=['wy']).pivot(columns='month', values=v)
+        corr_wy = corr_wy.reset_index(drop=True).rename_axis(None,axis=1).loc[:, m_cols]
+
+        # # correct order of tests and months to fix sorting
+        # corr_wy.plot(column=m_cols, kind='box', ax=ax_n, legend=False, rot=0)
+        # corr_plt[corr_plt.wy==2015].plot(by='month', column=v, kind='box', ax=ax_n)
+        ax_n.boxplot(corr_wy.values, labels=m_cols);
+        # ax_n.set(xticklabels=m_cols)
+
+for nwy, wy in enumerate(corr_plt.wy.unique()):
+    ax_n = ax[0, nwy]
+    ax_n.set_title(wy)
+# ax[0,0].ticklabel_format(style='plain')
+
+plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inches='tight')
+
+# %%
+corr_all = corr_all_in.copy()
+# the baseflow needs a log transform represent properly
+corr_all.loc[corr_all.Qbase==0, 'Qbase'] = 1 # convert 0 values to 1 for log transform
+corr_all.Qbase = np.log10(corr_all.Qbase)
+
+
 
 
 # %%
@@ -1155,6 +1017,7 @@ for n_dt in corr_all.dt.unique():
 # corr_all.groupby('WY').apply(lambda x : pearsonr(coarse_ref.num_coarse, x))
     corr_dt = corr_all[corr_all.dt==n_dt].drop(columns=['dt'])
     corr_out = pd.concat((corr_out, calc_corr_stats(corr_dt, coarse_ref.num_coarse).assign(dt=n_dt)))
+    # corr_out = pd.concat((corr_out, calc_corr_stats(corr_dt, ref_out.num_lak).assign(dt=n_dt)))
 corr_out['month'] = corr_out.dt.dt.month
 corr_out['wy'] = corr_out.dt.dt.year
 corr_out.loc[corr_out.month==10,'wy'] +=1
@@ -1175,9 +1038,17 @@ pval_large = corr_out.loc['p'][(corr_out.loc['p', var_names]>0.05).any(axis=1).v
 pval_large[pval_large[var_names]<0.05] = np.nan
 pval_large
 
+
 # %% [markdown]
 # Helen asked why I used more than one correlation coefficient and I didn't have a clear response other than that Steve did it so I'm simplifying to the Pearson's. I also should use color to highlight significance and draw lines at 0.3 and 0.5 to mark the moderate or strong correlations.
 # - I could use: {\*:<0.05, \**:<0.01, \***:<0.001}
+
+# %%
+def plt_corr_lines(ax_n, ms):
+    ax_n.axhline(0, linewidth=0.5, color='black')
+    ax_n.axhline(0.3*ms, color='black',linewidth=0.5, linestyle='--')
+    ax_n.axhline(0.5*ms, color='black',linewidth=0.5)
+
 
 # %%
 # v='Qbase'
@@ -1185,6 +1056,12 @@ pval_large
 # p_plt = corr_out.loc['p'][[v,'type','wy','month']]
 # corr_plt[~(p_plt[v]<.05).values]
 # ax_n.get_xticks()
+
+# %%
+# p_lab = p_wy[tests].loc[corr_out.month.unique()].copy()
+# plt.scatter(np.arange(0,4)[p_lab.Pearson<0.05], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.05],marker='*', color='black')
+# plt.scatter(np.arange(0,4)[p_lab.Pearson<0.01], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.01]+0.005,marker='*', color='black')
+# ax[0,0].get_xticks()
 
 # %%
 fig, ax = plt.subplots(len(var_names),4, figsize=(8,5.3), sharex=True, sharey='row', layout='constrained')
@@ -1199,13 +1076,19 @@ for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
                                                                              columns='type', dropna=False)
         # correct order of tests and months to fix sorting
         corr_wy[tests].loc[corr_out.month.unique()].plot(kind='bar', ax=ax_n, legend=False, rot=0)
+        # identify signficant correlations
+        p_lab = p_wy[tests].loc[corr_out.month.unique()].copy()
+        ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.05], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.05],marker='*', color='black')
+        # could further mark out 0.01 vs 0.001 but gets more complicated
+        # ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.01], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.01]-0.05,marker='*', color='black')
+        # ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.001], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.001]-0.1,marker='*', color='black')
+
         ax_n.set_ylabel(variables[v])
         if corr_wy[tests].min().values[0]<0:
-            ms = -1
-        else:
-            ms=1
-        ax_n.axhline(0.3*ms, color='black',linewidth=0.5, linestyle='--')
-        ax_n.axhline(0.5*ms, color='black',linewidth=0.5)
+            plt_corr_lines(ax_n, -1)
+        if corr_wy[tests].max().values[0]>0:
+            plt_corr_lines(ax_n, 1)
+
 for nwy, wy in enumerate(corr_plt.wy.unique()):
     ax_n = ax[0, nwy]
     ax_n.set_title(wy)
@@ -1214,38 +1097,6 @@ for nwy, wy in enumerate(corr_plt.wy.unique()):
 
 # ax[0,1].legend(loc='best')
 plt.savefig(join(fig_dir, 'corr_stats_season_WY.png'), bbox_inches='tight')
-
-# %%
-# goal is to present the data used to calculate the correlations in box plot format
-# box plot can't seem to handle the xtick formatting and throws an error even though there should only be 4 xticks, it thinks tehre are 8
-m_cols=[10,1,4,7]
-# m_cols = corr_all.month.unique()
-fig, ax = plt.subplots(len(var_names),4, figsize=(8,5.3), sharex='col', sharey='row', layout='constrained')
-for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
-    corr_plt = corr_all[[v,'wy','month']] 
-    ax[nv, 0].set_ylabel(variables[v])
-
-    for nwy, wy in enumerate(corr_plt.wy.unique()):
-        ax_n = ax[nv, nwy]
-        corr_wy = corr_plt[corr_plt.wy==wy].drop(columns=['wy']).pivot(columns='month', values=v)
-        corr_wy = corr_wy.reset_index(drop=True).rename_axis(None,axis=1).loc[:, m_cols]
-
-        # # correct order of tests and months to fix sorting
-        # corr_wy.plot(column=m_cols, kind='box', ax=ax_n, legend=False, rot=0)
-        # corr_plt[corr_plt.wy==2015].plot(by='month', column=v, kind='box', ax=ax_n)
-        ax_n.boxplot(corr_wy.values, labels=m_cols);
-        # ax_n.set(xticklabels=m_cols)
-
-for nwy, wy in enumerate(corr_plt.wy.unique()):
-    ax_n = ax[0, nwy]
-    ax_n.set_title(wy)
-
-# ax[0,0].set_yscale('log')
-# ax[1,0].set_yscale('log')
-# ax[-1,0].set_yscale('log')
-# ax[-1,0].locator_params(axis='y', nbins=3) # can't specify number of bins with log scale
-# ax[0,0].ticklabel_format(style='plain')
-plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inches='tight')
 
 # %% [markdown]
 # A lot of good discussion could come from the correlation by year and season figure. FOr example:
@@ -1266,7 +1117,8 @@ plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inche
 # - Graham suggested to show the linearity of the data in the model appendix. These plots can be saved then imported all at once to a word document.
 
 # %%
-coarse_ref.quantile([0,.5,1])*100/91
+coarse_ref.quantile([0,.5,1])*100/len(grid_sfr)
+
 
 # %%
 bins = len(coarse_ref.num_coarse.unique())
@@ -1274,10 +1126,10 @@ coarse_ref.hist('num_coarse',
                 # bins = bins
                 bins= np.arange(0, int(coarse_ref.max().values[0])+4, 4) # group with bins of size 4 to account for downscaling from 200 m to 100m gri dcell
                )
-plt.xlabel('Number of coarse segments')
+plt.xlabel('Number of coarse reaches')
 plt.ylabel('Number of realizations')
 plt.title(None)
-plt.savefig(join(fig_dir, 'coarse_segments_SFR_histogram.png'), dpi=300, bbox_inches='tight')
+plt.savefig(join(fig_dir, 'Methods','coarse_segments_SFR_histogram.png'), dpi=300, bbox_inches='tight')
 
 # %%
 # exampel regression
@@ -1293,7 +1145,7 @@ df_plt = plt_month[plt_month.WY==2017]
 # ax.annotate('$r^2$: '+ str(np.round(r2_val,3)), (0.85,0.85), xycoords='axes fraction')
 
 # %%
-def corr_plt_seep(name, ylabel):
+def corr_plt_seep(name, ylabel, log=False):
     """ name is Qbase or Qrech"""
     fig,ax = plt.subplots(4,4, figsize=(8,5.3), sharex=True, sharey=False, layout='constrained')
     # plot of number of connected days across realizations
@@ -1302,7 +1154,10 @@ def corr_plt_seep(name, ylabel):
         df_wy = sfr_3mon_all[sfr_3mon_all.WY==wy]
         # plot across 3 month blocks in columns
         for mn, mon in enumerate(sfr_3mon_all.month.unique()):
-            df_plt = df_wy[df_wy.month==mon]
+            df_plt = df_wy[df_wy.month==mon].copy()
+            if log:
+                df_plt.loc[df_plt[name]==0,name] = 1
+                df_plt[name] = np.log10(df_plt[name])
             ax_n = ax[yn, mn]
             df_plt.plot(x='num_coarse',y=name, kind='scatter', color='gray', ax = ax_n)
             # linear, regression
@@ -1312,7 +1167,7 @@ def corr_plt_seep(name, ylabel):
             x_range = np.array([[df_plt.num_coarse.min()], [df_plt.num_coarse.max()]])
             ax_n.plot(x_range, regr.predict(x_range), color='black', linewidth=3)
             r2_val = r2_score(df_plt[[name]], regr.predict(df_plt[['num_coarse']].values))
-            ax_n.annotate('$r^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes fraction')
+            ax_n.annotate('$R^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes fraction')
             # plot clean up
             ax_n.set_ylabel('')
             ax_n.set_xlabel('')
@@ -1325,17 +1180,19 @@ def corr_plt_seep(name, ylabel):
         ax_n = ax[0, mn]
         ax_n.set_title(labels_3mon[mn])
     fig.text(-0.01, 0.4, 'Mean Seasonal '+ylabel, rotation=90)
-    fig.text(0.4, -0.01, 'Number of Coarse Stream Segments')
+    fig.text(0.4, -0.01, 'Number of Coarse Stream Reaches')
 
     fig.tight_layout()
 
 
 # %%
 labels=['Recharge ($m^3/day$)','Baseflow ($m^3/day$)','Days with flow','Streamflow ($m^3/day$)']
-for n, param in enumerate(['Qrech','Qbase', 'flowing', 'Qout']):
-    corr_plt_seep(param, labels[n])
+var = ['Qrech','Qbase', 'flowing', 'Qout']
+# var,labels = ['Qbase'], ['Baseflow']
+for n, param in enumerate(var):
+    corr_plt_seep(param, labels[n],log=True)
 
-    plt.savefig(join(fig_dir, 'corr_scatter_'+param+'.png'), bbox_inches='tight')
+    plt.savefig(join(fig_dir,'Appendix', 'corr_scatter_'+param+'.png'), bbox_inches='tight')
 
 # %% [markdown]
 # # Application figure
@@ -1399,21 +1256,15 @@ for n, y in enumerate(total_flow_fall.index.unique()):
 # %%
 # groupby season and year
 total_last = sfr_last_all.groupby('realization', group_keys=False).resample('3MS').mean(numeric_only=True)
-h_last = h_sfrdf[h_sfrdf.segment==h_sfrdf.segment.max()]
+h_last = h_sfrdf[h_sfrdf[grp_col]==h_sfrdf[grp_col].max()]
 h_last = h_last.resample('3MS').mean(numeric_only=True)
 
-
-# %%
-total_last.columns
 
 # %%
 # we want to give something easy to digest so like a yes or no, or the number of realizations each season
 # that are better than the homogeneous case
 # total_last['month'] = total_last.index.get_level_values('dt').month
 # total_last.groupby(['realization','month']).mean()
-
-# %%
-# total_[['Qout']]
 
 # %%
 # calculate difference in flow from base case

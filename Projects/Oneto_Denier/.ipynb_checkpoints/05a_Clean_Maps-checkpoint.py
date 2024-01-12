@@ -71,7 +71,7 @@ add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/python_utilities')
 
 import map_cln
 reload(map_cln)
-from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, xy_lab, make_multi_scale
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, arr_lab, xy_lab, make_multi_scale, dir_arrow, plt_arrow
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
 from flopy_utilities import reach_data_gdf
 from tprogs_review import get_tprogs_quants
@@ -280,48 +280,6 @@ plt_arrow(ax)
 plt_scale(ax)
 mark_inset(axins, ax, loc1=2, loc2=3, fc="none", ec="black")
 # fig.savefig(join(fig_dir, 'CA_domain_map.png'), bbox_inches='tight')
-
-# +
-def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
-    lw = 1
-    ax.annotate(text, xy=(x, y), xytext=(x, y-arrow_length),
-                ha='center', va='center', fontsize=fontsize, #rotation =45,
-                xycoords=ax.transAxes,
-               bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
-
-    ### gw flow direction arrow approximation
-    ax.annotate('', xy=(x+dx, y+dy), xytext=(x, y),
-                arrowprops=dict(facecolor='black', width=1.5, alpha=1, headwidth=5),
-                ha='center', va='center', fontsize=10,xycoords=ax.transAxes, 
-               )
-
-# fig, ax =plt.subplots()
-# dir_arrow(ax, 0.8, 0.8, -0.2, -0.2, 0.2, 'Cosumnes River\nflow into the domain')
-
-
-# +
-def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
-    xy = gdf.geometry.unary_union.centroid.coords[0]
-    lw = 1
-    if exterior:
-        xy = gdf.geometry.unary_union.exterior.representative_point().centroid.coords[0]
-    if arrow:
-        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
-                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
-                    bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
-    else:
-        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
-            bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
-
-def xy_lab(xy, text, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
-    if bbox:
-        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
-                    bbox=dict(boxstyle="square,pad=0.3", fc=fc, ec=ec, lw=lw))
-    else:
-        ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize)
-# -
-
-
 
 # +
 fig, ax = plt.subplots(figsize=(6.5, 6.5), dpi=300)
