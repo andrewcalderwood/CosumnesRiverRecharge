@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 import os
 from os.path import join, exists
+
+import flopy
+
 #%% Model development
 
 from scipy.stats import ttest_rel, linregress
@@ -87,7 +90,7 @@ def run_stats(wb, wb0, term, season=None, freq='monthly', plot=False):
 
     return(t_df)
 
-
+# need to fix as this doesn't account for sfr_rows, sfr_cols or plt_segs
 def plot_vka(vka, ax, sfr_nodata, k_max):
     sfr_hk = vka[:k_max][:, sfr_rows, sfr_cols]
     sfr_hk = np.ma.masked_where(sfr_nodata[:k_max], sfr_hk)
@@ -97,3 +100,47 @@ def plot_vka(vka, ax, sfr_nodata, k_max):
     ax.set_yticks(ticks = np.arange(1,k_max,5), labels=m.dis.botm.array[:,0,0][:k_max:5]);
     ax.set_xticks(ticks = np.arange(0, len(plt_segs),10), labels=np.arange(0, len(plt_segs),10), rotation=90)
     return sfr_hk, im
+
+
+def clean_sfr_df(model_ws,  drop_iseg, dt_ref, m_name ='MF'):
+    """ specific to OD parallle realizations because of 
+    grid_sfr load and num_coarse specification
+    """
+    ## load sfr reach data ##
+    grid_sfr = pd.read_csv(model_ws+'/grid_sfr.csv')
+    # remove stream segments for routing purposes only
+    grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
+    pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'color', 'strthick']]
+    pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
+    num_coarse = int(grid_sfr.facies.isin(['Gravel','Sand']).sum())
+    
+    ## load sfr out file ##
+    sfrout = flopy.utils.SfrFile(join(model_ws, m_name+'.sfr.out'))
+    sfrdf = sfrout.get_dataframe()
+    sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
+    # convert from sub-daily to daily using mean, lose kstpkper
+    sfrdf = sfrdf.groupby(['segment','reach']).resample('D').mean(numeric_only=True)
+    sfrdf = sfrdf.reset_index(['segment', 'reach'], drop=True)
+    sfrdf[['row','column']] = sfrdf[['row','column']].astype(int) - 1 # convert to python
+    
+    ## join sfr out to reach data ##
+    sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
+    sfrdf['num_coarse'] = num_coarse
+    
+    ## data transformation for easier manipulation ##
+    sfrdf['month'] = sfrdf.index.month
+    sfrdf['WY'] = sfrdf.index.year
+    sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
+    # create column to calculate days flowing
+    sfrdf['flowing'] = 1
+    sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
+    
+    # create different column for stream losing vs gaining seeapge
+    sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
+    sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
+    # booleans for plotting
+    sfrdf['gaining'] = (sfrdf.gradient <= 0)
+    sfrdf['losing'] = (sfrdf.gradient >= 0)
+    sfrdf['connected'] = (sfrdf.gradient < 1)
+    return(sfrdf)
+

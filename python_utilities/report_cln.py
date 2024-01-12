@@ -20,6 +20,10 @@ def base_round(x, base=1):
     """
     return base * round(x/base)
 
+def magnitude(x):
+    """ Return the order of magnitude of a number regardless of sign
+    """
+    return int(np.log10(np.abs(x)))
 
 def fmt(x):
     """ format numeric contour labels to avoid excess decimals
@@ -30,3 +34,8 @@ def fmt(x):
     if s.endswith("0"):
         s = f"{x:.0f}"
     return rf"{s} " if plt.rcParams["text.usetex"] else f"{s} "
+
+def nse(targets,predictions):
+    """ Calculate the Nash-Sutcliffe efficiency for target and observed data
+    """
+    return 1-(np.sum((targets-predictions)**2)/np.sum((targets-np.mean(predictions))**2))
