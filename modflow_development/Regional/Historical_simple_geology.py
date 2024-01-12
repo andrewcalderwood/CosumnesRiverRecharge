@@ -725,6 +725,9 @@ for p in tprogs_vals:
     vka[(vka<vka_quants.loc[p,'vka_max'])&(vka>vka_quants.loc[p,'vka_min'])] /= params.vani[p]
 
 
+# %%
+vka_quants.to_csv(join(model_ws, 'vka_quants.csv'))
+
 # %% [markdown]
 # The tuff breccia is very dense, hard and low water yielding. It is supposedly responsible for the many "haystack" hills in the eastern part of the county
 #
@@ -946,9 +949,15 @@ XSlocs = gpd.read_file(sfr_dir+'8pointXS_locs/8pointXS_locs.shp')
 # new shapefile with an extra point for blodgett dam as site 16.5
 # XSlocs = gpd.read_file(gwfm_dir+'/Blodgett_Dam/geospatial/8pointXS_locs/8pointXS_locs.shp')
 XSlocs.crs = 32610
+# this is better done manually (causes weird numbering)
 # split segments where Oneto-Denier floodplain starts and ends for easier diversion to LAK
-XSlocs = pd.concat((XSlocs, OD_locs.drop(columns='Logger Location')))
+# XSlocs = pd.concat((XSlocs, OD_locs.drop(columns='Logger Location')))
+# identify the nearest XS to the OD sites and update the site name to improve referencing uniqueness
+OD_XSlocs = gpd.sjoin_nearest(XSlocs, OD_locs, how='right').drop(columns=['index_left','Logger Location'])
+OD_XSlocs['Site'] += [0.4, 0.8]
+XSlocs = pd.concat((XSlocs, OD_XSlocs))
 
+# it would be better to do the sjoin_nearest after creating an udpating XSg
 # XSg  = gpd.sjoin(grid_sfr, XSlocs, how = "inner", predicate= "contains", lsuffix = 'sfr',rsuffix = 'xs')
 XSg_in  = gpd.sjoin_nearest(grid_sfr_in, XSlocs, how = "right", lsuffix = 'sfr',rsuffix = 'xs')
 
@@ -956,7 +965,7 @@ XSg_in  = gpd.sjoin_nearest(grid_sfr_in, XSlocs, how = "right", lsuffix = 'sfr',
 XSg_in = XSg_in.sort_values('Site')
 
 # to account for the iseg splitting added by Oneto-Denier forward fill information on XS
-XSg_in['Site'] = XSg_in['Site'].ffill(axis=0)
+# XSg_in['Site'] = XSg_in['Site'].ffill(axis=0)
 
 XSg_in['iseg'] = np.arange(2,len(XSg_in)+2) # add the segment that corresponds to each cross section
 
@@ -1000,60 +1009,89 @@ XSg_in['iseg'] = np.arange(2,len(XSg_in)+2) # add the segment that corresponds t
 # For the floodplain connection segments, the Site that it is connected to does not matter because they conductivity will be set to zero so the depth computed will not impact calculations. The stream bottom elevation will have an impact on the return flow because it must be below the lake bottom.
 
 # %%
+## new version from Oneto-Denier
 XSg = XSg_in.copy()
 
-if scenario != 'no_reconnection':
-    ## upstream ##
-    # od_breach is the sensor location where the breach was made in the levees for flow to leave the river
-#     od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
-    od_breach = OD_locs[OD_locs['Logger Location']=='OD_Excavation'].sjoin_nearest(XSg.reset_index(), how='inner')
-#     od_breach.z_min += od_breach.slope*20
-#     od_breach.reach -=0.2
-    # second reach to assist diversion into floodplain
-    # need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
-    od_return = od_breach.copy()
-    od_return['Logger Location'] = 'OD_Exc_Return'
-    od_return['iseg'] += 1 # adjust iseg to set sorting order
-#     od_breach.reach -=0.2
+# if scenario != 'no_reconnection':
+# identify XS to be copied for diversion reaches
+fp_grid_xs = fp_grid[['Logger Location','geometry']].copy()
+fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg.reset_index(), how='inner') #.drop(columns=['index_right'])
+# od_breach is the sensor location where the breach was made in the levees for flow to leave the river
+od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
+od_breach['Site'] -= 0.2 # adjust Site to set sorting order
+# swale is the return to downstream so it should be just upsream of the segment if possible
+od_swale = fp_grid_xs[fp_grid_xs['Logger Location']=='SwaleBreach_1'].copy()
+od_swale['Site'] -= 0.01 # adjust Site to set sorting order
 
-#     od_return.z_min -= od_return.slope*10
-    # all segments starting at the floodplain must have 2 added to accomodate the diversion and return flow
-    # includes the breach and return
-    XSg.loc[XSg.iseg>=od_breach.iseg.values[0], 'iseg'] +=2
-    
-    ## downstream ##
-    # the swale is where flow returns to the channel
-    od_swale = OD_locs[OD_locs['Logger Location']=='SwaleBreach_1'].sjoin_nearest(XSg.reset_index(), how='inner')
-#     all segments after the floodplain return must have 1 added to accomodate the return flow
-    XSg.loc[XSg.iseg>=od_swale.iseg.values[0], 'iseg'] += 1
-    
-    # add reaches for diversion
-    XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_swale)) 
-    XSg = XSg.sort_values('iseg')
-else:
-    XSg = XSg_in.reset_index().copy()
+# need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
+# return takes flow from the breach and returns it to the channel
+od_return = od_breach.copy()
+od_return['Site'] += 0.1 # adjust Site to set sorting order
+od_return.z_min = XSg[XSg.Site==int(np.ceil(od_return.Site).values[0])].z_min.max() + od_return.slope*delr
+# need another segment to transfer water between the breach and lake to avoid doubling
+od_lake = od_return.copy()
+od_lake['Site'] -= 0.05
+od_lake.z_min = od_breach.z_min - od_lake.slope*delr
+
+# add reaches for diversion
+# XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_swale)) #, od_swale (old)
+# need a segment to control diversion to lake to avoid doubling water
+XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_lake, od_swale)) #, od_swale
+# else:
+#     XSg = XSg.reset_index().copy()
 
 # %%
-if scenario != 'no_reconnection':
-    # update grid_sfr to account for added segments (3)
-    sfr_add = XSg.loc[~XSg['Logger Location'].isna(), np.append(grid_sfr_in.columns.values,['Logger Location'])]
-    # specify short lengths for identifying (don't think modflow will allow a zero length)
-    sfr_add.length_m = 1
-    # run first by simply re-writing the reach numbers to be longer
-    grid_sfr = pd.concat((grid_sfr_in,sfr_add))
-    # resort by reach number so they are in the correct spot before renumbering
-#     grid_sfr = grid_sfr.sort_values('reach')
-#     grid_sfr.reach = np.arange(1,len(grid_sfr)+1)
+# this needs to be done once the sfr reaches are in place
+# redefine Site/iseg
+def clean_reach_routing(XSg):
+    XSg['reach_order'] = np.arange(0, len(XSg)) # fix reach order
+    
+    # iterate over the added segments to fix reach ordering
+    for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+    # for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+        rn = XSg.loc[XSg.Site==xsn,'reach_order'].values[0]
+        if XSg.loc[XSg.reach_order==rn-1, 'iseg'].values== XSg.loc[XSg.reach_order==rn, 'iseg'].values:
+            XSg.loc[XSg.Site>=xsn, 'iseg'] += 1
+    # # now make sure to add 1 to downstream segments only if theyare equal
+    for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+        rn = XSg.loc[XSg.Site==xsn,'reach_order'].values[0]
+        if XSg.loc[XSg.reach_order==rn, 'iseg'].values== XSg.loc[XSg.reach_order==rn+1, 'iseg'].values:
+            XSg.loc[XSg.reach_order>rn, 'iseg'] += 1
+    # need to fix reach numbering after fixing segment numbers
+    # min_reach = XSg.groupby('iseg').min(numeric_only=True)['ireach']
+    # for ns in min_reach[min_reach!=1].index:
+    #     XSg.loc[XSg.iseg==ns,'ireach'] = np.arange(1,np.sum(XSg.iseg==ns)+1)
+    return(XSg)
+    
+XSg  = XSg.sort_values(['Site','reach'])
+XSg = clean_reach_routing(XSg)
 
-else:
-    grid_sfr = grid_sfr_in.copy()
+# %%
+xs_sfr = grid_sfr_in.merge(XSg[['row','column','Logger Location','Site', 'iseg']],how='left')
+
+# specify reach 1 will have iseg from Michigan Bar icalc=4
+xs_sfr.loc[xs_sfr.reach==1,'iseg']=1
+xs_sfr = xs_sfr.sort_values(['reach', 'iseg'])
+# forward fill iseg numbers
+xs_sfr.iseg = xs_sfr.iseg.ffill()
+# rename old reach numbers to save
+xs_sfr = xs_sfr.rename(columns={'reach':'reach_order'})
+# specify new reach number for each segment
+xs_sfr['reach'] = 1
+for ns, seg in enumerate(xs_sfr.iseg.unique()):
+    xs_sfr.loc[xs_sfr.iseg==seg,'reach'] = np.arange(1,(xs_sfr.iseg==seg).sum()+1)
+    
+# get total lengths
+xs_sfr['dist_m'] = xs_sfr.length_m.cumsum()
+xs_sfr.dist_m -= xs_sfr.dist_m.iloc[0]
+
 
 # %% [markdown]
 # ### Read in 8 pt XS, revised by simplifying from Constantine 2001
 
 # %%
 # There is one reach for each cell that a river crosses
-NSTRM = -len(grid_sfr)
+NSTRM = -len(xs_sfr)
 # There should a be a stream segment if there are major changes
 # in variables in Item 4 or Item 6
 # 1st segment is for the usgs Michigan Bar rating curve, one for each XS, plus 2 for the floodplain diversion
@@ -1117,49 +1155,6 @@ sfr.options = tab_option
 # %% [markdown]
 # ## Define reach data
 # Originally used loops to fill reach and iseg numbers. Updated to rejoin with cross-section numbering to then apply forward fill to specify iseg then a loop can be applied to fill reach numbers only.
-
-# %%
-# join iseg to grid_sfr
-xs_sfr = grid_sfr.merge(XSg[['row','column', 'iseg']],how='left')
-if scenario=='reconnection':
-    xs_sfr = grid_sfr.merge(XSg[['row','column','Logger Location', 'iseg']],how='left')
-# specify reach 1 will have iseg from Michigan Bar icalc=4
-xs_sfr.loc[xs_sfr.reach==1,'iseg']=1
-xs_sfr = xs_sfr.sort_values(['reach', 'iseg'])
-# forward fill iseg numbers
-xs_sfr.iseg = xs_sfr.iseg.ffill()
-# rename old reach numbers to save
-xs_sfr = xs_sfr.rename(columns={'reach':'reach_order'})
-# specify new reach number for each segment
-xs_sfr['reach'] = 1
-for ns, seg in enumerate(xs_sfr.iseg.unique()):
-    xs_sfr.loc[xs_sfr.iseg==seg,'reach'] = np.arange(1,(xs_sfr.iseg==seg).sum()+1)
-    
-# get total lengths
-xs_sfr['dist_m'] = xs_sfr.length_m.cumsum()
-xs_sfr.dist_m -= xs_sfr.dist_m.iloc[0]
-
-if scenario=='reconnection':
-    # fix diversion elevation ( must be lower but not so low flow can't partly return to channel)
-    od_xs = xs_sfr.loc[xs_sfr['Logger Location']=='OD_Excavation'].copy()
-    od_xs.z_min = xs_sfr[xs_sfr.iseg==od_xs.iseg.iloc[0]-1].z_min.min() - od_xs.slope*10
-    # # fix return elevation
-    ret_xs = xs_sfr.loc[xs_sfr['Logger Location']=='OD_Exc_Return'].copy()
-    ret_xs.z_min = od_xs.z_min.iloc[0] - ret_xs.slope*10
-    # fix downstream elevation outlet elevation ( must be higher than lower segment)
-    out_xs = xs_sfr.loc[xs_sfr['Logger Location']=='SwaleBreach_1'].copy()
-    out_xs.z_min = xs_sfr[xs_sfr.iseg==out_xs.iseg.iloc[0]+1].z_min.max() + out_xs.slope*10
-    # fix elevations of floodplain connector segments
-    xs_sfr = pd.concat((xs_sfr[xs_sfr['Logger Location'].isna()], od_xs, ret_xs, out_xs))
-    xs_sfr = xs_sfr.sort_values(['iseg','reach'])
-
-# %%
-# error checking
-# fig,ax = plt.subplots()
-# xs_sfr[xs_sfr.iseg==32].tail(2).plot( 'iseg',ax=ax, alpha=0.6)
-
-# xs_sfr[xs_sfr.iseg==33].plot('iseg',ax=ax,  alpha=0.6,color='red')
-# xs_sfr[xs_sfr.iseg==34].head(3).plot('iseg',ax=ax,  alpha=0.6,edgecolor='green',color='none')
 
 # %%
 sfr_rows = (xs_sfr.row.values-1).astype(int)
@@ -1282,12 +1277,15 @@ sfr_seg.roughch[(sfr_seg.icalc==1) | (sfr_seg.icalc==2)] = 0.048
 sfr_seg.roughbk[(sfr_seg.icalc==2) | (sfr_seg.icalc==5)] = 0.083# higher due to vegetation
 
 # %%
+# added extra segments 2024-1-10 (based on Oneto-Denier)
 if scenario != 'no_reconnection':
     # diversion segment
-    od_div = XSg[XSg['iseg']==od_breach.iseg.values[0]]
-    od_ret = XSg[XSg['iseg']==od_return.iseg.values[0]]
+    od_div = XSg[XSg['Site']==od_breach.Site.values[0]]
+    od_ret = XSg[XSg['Site']==od_return.Site.values[0]]
+    od_lak = XSg[XSg['Site']==od_lake.Site.values[0]]
     # downstream channel segment
-#     od_sfr = XSg[XSg.iseg==np.round(od_div.iseg.values[0])]
+    # od_sfr = XSg[XSg.Site==np.round(od_div.Site.values[0])]
+    # od_sfr = od_sfr[od_sfr['Logger Location'].isna()]
     # upstream segment to diversion and channel
     up_div = XSg[XSg.iseg == od_div.iseg.values[0]-1]
 
@@ -1297,10 +1295,21 @@ if scenario != 'no_reconnection':
     # pull segments for easier indexing
     div_seg = od_div.iseg.iloc[0]
     ret_seg = od_ret.iseg.iloc[0]
-#     chan_seg = od_sfr.iseg.iloc[0]
+    lak_seg = od_lak.iseg.iloc[0]
+    chan_seg = od_sfr.iseg.iloc[0]
     up_seg = div_seg - 1
-    chan_seg = up_seg +3
-    out_seg = od_out.iseg.iloc[0]
+    chan_seg = ret_seg + 1
+    out_seg = od_out.iseg.iloc[0] # still needed?
+
+# %%
+# check order (forced chan_seg for now to be ret_seg +1)
+up_seg, div_seg, ret_seg, lak_seg, out_seg, chan_seg,
+
+# %%
+# pull out floodplain activation flows
+fp_flow = bc_params.loc['fp_active_flow','StartValue']*86400
+print('Baseline flow is %.2f  m^3/day ' %fp_flow)
+
 
 # %%
 if scenario != 'no_reconnection':
@@ -1312,9 +1321,11 @@ if scenario != 'no_reconnection':
      # there will be a diversion from the river to the dam above 27 cms, of which 20% will be returned to the side channel
     sfr_seg.iupseg[sfr_seg.nseg==div_seg] = up_seg
     sfr_seg.iprior[sfr_seg.nseg==div_seg] = -3 # iprior=-3 any flows above the flow specified will be diverted
-    sfr_seg.flow[sfr_seg.nseg==div_seg] = 23*86400 # 23 cms is floodplain threshold per Whipple in the Cosumnes
-    sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain
-
+    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow # 23 cms is floodplain threshold per Whipple in the Cosumnes
+    # outflow from the segment is a downstream segment then the lake to avoid diverison routing issues
+    sfr_seg.outseg[sfr_seg.nseg==div_seg] = lak_seg
+    sfr_seg.outseg[sfr_seg.nseg==lak_seg] = -1
+    
     # adjust for flow from diversion segment back to  channel
     sfr_seg.iupseg[sfr_seg.nseg==ret_seg] = div_seg
     sfr_seg.iprior[sfr_seg.nseg==ret_seg] = -2 # the flow diverted is a % of the total flow in the channel
@@ -1333,6 +1344,7 @@ if scenario != 'no_reconnection':
     sfr.reach_data.strhc1[sfr.reach_data.iseg== div_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== ret_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== out_seg] = 0
+    sfr.reach_data.strhc1[sfr.reach_data.iseg== lak_seg] = 0
 
 # %%
 if scenario != 'no_reconnection':
@@ -1393,7 +1405,7 @@ XS8pt.columns = XS8pt.columns.astype('float')
 sfr.channel_geometry_data = {0:{j:[] for j in np.arange(2,len(XSg)+2)}  }
 
 xsnum = 2
-for k in XSg.Site.values:
+for k in np.floor(XSg.Site.values): # round is fix for subtracting to id diversion segments
     pos = int(XS8pt.columns.get_loc(k))
     XCPT = XS8pt.iloc[:,pos].values
     ZCPT = XS8pt.iloc[:,pos+1].values
@@ -2003,6 +2015,10 @@ ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
 
 # %%
+evtr_mean = evtr.mean(axis=0)
+evt_active = evtr_mean>0
+
+# %%
 plt.imshow(ext_dp)
 plt.colorbar(shrink=0.5)
 
@@ -2109,10 +2125,15 @@ plt.show()
 # where GDEs are active the rain should be directly applied instead of SWB percolation
 # as we don't want to double count ET
 adj_perc = perc.copy()
-adj_perc[:, ext_dp>2] = rain_arr[:, ext_dp>2]
+et_rain_bool = (evt_active)&(ext_dp>2)
+adj_perc[:, et_rain_bool] = rain_arr[:, et_rain_bool]
 
 adj_perc_ss = ss_perc.copy().mean(axis=0)
-adj_perc_ss[ext_dp>2] = rain_arr_ss[ext_dp>2]
+adj_perc_ss[et_rain_bool] = rain_arr_ss[et_rain_bool]
+
+# %%
+# why is the adjusted percolation so high along the river?
+plt.imshow(adj_perc.mean(axis=0))
 
 # %%
 # have transient recharge start after the 1st spd
@@ -2400,15 +2421,17 @@ hob_dir = gwfm_dir+'/HOB_data'
 all_obs = pd.read_csv(hob_dir+'/all_obs_grid_prepared.csv') #,index_col='date', parse_dates=['date'])
 # all_obs = pd.read_csv(hob_dir+'/all_obs_grid_prepared_auto_QAQC.csv',index_col='date', parse_dates=True)
 # remove date time portion since regional model is daily scale, subdaily variation isn't critical
-if (all_obs.date is object):
-    all_obs['date'] = all_obs.date.str.extract(r'(\d{4}-\d+-\d+)')
+if (all_obs.date.dtype == 'object'):
+    all_obs['mdy'] = all_obs.date.str.extract(r'(\d+/\d+/\d+)')
+    # pd.to_datetime(all_obs['date'], errors='coerce')
+    all_obs['date'] = pd.to_datetime(all_obs.mdy)
 all_obs.date = pd.to_datetime(all_obs.date, errors='coerce')
 
 all_obs = all_obs.set_index('date')
 all_obs_ss = all_obs.copy()
 all_obs = all_obs.loc[(all_obs.index>strt_date)&(all_obs.index<end_date)]
 
-# # # get spd corresponding to dates
+# # # # get spd corresponding to dates
 all_obs['spd'] = (all_obs.index-strt_date).days.values
 
 if ss_bool:
@@ -2420,7 +2443,7 @@ if ss_bool:
     all_obs_ss['date'] = strt_date
     all_obs_ss['obs_nam'] = 'N'+all_obs_ss.node.astype(int).astype(str)+'.00000'
 #     # join steady state
-    all_obs = pd.concat((all_obs, all_obs_ss))
+    all_obs = pd.concat((all_obs, all_obs_ss.set_index('date')))
 
 
 
@@ -2436,15 +2459,12 @@ print('Number of wells kept',all_obs[all_obs.site_code.isin(hob_use)].site_code.
 all_obs = all_obs[all_obs.site_code.isin(hob_use)]
 
 # %%
-# all_obs.row
-
-# %%
 if all_obs.avg_screen_depth.isna().sum()>0:
     print('Some OBS missing screen depth')
 
 all_obs['screen_elev'] = dem_data[all_obs.row-1, all_obs.column-1] - all_obs.avg_screen_depth
 # keep 1 based layer
-all_obs['layer'] = get_layer_from_elev(all_obs.screen_elev, botm[:,all_obs.row-1, all_obs.column-1], m.dis.nlay) + 1
+all_obs['layer'] = get_layer_from_elev(all_obs.screen_elev.values, botm[:,all_obs.row-1, all_obs.column-1], m.dis.nlay) + 1
 
 # %%
 stns = all_obs.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
@@ -2574,12 +2594,12 @@ oc.write_file()
 
 # For later model runs when all the data is needed to be saved
 spd = {}
-# spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,nper,1)}
-spd = { (j,0): ['save head'] for j in np.arange(0,nper,1)}
+spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,nper,1)}
+# spd = { (j,0): ['save head'] for j in np.arange(0,nper,1)}
 
 for j in month_intervals:
-#     spd[j, 0] = ['save head', 'save budget','print budget']
-    spd[j, 0] = ['save head', 'print budget']
+    spd[j, 0] = ['save head', 'save budget','print budget']
+    # spd[j, 0] = ['save head', 'print budget']
     
 oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True)
 
@@ -2588,6 +2608,7 @@ oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True
 
 # %% [markdown]
 # ## Newton Solver
+# New version of OHWM requires CONTINUE to be specified before SPECIFIED
 
 # %%
 nwt = flopy.modflow.ModflowNwt(model = m, headtol=1E-4, fluxtol=500, maxiterout=200, thickfact=1e-05, 
@@ -2659,6 +2680,3 @@ m.write_input()
 # The parameters used with the model run that had the 0% CME were the parametersf rom Box (e.g., 100 vani). BC_params from box also had the 10 coarse scale and 23 fp_active flow. Maybe something in the py script?
 #
 # Looking back it seems that cumulative erro was 0% but the 1st period might have had really high error.
-
-# %%
-bc_params

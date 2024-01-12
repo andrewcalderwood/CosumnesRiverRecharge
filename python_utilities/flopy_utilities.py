@@ -78,3 +78,34 @@ def find_active_ET(m, dt_ref):
 	    b = head[et_lay, et_row, et_col] > et_botm[et_row, et_col]
 	    et_act[t, et_row[b], et_col[b]] = 1
 	return et_act
+
+
+def zone_clean(cbc,zon,  kstpkper, strt_date):
+    """ assumes totim units in days
+    """
+    zb = flopy.utils.ZoneBudget(cbc, zon, kstpkper)
+    zb_df = zb.get_dataframes()
+    # ungroup by timestep
+    zb_df = zb_df.reset_index()
+    names = zb_df.name.unique()
+    zb_df = zb_df.pivot(index = 'totim', columns = 'name',values = 'ZONE_1')
+    
+    # columns to make negative
+    to_cols = zb_df.columns[zb_df.columns.str.contains('TO_')]
+    # get net GHB
+    zb_df['GHB_NET'] = zb_df.TO_HEAD_DEP_BOUNDS - zb_df.FROM_HEAD_DEP_BOUNDS
+    # to storage is gw increase (positive)
+    stor_cols = zb_df.columns[zb_df.columns.str.contains('STORAGE')]
+    zb_df['dSTORAGE'] = (zb_df.TO_STORAGE - zb_df.FROM_STORAGE)
+    zb_df['dSTORAGE_sum'] = zb_df.dSTORAGE.copy().cumsum()
+    zb_df = zb_df.drop(columns=stor_cols)
+    zb_df = zb_df.reset_index()
+    strt_date = pd.to_datetime(m.dis.start_datetime)
+    zb_df.totim = strt_date+(zb_df.totim*24).astype('timedelta64[h]')
+    zb_df = zb_df.set_index('totim')
+    # convert 4 hr time steps to daily basis
+    zb_df = zb_df.resample('D').mean()
+    # summarize to monthly sum
+    zb_mon = zb_df.resample('MS').sum()
+    zb_mon['PERCENT_ERROR'] = zb_mon['IN-OUT']/np.mean((zb_mon.TOTAL_IN, zb_mon.TOTAL_OUT), axis=0)
+    return(zb_df, zb_mon)
