@@ -95,6 +95,10 @@ else:
 #     grid_sfr = grid_sfr_in.copy()
 # -
 
+# # join iseg to grid_sfr
+# xs_sfr = grid_sfr.merge(XSg[['row','column', 'iseg']],how='left')
+# if scenario=='reconnection':
+#     xs_sfr = grid_sfr.merge(XSg[['row','column','Logger Location','Site', 'iseg']],how='left')
 
 
 # # RCH
@@ -184,5 +188,39 @@ else:
 #     spd_all = np.copy(spd_ag)
 #     wel_ETc_dict[t] = spd_all
 # -
+# # HOB plotting
 
+
+# +
+
+# voi = hob_gpd[hob_gpd.site_code.isin(hobs_long)].node.unique()
+# # voi = 22825
+# # def obs_sim_node(voi):
+# ny = 3
+# nx = int(np.ceil(len(voi)/ny))
+# fig,ax=plt.subplots(nx,ny,figsize=(12,3*nx))
+# for i,voi_n in enumerate(voi):
+#     ax_n = ax[int(i / ny), i % ny] if (nx > 1) else ax[i]
+#     hob_n = hob_gpd[hob_gpd.node==voi_n]
+#     hob_n.reset_index().plot(x='date',y='obs_val',kind='scatter', ax=ax_n,
+#                                                   marker='x', s=40, legend=False)
+#     hob_n.reset_index().plot(x='date',y='sim_val',kind='scatter', ax=ax_n, 
+#                                                   marker='o', s=40, legend=False)
+#     # add time series of simulated data to see true peaks
+# #     ts_i = pd.DataFrame(hdobj.get_ts(hob_kij[hob_kij.node==voi_n].kij.values[0]),columns=['spd','sim_val']) 
+#     ts_i['dt'] = dt_ref.dt
+#     ts_i.plot(x='dt',y='sim_val', ax=ax_n, legend=False)
+
+#     ax_n.set_xlabel('')
+#     ax_n.set_ylabel('')
+#     S_n = format(gel.ss.array[hob_n.layer.iloc[0],hob_n.row.iloc[0],hob_n.column.iloc[0]],'.1e')
+#     K_n = format(gel.hk.array[hob_n.layer.iloc[0],hob_n.row.iloc[0],hob_n.column.iloc[0]], '.1e')
+
+#     ax_n.set_title(str(voi_n)+' K'+K_n+' S'+S_n+'\n'+hob_n.site_code.iloc[0])
+# ax_n.legend(['Observed','Simulated'])
+# ax[0,0].legend(['Observed','Simulated'])
+
+# # fig.text(-0.03, 0.2, 'Head (m)',rotation='vertical',size=26)
+# # fig.text(0.35, -0.05, 'Date',size=26)
+# fig.tight_layout()
 

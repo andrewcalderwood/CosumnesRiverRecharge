@@ -79,10 +79,28 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 
+# %% [markdown]
+# # Load data files
+
+# %%
+from flopy.utils.geometry import Polygon, LineString, Point
+# Original model domain, 44.7 deg angle
+# m_domain = gpd.read_file(gwfm_dir+'\\GWModelDomain_UTM10N\\GWModelDomain_Rec_UTM10N.shp')
+# New model domain 52.9 deg
+m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
+
+# Need to check this when changing model domains
+xul, yul = list(m_domain.geometry.values[0].exterior.coords)[1]
+list(m_domain.geometry.values[0].exterior.coords)
+# m_domain.geometry.values[0].exterior
+
+# %% [markdown]
+# # define model attributes
+
 # %%
 
-ss_bool = True # add steady state period
-# ss_bool = False # no steady state period
+# ss_bool = True # add steady state period
+ss_bool = False # no steady state period
 
 # %%
 
@@ -148,17 +166,25 @@ rotation=52.9
 # nlay_tprogs = int(max_num_layers/upscale)
 # tprog_thick = max_num_layers*0.5/nlay_tprogs
 
+upscale = 8 # from usual 0.5m
+tprog_thick = 0.5*upscale
+
 # elevation minimum is -1.2 m so have tprogs start at -2 to leave room for filler layer
 tprog_strt = -2
 # only need tprogs data nearer surface river-aquifer interaction
 tprog_total = 64 # 16, 64 3+ hrs #12 
-upscale = 8 # from usual 0.5m
-tprog_thick = 0.5*upscale
-nlay_tprogs = int(tprog_total/tprog_thick)
+
+# alternate version has tprogs with full layers to surface and no flow above land
+fine_tprogs = False
+if fine_tprogs:
+    tprog_strt = 40
+    # only need tprogs data nearer surface river-aquifer interaction
+    tprog_total = 104 #  
 
 # nlay_tprogs = 0
 # tprog_thick = 0
 
+nlay_tprogs = int(tprog_total/tprog_thick)
 num_leveling_layers = 1 # layers to create the upscaled unsaturated zone
 nlay = 2 + num_leveling_layers + nlay_tprogs
 
@@ -166,18 +192,6 @@ nlay = 2 + num_leveling_layers + nlay_tprogs
 # proj4_str='EPSG:26910'
 proj4_str='+proj=utm +zone=10 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 print('TPROGs layers', nlay_tprogs)
-
-# %%
-from flopy.utils.geometry import Polygon, LineString, Point
-# Original model domain, 44.7 deg angle
-# m_domain = gpd.read_file(gwfm_dir+'\\GWModelDomain_UTM10N\\GWModelDomain_Rec_UTM10N.shp')
-# New model domain 52.9 deg
-m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
-
-# Need to check this when changing model domains
-xul, yul = list(m_domain.geometry.values[0].exterior.coords)[1]
-list(m_domain.geometry.values[0].exterior.coords)
-# m_domain.geometry.values[0].exterior
 
 # %% [markdown]
 # ## Individual Users may change loadpath 
@@ -326,6 +340,12 @@ for i in np.arange(0,nlay):
 # %%
 # Set the elevation of the top layer based on the DEM
 m.dis.top = dem_data
+# top elevations of tprogs
+tprogs_top = np.full((nrow,ncol), tprog_strt + tprog_thick)
+if fine_tprogs: 
+    top = np.where(tprogs_top>dem_data, tprogs_top, dem_data)
+    m.dis.top = top
+
 # Bottom of model based on geology
 m.dis.botm = botm
 chk = dis.check()
@@ -462,9 +482,7 @@ plt.colorbar(shrink=0.5)
 # either marine or volcanic based
 deep_geology = np.invert(ibound[:,:,:].astype(bool))
 
-# reset ibound to all active cells to reduce non-linearity
-# still need to take account of no flow cells for lake package
-ibound = np.ones([nlay, nrow,ncol])
+
 
 # %%
 np.savetxt(gwfm_dir+'/BAS6/deep_geology_'+str(nlay)+'layer.tsv', np.reshape(deep_geology, (nlay*nrow,ncol)), delimiter ='\t')
@@ -502,6 +520,17 @@ if ss_bool:
 else:
     #start with adjusted head contours because the steady state is causing the model to start off
     strt[:,:,:] = hd_strt
+
+# %%
+# reset ibound to all active cells to reduce non-linearity
+# still need to take account of no flow cells for lake package
+ibound = np.ones((nlay,nrow,ncol))
+
+# find wherever layer less than min thickness to set as inactive, with thin layer version
+# ibound[thickness < 0.5] = 0
+# where bottom is above land surface set as inactive 
+ibound[botm>dem_data] = 0
+
 
 # %%
 # Basic package, BAS
@@ -650,7 +679,8 @@ t=5
 tprogs_info = [80, -80, 320]
 
 tprogs_line = np.loadtxt(tprogs_files[t])
-masked_tprogs= tc.tprogs_cut_elev(tprogs_line, dem_data, tprogs_info)
+# using m.dis.top to account for cases when top is above dem
+masked_tprogs= tc.tprogs_cut_elev(tprogs_line, m.dis.top.array, tprogs_info)
 K, Sy, Ss, porosity = tc.int_to_param(masked_tprogs, params, porosity=True)
 
 # save tprogs facies array as input data for use during calibration
@@ -778,7 +808,7 @@ for k in adj_lowK.index:
 # this is causing potentially high water levels in the foothills
 # the deep_geology array shows where the mehrten formation comes out of the surface
 hk[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']
-vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']/params.loc[7,'vani']
+vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']*10/params.loc[7,'vani'] # quick test of if only 10 vani (fractured rock has lower vani)
 sy[adj_lowK_arr.astype(bool)] = params.loc[7,'Sy']
 ss[adj_lowK_arr.astype(bool)] = params.loc[7,'Ss']
 
@@ -792,11 +822,11 @@ ss[adj_lowK_arr.astype(bool)] = params.loc[7,'Ss']
 # plt.imshow(K[0,:,:])
 # plt.imshow(K[-1,:,:])
 row = 50
-plt.imshow(K[:,row,:],aspect=1/10)
-plt.show()
-plt.imshow(vka[:,row,:],aspect=5, norm=mpl.colors.LogNorm())
-plt.colorbar(shrink=0.4)
-plt.show()
+fig, ax = plt.subplots(2,1, figsize=(6.5,2),layout='constrained', sharex=True, dpi=300)
+im = ax[0].imshow(K[:,row,:],aspect=1/10)
+im = ax[1].imshow(vka[:,row,:],aspect=1, norm=mpl.colors.LogNorm())
+plt.colorbar(im, ax=ax[1], shrink=0.8)
+# plt.show()
 
 # %%
 # this may not be needed
@@ -1110,7 +1140,7 @@ ISTCB2 = 54
 # isfropt = 1 is no unsat flow
 # specifies whether unsat flow beneath stream or not, isfropt 2 has properties read for each reach, isfropt 3 also has UHC
 # read for each reach, isfropt 4 has properties read for each segment (no UHC), 5 reads for each segment with UHC
-ISFROPT = 1
+ISFROPT = 1 #3 tried out 3 for quick test of impact on leakage 
 # nstrail (int), number of trailing weave increments used to represent a trailing wave, used to represent a decrease 
 # in the surface infiltration rate. Can be increased to improve mass balance, values between 10-20 work well with error 
 # beneath streams ranging between 0.001 and 0.01 percent, default is 10 (only when isfropt >1)
@@ -1145,9 +1175,9 @@ sfr = flopy.modflow.ModflowSfr2(model = m, nstrm = NSTRM, nss = NSS, nparseg = N
 # %%
 # Add option block at the top of the sfr input file for tabfiles
 # tab_option = flopy.utils.OptionBlock(options_line = ' reachinput transroute tabfiles 1 ' + str(nper), package = sfr, block = True)
-options_line = ' reachinput transroute tabfiles 1 ' + str(nper)
+# options_line = ' reachinput transroute tabfiles 1 ' + str(nper)
 
-# options_line = ' reachinput transroute tabfiles 1 ' + str(nper) + ' no_reach_layer_change'
+options_line = ' reachinput transroute tabfiles 1 ' + str(nper) + ' no_reach_layer_change'
 tab_option = flopy.utils.OptionBlock(options_line = options_line, package = sfr, block = True)
 sfr.options = tab_option
 
@@ -1163,7 +1193,7 @@ sfr_cols = (xs_sfr.column.values-1).astype(int)
 # since the if statement only checks whether the first layer is greater than the streambed elevation, 
 sfr_top = xs_sfr.z_min.values 
 sfr_bot =  sfr_top - soildepth_array[sfr_rows, sfr_cols]
-sfr_lay = get_layer_from_elev(sfr_bot, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
+sfr_lay = get_layer_from_elev(sfr_bot-0.1, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
 
 
 # %%
@@ -1183,7 +1213,8 @@ sfr.reach_data.strtop = sfr_top
 sfr.reach_data.slope = xs_sfr.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
-sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]
+# added additional 1/10 scaling to see if that fixed the issue of excess stream leakage
+sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/2
 
 # UZF parameters
 sfr.reach_data.thts = soiln_array[sfr.reach_data.i, sfr.reach_data.j]/100
@@ -1193,7 +1224,7 @@ sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data
 
 
 # %%
-# sfr.write_file()
+sfr.write_file()
 
 # %%
 mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
@@ -1562,6 +1593,7 @@ if scenario != 'no_reconnection':
     lak.tabdata = True
 
 
+
 # %%
 # lak.write_file()
 
@@ -1571,7 +1603,7 @@ if scenario != 'no_reconnection':
 # %%
 if scenario != 'no_reconnection':
     ibound[lakarr>0] = 0
-    bas = flopy.modflow.ModflowBas(model = m, ibound=ibound, strt = strt, stoper = None) #
+    bas = flopy.modflow.ModflowBas(model = m, ibound=ibound, strt = strt, stoper = None, hnoflo=-999.99) #
 
 # %% [markdown]
 # ## Add Gage for lake output
@@ -1641,12 +1673,13 @@ df_mon['year'] = df_mon.index.year
 df_mon['month'] = df_mon.index.month
 
 df_mon[['row','column']] = df_mon[['row','column']].astype(int)
-# for one year this calculation doesn't take long
+# for one year this calculation doesn't take long (add 1 to make 1-based)
 df_mon['layer'] = get_layer_from_elev(df_mon.value.values, botm[:, df_mon.row, df_mon.column], m.dis.nlay)
-# correct kriged elevations so if head is below cell bottom it is set to the mid elevation of the cell
+# correct kriged elevations so if head is below cell bottom it is removed
 df_mon['botm'] = botm[df_mon.layer, df_mon.row, df_mon.column] 
-df_mon['botm_adj'] = (df_mon.botm + botm[df_mon.layer-1, df_mon.row, df_mon.column])/2
-df_mon.loc[df_mon.value < df_mon.botm, 'value'] = df_mon.loc[df_mon.value < df_mon.botm, 'botm_adj']
+# df_mon['botm_adj'] = (df_mon.botm + botm[df_mon.layer, df_mon.row, df_mon.column])/2
+# df_mon.loc[df_mon.value < df_mon.botm, 'value'] = df_mon.loc[df_mon.value < df_mon.botm, 'botm_adj']
+df_mon = df_mon[df_mon.value > df_mon.botm]
 
 # can calculate nw, se and upstream boundary uniformly
 # just drop row,col on delta boundary
@@ -1661,6 +1694,8 @@ df_mon = df_mon[ibound[df_mon.layer, df_mon.row,df_mon.column].astype(bool)]
 # ghb_ss = df_mon.groupby(['layer','row','column']).mean()
 # use heads that should appear at start for steady state
 ghb_ss = df_mon.loc[strt_date].groupby(['layer','row','column']).mean().reset_index()
+ghb_ss = ghb_ss[ibound[ghb_ss.layer, ghb_ss.row,ghb_ss.column].astype(bool)]
+
 # ghb_ss.value < ghb
 
 
@@ -1671,22 +1706,25 @@ def prep_ghb_df(ghb_df):
     # pull out head for rows and columns
     rows = ghb_df.row.values
     cols = ghb_df.column.values
+    ghb_lay = ghb_df.layer.values
     ghb_hd = ghb_df.set_index(['row','column'])
     head = ghb_hd.loc[list(zip(rows, cols))].value.values
-    ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay)
+    # ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay) #0-based
 
     df = pd.DataFrame(np.zeros((np.sum(nlay - ghb_lay),5)))
     df.columns = ['k','i','j','bhead','cond']
     # get all of the i, j,k indices to reduce math done in the for loop
     n=0
-    nk = -1
+    nk = 0 
     for i, j in list(zip(rows,cols)):
-        nk +=1
         for k in np.arange(ghb_lay[nk], nlay):
             df.loc[n,'i'] = i
             df.loc[n,'j'] = j
             df.loc[n,'k'] = k
             n+=1
+        # update layer sampling location
+        nk +=1
+
     df[['k','i','j']] = df[['k','i','j']].astype(int)
 #     hk = hk[df.k, df.i, df.j] # old hk with cell by cell values
     hk = eff_K.loc[eff_K.name=='HK_Y', 'permeameter'].values[0] # permeameter effective K
@@ -1743,7 +1781,8 @@ ghbdelta_spd.bhead = 0
 ghbdelta_spd.k = xz[:,1]
 ghbdelta_spd.j = 0
 ghbdelta_spd.i = xz[:,0]
-
+# only keep cells where boundary head is above cell botm
+ghbdelta_spd = ghbdelta_spd[ghbdelta_spd.bhead > botm[ghbdelta_spd.k, ghbdelta_spd.i, ghbdelta_spd.j]]
 # drop ghb in inactive cells?
 ghbdelta_spd = ghbdelta_spd[ibound[ghbdelta_spd.k, ghbdelta_spd.i,ghbdelta_spd.j].astype(bool)]
 
@@ -1785,7 +1824,7 @@ ghb = flopy.modflow.ModflowGhb(model=m, stress_period_data =  ghb_dict, ipakcb=5
 # ghb.stress_period_data =  {0: ghbdn_spd}
 
 # %%
-# ghb.check()
+ghb.check()
 # ghb.write_file()
 
 # %%
@@ -2606,6 +2645,8 @@ oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True
 # %%
 # oc.write_file()
 
+# %%
+
 # %% [markdown]
 # ## Newton Solver
 # New version of OHWM requires CONTINUE to be specified before SPECIFIED
@@ -2630,7 +2671,7 @@ nwt_dict['fluxtol'] = 500
     # update NWT sovler parameters
 nwt.__dict__ = nwt_dict
 
-nwt.write_file()
+# nwt.write_file()
 
 # %% [markdown]
 # # Model checks
@@ -2672,8 +2713,6 @@ m.check()
 # %%
 # Writing the MODFLOW data files
 m.write_input()
-
-
 
 
 # %% [markdown]
