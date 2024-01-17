@@ -777,13 +777,6 @@ vka[-2,:,:] = params.loc[5,'K_m_d']/params.loc[5,'vani']
 sy[-2,:,:] = params.loc[5,'Sy']
 ss[-2,:,:] = params.loc[5,'Ss']
 
-# this is causing potentially high water levels in the foothills
-# the deep_geology array shows where the mehrten formation comes out of the surface
-# hk[deep_geology[:,:,:].astype(bool)] = params.loc[7,'K_m_d']
-# vka[deep_geology[:,:,:].astype(bool)] = params.loc[7,'K_m_d']/params.loc[7,'vani'] 
-# sy[deep_geology[:,:,:].astype(bool)] = params.loc[7,'Sy']
-# ss[deep_geology[:,:,:].astype(bool)] = params.loc[7,'Ss']
-
 # set values for bottom layer, Mehrten formation
 hk[-1,:,:] = params.loc[6,'K_m_d']
 vka[-1,:,:] = params.loc[6,'K_m_d']/params.loc[6,'vani'] 
@@ -837,13 +830,6 @@ coarse_cutoff = vka_quants.loc[2,['vka_min','vka_max']].mean() #vka_quants.loc[2
 seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue']
 print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
-
-# model review has shown that stream leakage is the cause of excess heads in the foothills
-# the solution is to scale strhc1 in the foothills by 1/10 or more (over the deep geology generally)
-# seep_vka[adj_lowK_arr[:-2].astype(bool)] /= 10
-# column 150 is just below roooney, where east wells oversimulate
-# seep_vka /= 4 # divide everything by 2
-# seep_vka[:,:,120:] /= 15
 
 # apply additional scaling factors by breaking columns into 5 groups
 stp = int(ncol/5)
@@ -1214,17 +1200,18 @@ sfr.reach_data.slope = xs_sfr.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
 # added additional 1/10 scaling to see if that fixed the issue of excess stream leakage
-sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/2
+strhc_scale = bc_params.loc['strhc_scale', 'StartValue']
+sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
 
 # UZF parameters
 sfr.reach_data.thts = soiln_array[sfr.reach_data.i, sfr.reach_data.j]/100
 sfr.reach_data.thti = sfr.reach_data.thts
 sfr.reach_data.eps = soileps_array[sfr.reach_data.i, sfr.reach_data.j]
-sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]
+sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
 
 
 # %%
-sfr.write_file()
+# sfr.write_file()
 
 # %%
 mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
@@ -1327,7 +1314,7 @@ if scenario != 'no_reconnection':
     div_seg = od_div.iseg.iloc[0]
     ret_seg = od_ret.iseg.iloc[0]
     lak_seg = od_lak.iseg.iloc[0]
-    chan_seg = od_sfr.iseg.iloc[0]
+    # chan_seg = od_sfr.iseg.iloc[0]
     up_seg = div_seg - 1
     chan_seg = ret_seg + 1
     out_seg = od_out.iseg.iloc[0] # still needed?
