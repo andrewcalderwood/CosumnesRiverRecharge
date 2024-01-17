@@ -13,11 +13,11 @@ import matplotlib as mpl
 import flopy
 
 def plt_bc_hk(model, ax, hk=False):
-    if 'LPF' in m.get_package_list():
+    if 'LPF' in model.get_package_list():
         gel_nam = 'LPF'
     else:
         gel_nam = 'UPW'
-    gel = m.__getattr__(gel_nam)
+    gel = model.__getattr__(gel_nam)
     mapview = flopy.plot.PlotMapView(model=model,ax=ax)
 
     # plot the horizontal hydraulic conductivities

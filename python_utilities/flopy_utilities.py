@@ -109,3 +109,28 @@ def zone_clean(cbc,zon,  kstpkper, strt_date):
     zb_mon = zb_df.resample('MS').sum()
     zb_mon['PERCENT_ERROR'] = zb_mon['IN-OUT']/np.mean((zb_mon.TOTAL_IN, zb_mon.TOTAL_OUT), axis=0)
     return(zb_df, zb_mon)
+
+def sfr_load_hds(hdobj, grid_sfr, plt_dates, dt_ref):
+    """ Pull the groundwater elevation from below the stream cells
+    Input:
+    hdobj: flopy head object
+    grid_sfr: pd.dataFrame of reach data
+    plt_dates: list of dates to sample
+    dt_ref: reference between dates and stress periods
+    Output:
+    sfr_heads: heads for each row,column with the sfr layer
+    avg_heads: head averaged for top 10 layers
+    """
+    # runs pretty quickly with hdobj.get_data
+    sfr_heads = np.zeros((len(plt_dates), len(grid_sfr)))
+    avg_heads = np.zeros((len(plt_dates), len(grid_sfr)))
+    for n, plt_date in enumerate(plt_dates):
+        spd = dt_ref.loc[dt_ref.dt==plt_date, 'kstpkper'].values[0]
+    
+        head = hdobj.get_data(spd)
+        head = np.ma.masked_where(head ==-999.99, head)
+        sfr_heads[n,:] = head[grid_sfr.k, grid_sfr.i, grid_sfr.j]
+        # pull head for top 10 layers to compare
+        avg_heads[n,:] = np.mean(head[:10, grid_sfr.i, grid_sfr.j], axis=0)
+    return(sfr_heads, avg_heads)
+

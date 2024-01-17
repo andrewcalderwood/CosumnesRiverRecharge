@@ -609,12 +609,17 @@ kriged = kriged_arr[:, bnd_rows, bnd_cols]
 ## NW is row 0, SE is last row
 kriged_NW = np.vstack((kriged_spring[:,0,:],kriged_fall[:,0,:]))
 kriged_SE = np.vstack((kriged_spring[:,nrow-1,:],kriged_fall[:,nrow-1,:] ))
-fig,ax=plt.subplots(1,2, figsize=(12,4))
+
+fig,ax=plt.subplots(1,2, figsize=(6.5,3), sharey=True, dpi=300)
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[0],linestyle='--')
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[0])
-
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[1],linestyle='--')
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[1])
+ax[0].legend(ncol=5, loc=(0.1, 1.02))
+ax[1].legend().remove()
+ax[0].set_xlabel('Column')
+ax[1].set_xlabel('Column')
+ax[0].set_ylabel('Groundwater elevation (m)')
 
 # %% [markdown]
 # ## Read in TPROGS data
@@ -838,13 +843,7 @@ seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue'
 print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
 
-# model review has shown that stream leakage is the cause of excess heads in the foothills
-# the solution is to scale strhc1 in the foothills by 1/10 or more (over the deep geology generally)
-# seep_vka[adj_lowK_arr[:-2].astype(bool)] /= 10
-# column 150 is just below roooney, where east wells oversimulate
-# seep_vka /= 4 # divide everything by 2
-# seep_vka[:,:,120:] /= 15
-
+# temporary block out to see how fit changes
 # apply additional scaling factors by breaking columns into 5 groups
 stp = int(ncol/5)
 for n in np.arange(0, 5):
@@ -852,6 +851,13 @@ for n in np.arange(0, 5):
 
 # keep laguna/mehrten input constant
 seep_vka[-2:] = np.copy(vka[-2:])
+
+# %%
+substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
+substrate.
+
+# %%
+plt.imshow(seep_vka[0], norm=mpl.colors.LogNorm())
 
 # %%
 coarse = (masked_tprogs==1)|(masked_tprogs==2)
@@ -1214,7 +1220,8 @@ sfr.reach_data.slope = xs_sfr.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
 # added additional 1/10 scaling to see if that fixed the issue of excess stream leakage
-sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/2
+strhc_scale = bc_params.loc['strhc_scale','StartValue']
+sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
 
 # UZF parameters
 sfr.reach_data.thts = soiln_array[sfr.reach_data.i, sfr.reach_data.j]/100
@@ -1224,7 +1231,7 @@ sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data
 
 
 # %%
-sfr.write_file()
+# sfr.write_file()
 
 # %%
 mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
