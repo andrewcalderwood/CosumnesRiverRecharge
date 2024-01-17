@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -65,7 +65,8 @@ add_path(py_dir)
 # from map_cln import gdf_bnds, plt_cln
 import map_obs_plt as mop
 from map_obs_plt import plt_bc_hk, plot_head_simple, plot_dtw_simple
-from map_cln import gdf_bnds
+from map_cln import gdf_bnds, plt_cln
+from report_cln import base_round
 
 from flopy_utilities import zone_clean, reach_data_gdf
 from mf_utility import get_dates, clean_hob
@@ -74,7 +75,7 @@ from mf_utility import get_dates, clean_hob
 
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
-run_dir = 'F://WRDAPP/GWFlowModel'
+=run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
@@ -83,6 +84,9 @@ base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
 model_nam = 'strhc1_scale'
 model_nam = 'parallel_realizations/realization005'
+# model_nam = 'foothill_vani10'
+model_nam = 'strhc1_scale'
+# model_nam = 'sfr_uzf'
 
 model_ws = loadpth+model_nam
 
@@ -118,6 +122,8 @@ lak_grid_clip = gpd.read_file(gwfm_dir+'/Levee_setback/lak_grid_clip/lak_grid_cl
 
 
 # %%
+
+vka = gel.vka.array
 # load sfr data 
 grid_sfr = reach_data_gdf(sfr, grid_p)
 grid_sfr[['row','column']] = grid_sfr[['i','j']] +1 # convert to 1 based to match with SFR output
@@ -159,7 +165,7 @@ cbc = model_ws+'/MF.cbc'
 strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 # round of the steady state period
 dt_ref['dt'] = dt_ref.dt.dt.round('D')
-dt_ref = dt_ref.iloc[1:]
+dt_ref = dt_ref[~dt_ref.steady]
 
 # %%
 rech = m.rch.rech.array[:,0,:,:]
@@ -255,6 +261,54 @@ plt.xlabel('Date')
 
 
 # %% [markdown]
+
+# # general contour check
+
+# %%
+ghb_dir = join(gwfm_dir, 'GHB_data')
+year = 2019 # 2016
+filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
+# convert from ft to meters
+hd_strt = np.loadtxt(filename)*0.3048
+extent = (minx,maxx,miny,maxy)
+
+# %%
+# minx, miny, maxx, maxy = m_domain.geometry.unary_union.bounds
+# extent = (minx, maxx, miny, maxy)
+
+# %%
+fig,ax=plt.subplots(figsize=(8, 8))
+m_domain.plot(ax=ax,color='None')
+mapview = flopy.plot.PlotMapView(model=m,ax=ax)
+
+step=2
+levels = np.arange(base_round(hd_strt.min(),step), base_round(hd_strt.max(),step), step)
+
+cs = mapview.contour_array(hd_strt, levels=levels)
+# CS = plt.contour(gwl_arr, levels= breaks, extent = extent, colors='blue')
+
+# need to do this after calling zoom to avoid negative impacts
+ax.clabel(cs, cs.levels, inline=True, fmt="%2.0f", fontsize=10) #fmt
+plt_cln(ax=ax)
+
+# %%
+y=2019
+s='fall'
+row = 50
+hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
+head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
+head_ma = np.ma.masked_where(head==-999.99, head)  
+hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
+levels = np.arange(hmin, hmax, step)
+plt.plot(head_ma[0][row,:],label='Simulation')
+# plt.plot(head_ma[-2][row,:],label='Simulation Laguna')
+# plt.plot(head_ma[-1][row,:],label='Simulation Mehrten')
+plt.plot(hd_strt[row,:], label='Contour')
+plt.legend()
+print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
+
+
+# %% [markdown]
 # # Sim vs Obs Head
 #
 
@@ -301,6 +355,7 @@ fig_nam = plt_dir+'GSP_WaterBudget/sim_vs_obs_heads'
 
 # %%
 def mak_hob_gpd(hobout, model_ws):
+
     all_obs = pd.read_csv(model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
     all_obs.index = all_obs.index.rename('date')
     all_obs = all_obs.reset_index()
@@ -335,6 +390,7 @@ def mak_hob_gpd(hobout, model_ws):
 # %%
 hob_gpd = mak_hob_gpd(hobout, base_model_ws)
 
+
 hob_seasonal = hob_gpd.groupby(['node','season']).mean(numeric_only=True)
 hob_seasonal = gpd.GeoDataFrame(hob_seasonal, geometry = gpd.points_from_xy(hob_seasonal.easting, hob_seasonal.northing))
 hob_seasonal = hob_seasonal.reset_index()
@@ -358,7 +414,12 @@ print('Sum of absolute difference of OBS and SIM: %.2e' %soswr)
 
 
 # %%
-def plt_hob_map(y, s, nd_chk=None, rch=False, contour=False, hk=False):
+from report_cln import base_round
+from map_cln import plt_cln
+
+
+# %%
+def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False, step=15):
     fig,ax=plt.subplots(figsize=(8, 8))
     m_domain.plot(ax=ax,color='None')
     mapview = flopy.plot.PlotMapView(model=m,ax=ax)
@@ -375,50 +436,55 @@ def plt_hob_map(y, s, nd_chk=None, rch=False, contour=False, hk=False):
 
     hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
 
-    if nd_chk != None:
-        hob_gpd_plt = hob_gpd_plt[hob_gpd_plt.node.isin(nd_chk)]
-    # hob_gpd.plot('error',scheme='EqualInterval', k= 6, ax=ax,legend=True,cmap='magma')
-    hob_gpd_plt.plot('error',markersize='abs_error',scheme='Quantiles', k = 6, ax=ax,
-                      legend=True,cmap='bwr',legend_kwds={'loc':(1.1,0.9),'title':'Error (Obs - Sim)'})
-    hob_gpd_plt.apply(lambda x: ax.annotate(str(x.node), xy=(x.geometry.x, x.geometry.y), ha='right'),axis=1);
-    
+
     # stns[stns.botm_elev > stns.screen_elev].plot(color='red',marker='x',ax=ax)
     grid_sfr.plot(ax=ax,color='black')
     if contour:
-        contour_set = mapview.contour_array(hdobj.get_data((0,int(hob_gpd_plt.spd.mean()))),
-                                    masked_values=[-999.99],  ax=ax)
+        head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
+        head_ma = np.ma.masked_where(head==-999.99, head)  
+        hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
+        levels = np.arange(hmin, hmax, step)
+        contour_set = mapview.contour_array(head_ma,
+                                    masked_values=[-999.99], levels=levels, ax=ax)
         hcb = plt.colorbar(contour_set, shrink = 0.5,ax=ax)
         hcb.set_label('Head (m)')
         ax.clabel(contour_set, contour_set.levels[0::], inline=True, fontsize=8)
 #     foothills.plot(ax=ax, alpha=0.5, edgecolor='black', color='grey')
+
+    if nd_chk != None:
+        hob_gpd_plt = hob_gpd_plt[hob_gpd_plt.node.isin(nd_chk)]
+    if hob:
+        # hob_gpd.plot('error',scheme='EqualInterval', k= 6, ax=ax,legend=True,cmap='magma')
+        hob_gpd_plt.plot('error',markersize='abs_error',scheme='Quantiles', k = 6, ax=ax,
+                          legend=True,cmap='bwr',legend_kwds={'loc':(1.1,0.9),'title':'Error (Obs - Sim)'})
+        hob_gpd_plt.apply(lambda x: ax.annotate(str(x.node), xy=(x.geometry.x, x.geometry.y), ha='right'),axis=1);
     
-    gdf_bnds(hob_gpd_plt, ax=ax, buf=2E3)
-    return(hob_gpd_plt)
+        gdf_bnds(hob_gpd_plt, ax=ax, buf=2E3)
+        return(hob_gpd_plt)
+    plt_cln(ax=ax)
+    return None
 
     # ax.legend(loc=(1,0.5))
 
 
+# %%
+# plot plain contours for reference
+# hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=False, step=5)
 
 # %%
-hob_gpd_plt = plt_hob_map(2019, 'fall', rch=False, contour=False, hk=False)
-
-# %%
-nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
-# nd_chk = [2926, 8437, 12944, 13407]
-nd_chk = [15314, 15343, 13407, 12944, 14626]
-nd_chk = [6458, 8437, 9580, 11448, 15314, 20055]
-# nd_chk = [6458, 8437, 9580, 10884, 11448]
-hob_gpd_chk = plt_hob_map(2019, 'fall', nd_chk=nd_chk, rch=True, contour=False)
+# nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
+# # nd_chk = [2926, 8437, 12944, 13407]
+# nd_chk = [15314, 15343, 13407, 12944, 14626]
+# nd_chk = [6458, 8437, 9580, 11448, 15314, 20055]
+# # nd_chk = [6458, 8437, 9580, 10884, 11448]
+# hob_gpd_chk = plt_hob_map(2019, 'fall', nd_chk=nd_chk, rch=True, contour=False)
 
 
 # %%
-df_chk = hob_gpd_chk.groupby('node').mean(numeric_only=True)
-df_chk['rech'] = rech.sum(axis=0)[df_chk.row.astype(int)-1, df_chk.column.astype(int)-1]
-df_chk[['sim_val','obs_val','avg_screen_depth', 'hk', 'rech', 'layer','abs_error']]
-
-# %%
-
-
+# df_chk = hob_gpd_chk.groupby('node').mean(numeric_only=True)
+# df_chk['rech'] = rech.sum(axis=0)[df_chk.row.astype(int)-1, df_chk.column.astype(int)-1]
+# df_chk[['sim_val','obs_val','avg_screen_depth', 'hk', 'rech', 'layer','abs_error']]
 
 # %%
 hobout = load_hob(model_ws)
@@ -449,6 +515,19 @@ sns.relplot(hob_long.dropna(subset='value'), x='date',y='value',
            facet_kws={'sharex':True, 'sharey':False}
            )
 
+
+# %% [markdown]
+
+# ### review observation details
+
+# %%
+node = [16733, 15314, 15343]
+# node=[6085, 6458, 20055]
+stn_chk = stns[stns.node.isin(node)].copy()
+cols = ['site_code','node','agency','wlm_gse', 'dem_elev', 'layer', 'hk', 'row','column']
+cols = ['node','wlm_gse','top_prf_int','bot_prf_int', 'interp_depth','screen_elev' ]
+stn_chk[cols]
+# # stn_chk.columns
 
 # %% [markdown]
 # ## cross-section
@@ -495,6 +574,7 @@ wt = mcs.plot_surface(a=head_new[:,:,:],color='red')
 plt.xlabel('Distance from southwestern edge (m)')
 plt.ylabel('Elevation (m)')
 
+
 # %%
 head_new[-1,50,173], head_new[-1,50,200], head_new[-1,50,229]
 
@@ -504,61 +584,16 @@ head_new[-1,50,175::5]
 # %%
 hob_gpd_chk[hob_gpd_chk.node==16733].column
 
-
 # %% [markdown]
 # # Plot stream water budget
 
 # %%
-def sfr_load_hds(hdobj, grid_sfr, plt_dates, dt_ref):
-    # runs pretty quickly with hdobj.get_data
-    sfr_heads = np.zeros((len(plt_dates), len(grid_sfr)))
-    avg_heads = np.zeros((len(plt_dates), len(grid_sfr)))
-    for n, plt_date in enumerate(plt_dates):
-        spd = dt_ref.loc[dt_ref.dt==plt_date, 'kstpkper'].values[0]
-    
-        head = hdobj.get_data(spd)
-        head = np.ma.masked_where(head ==-999.99, head)
-        sfr_heads[n,:] = head[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-        # pull head for top 10 layers to compare
-        avg_heads[n,:] = np.mean(head[:10, grid_sfr.i, grid_sfr.j], axis=0)
-    return(sfr_heads, avg_heads)
 
-
+from mf_utility import clean_sfr_df
+from flopy_utilities import sfr_load_hds
 
 # %%
-
-def clean_sfr_df(model_ws, pd_sfr=None):
-    sfrout = flopy.utils.SfrFile(join(model_ws, m.name+'.sfr.out'))
-    sfrdf = sfrout.get_dataframe()
-    sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
-    # convert from sub-daily to daily using mean, lose kstpkper
-    sfrdf = sfrdf.groupby(['segment','reach']).resample('D').mean(numeric_only=True)
-    sfrdf = sfrdf.reset_index(['segment','reach'], drop=True)
-    sfrdf[['row','column']]-=1 # convert to python
-    sfrdf['month'] = sfrdf.index.month
-    sfrdf['WY'] = sfrdf.index.year
-    sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
-    # add column to track days with flow
-    sfrdf['flowing'] = 1
-    sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
-    if pd_sfr is not None:
-    #     sfrdf = pd_sfr.join(sfrdf.set_index(['row','column']),on=['row','column'],how='inner',lsuffix='_all')
-        sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
-
-    # create different column for stream losing vs gaining seeapge
-    sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
-    sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    if 'gradient' in sfrdf.columns:
-        # booleans for plotting
-        sfrdf['gaining'] = (sfrdf.gradient == 0)
-        sfrdf['losing'] = (sfrdf.gradient >= 0)
-        sfrdf['connected'] = (sfrdf.gradient < 1)
-    return(sfrdf)
-
-
-
-# %%
-sfrdf = clean_sfr_df(model_ws, pd_sfr)
+sfrdf = clean_sfr_df(model_ws, dt_ref, pd_sfr)
 # drop routing segments
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
 
@@ -568,32 +603,25 @@ plt_dates = pd.date_range('2017-1-1','2017-4-1')
 sfr_heads, avg_heads = sfr_load_hds(hdobj, grid_sfr[~grid_sfr.iseg.isin(drop_iseg)], plt_dates, dt_ref)
 
 # %%
-var = ['Qrech','Qbase', 'Qout','stage', 'depth']
+
+var = ['Qrech','Qbase', 'Qout','stage']
+label=['Stream\nLosses ($m^3/d$)', 'Stream\nBaseflow ($m^3/d$)','Streamflow\n($m^3/d$)', 'Elevation (m)']
 fig, ax = plt.subplots(len(var)+1, 1, sharex=True, figsize=(6.5,8),dpi=300)
-pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0])
-pd_sfr.plot(x='Total distance (m)', y='vka', ax=ax[0])
+pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0], legend=False)
+ax[0].set_ylabel('Stream \n$K_{vert}$ (m/d)')
+# pd_sfr.plot(x='Total distance (m)', y='vka', ax=ax[0])
 ax[0].set_yscale('log')
-ax[-2].plot(pd_sfr['Total distance (m)'], sfr_heads[0], label='GWE')
+ax[4].plot(pd_sfr['Total distance (m)'], sfr_heads[0], label='GWE')
 for n, v in enumerate(var):
-    sfrdf.loc[plt_dates].groupby('Total distance (m)').mean(numeric_only=True).plot(y=v, ax=ax[n+1], legend=False)
-    # sfrdf.groupby('Total distance (m)').mean(numeric_only=True).reset_index().plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
-    ax[n+1].set_ylabel(v)
-ax[-2].legend()
+    # sfrdf.loc[plt_dates].groupby('Total distance (m)').mean(numeric_only=True).plot(y=v, ax=ax[n+1], legend=False)
+    sfrdf.groupby('Total distance (m)').mean(numeric_only=True).reset_index().plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
+    ax[n+1].set_ylabel(label[n])
+ax[4].legend()
 # sfrdf.loc[plt_date].plot(x='Total distance (m)', y='Qout')
 
 # %%
 sfr_sum = sfrdf.groupby(['segment','reach','row','column','layer']).mean(numeric_only=True).reset_index()
 # sfr_seg_sum = sfrdf.groupby(['segment']).mean().reset_index()
-
-# %%
-fig,ax = plt.subplots()
-# grid_p.merge(sfr_sum, on=['row','column']).plot('Qin', legend=True)
-grid_p.merge(sfr_sum, on=['row','column']).plot('Qaquifer', legend=True, ax=ax)
-# hob_gpd_chk.plot('Error', ax=ax, legend=True)
-hob_gpd_chk.plot('error',markersize='abs_error',scheme='Quantiles', k = 6, ax=ax,
-                  legend=True,cmap='bwr',legend_kwds={'loc':(1.2,0.8),'title':'Error (Obs - Sim)'})
-hob_gpd_chk.apply(lambda x: ax.annotate(str(x.node), xy=(x.geometry.x, x.geometry.y), ha='right'),axis=1);
-gdf_bnds(hob_gpd_chk, ax=ax, buf = 1E3)
 
 # %%
 sfrdf_sum = sfrdf.resample('D').mean(numeric_only=True)
@@ -610,6 +638,44 @@ for n, v in enumerate(var):
     sfrdf_sum.plot( y=v, ax=ax[n], legend=False)
     ax[n].set_ylabel(v)
 
+
+# %% [markdown]
+#
+
+# %%
+# flow is based on old rating curve
+mcc_flow = pd.read_csv(join(sfr_dir,'MCC_flow_obs_all.csv'), parse_dates=['DATE TIME'])
+mcc_flow = mcc_flow.set_index('DATE TIME')
+# mcc_flow.plot(x='DATE TIME',y='flow_cfs')
+# I had cleaned the stage data before translating it to flows because it isn't ready to use as is
+# mcc_stage = pd.read_csv(join(sfr_dir,'McConnell_stage_2000_01_01_to_2020_12_31.csv'), 
+#                         parse_dates=['DATE TIME'], na_values='---')
+
+
+# %%
+sensors = pd.read_csv(join(gwfm_dir, 'Mapping', 'allsensor_latlong.csv'))
+sensors = gpd.GeoDataFrame(sensors, geometry=gpd.points_from_xy(sensors.Longitude, sensors.Latitude),
+                           crs='epsg:4326').to_crs(grid_sfr.crs)
+grid_MCC = gpd.sjoin_nearest(grid_sfr, sensors[sensors.Site_id=='MCC'], how='right')
+# subset relevant columns to plot flows at MCC
+grid_MCC = grid_MCC[['iseg','ireach','strtop','slope','k','i','j','Elev_m_MSL']].iloc[0]
+# grid_MCC.columns
+
+# %%
+mcc_flow_plt = mcc_flow[mcc_flow.index.isin(sfrdf_MCC.index)]
+mcc_flow_plt = mcc_flow_plt.reindex(sfrdf_MCC.index)
+
+# %%
+sfrdf_MCC = sfrdf[(sfrdf.segment==grid_MCC.iseg)&(sfrdf.reach==grid_MCC.ireach)]
+fig,ax = plt.subplots()
+sfrdf_MCC.Qout.plot(ax=ax, label='Simulated')
+mcc_flow_plt.plot(y='flow_cmd', ax=ax, label='Observed')
+plt.legend()
+ax.set_yscale('log')
+
+
+# %% [markdown]
+# It makes sense that flows are below the observed because we don't have Deer Creek in the system.
 
 # %% [markdown]
 # # Zone budget check
@@ -659,4 +725,3 @@ zon_arr[zon_cells.row-1,zon_cells.column-1]=1
 # %%
 all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)
 
-# %%

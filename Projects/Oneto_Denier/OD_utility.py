@@ -12,6 +12,7 @@ import pandas as pd
 import os
 from os.path import join, exists
 
+# requires GitHub flopy to be added to path
 import flopy
 
 #%% Model development

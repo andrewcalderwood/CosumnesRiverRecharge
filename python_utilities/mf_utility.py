@@ -106,6 +106,10 @@ def get_dates(dis, ref='end'):
     # add column to specify water year
     dt_ref['wy'] = dt_ref.dt.dt.year
     dt_ref.loc[dt_ref.dt.dt.month>=10, 'wy']+=1
+    # specify whether a stress period is steady state
+    dt_ref['steady'] = False
+    dt_ref.loc[dis.steady.array, 'steady']=True
+
 
     return(strt_date, end_date, dt_ref)
     
@@ -181,9 +185,10 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     # create different column for stream losing vs gaining seeapge
     sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
     sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    # booleans for plotting
-    sfrdf['gaining'] = (sfrdf.gradient == 0)
-    sfrdf['losing'] = (sfrdf.gradient >= 0)
-    sfrdf['connected'] = (sfrdf.gradient < 1)
+    if 'gradient' in sfrdf.columns:
+        # booleans for plotting
+        sfrdf['gaining'] = (sfrdf.gradient == 0)
+        sfrdf['losing'] = (sfrdf.gradient >= 0)
+        sfrdf['connected'] = (sfrdf.gradient < 1)
     return(sfrdf)
 
