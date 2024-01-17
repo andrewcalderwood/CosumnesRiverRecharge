@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -75,7 +75,7 @@ from mf_utility import get_dates, clean_hob
 
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
-=run_dir = 'F://WRDAPP/GWFlowModel'
+run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
@@ -85,10 +85,11 @@ base_model_ws = join(loadpth, model_nam)
 model_nam = 'strhc1_scale'
 model_nam = 'parallel_realizations/realization005'
 # model_nam = 'foothill_vani10'
-model_nam = 'strhc1_scale'
+# model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
 
 model_ws = loadpth+model_nam
+print(model_nam)
 
 
 # %%
@@ -122,18 +123,18 @@ lak_grid_clip = gpd.read_file(gwfm_dir+'/Levee_setback/lak_grid_clip/lak_grid_cl
 
 
 # %%
-
+sfr = m.sfr
 vka = gel.vka.array
 # load sfr data 
 grid_sfr = reach_data_gdf(sfr, grid_p)
 grid_sfr[['row','column']] = grid_sfr[['i','j']] +1 # convert to 1 based to match with SFR output
 drop_iseg = grid_sfr[grid_sfr.strhc1==0].iseg.values
 grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-vka_quants = pd.read_csv(join(model_ws, 'vka_quants.csv'))
-
+vka_quants = pd.read_csv(join(base_model_ws, 'vka_quants.csv'))
+grid_sfr['facies'] = ''
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
-    grid_sfr.loc[(sfr_vka< facies.vka_max)&(sfr_vka>= facies.vka_min),'facies'] = facies.facies
+    grid_sfr.loc[(grid_sfr.vka< facies.vka_max)&(grid_sfr.vka>= facies.vka_min),'facies'] = facies.facies
     # add color for facies plots
 
 # drop routing segments before calculating distances
@@ -143,7 +144,7 @@ pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
 
 
 # %%
-all_obs = pd.read_csv(model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
+all_obs = pd.read_csv(base_model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
 all_obs.index = all_obs.index.rename('date')
 all_obs = all_obs.reset_index()
 
@@ -184,7 +185,6 @@ pump_rate = pump/(m.dis.delr[0]*m.dis.delc[0])
 # %%
 # plt.imshow(rech.mean(axis=0), vmax=0.001)
 # plt.imshow(pump_rate.mean(axis=0), vmax=0.005)
-
 # plt.colorbar(shrink=0.6)
 
 # %% [markdown]
@@ -258,54 +258,6 @@ ax[0].set_ylabel('Inflow\n($10^6 m^3/day$)')
 ax[1].set_ylabel('Outflow\n($10^6 m^3/day$)')
 plt.xlabel('Date')
 # plt.savefig(join(plt_dir, 'total_water_budget_time_series.png'),  bbox_inches='tight')
-
-
-# %% [markdown]
-
-# # general contour check
-
-# %%
-ghb_dir = join(gwfm_dir, 'GHB_data')
-year = 2019 # 2016
-filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
-# convert from ft to meters
-hd_strt = np.loadtxt(filename)*0.3048
-extent = (minx,maxx,miny,maxy)
-
-# %%
-# minx, miny, maxx, maxy = m_domain.geometry.unary_union.bounds
-# extent = (minx, maxx, miny, maxy)
-
-# %%
-fig,ax=plt.subplots(figsize=(8, 8))
-m_domain.plot(ax=ax,color='None')
-mapview = flopy.plot.PlotMapView(model=m,ax=ax)
-
-step=2
-levels = np.arange(base_round(hd_strt.min(),step), base_round(hd_strt.max(),step), step)
-
-cs = mapview.contour_array(hd_strt, levels=levels)
-# CS = plt.contour(gwl_arr, levels= breaks, extent = extent, colors='blue')
-
-# need to do this after calling zoom to avoid negative impacts
-ax.clabel(cs, cs.levels, inline=True, fmt="%2.0f", fontsize=10) #fmt
-plt_cln(ax=ax)
-
-# %%
-y=2019
-s='fall'
-row = 50
-hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
-head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
-head_ma = np.ma.masked_where(head==-999.99, head)  
-hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
-levels = np.arange(hmin, hmax, step)
-plt.plot(head_ma[0][row,:],label='Simulation')
-# plt.plot(head_ma[-2][row,:],label='Simulation Laguna')
-# plt.plot(head_ma[-1][row,:],label='Simulation Mehrten')
-plt.plot(hd_strt[row,:], label='Contour')
-plt.legend()
-print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
 
 
 # %% [markdown]
@@ -470,7 +422,7 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 # %%
 # plot plain contours for reference
 # hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=True, contour=True, hk=False, step=5)
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -489,7 +441,7 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=F
 # %%
 hobout = load_hob(model_ws)
 
-hob_gpd = mak_hob_gpd(hobout)
+hob_gpd = mak_hob_gpd(hobout, base_model_ws)
 # find sites with long time series of OBS
 hobs_long = (hob_gpd.groupby('site_code').count()>=int(m.dis.nper/365)*2)
 hobs_long = hobs_long.index[hobs_long.obs_val].values
@@ -517,7 +469,7 @@ sns.relplot(hob_long.dropna(subset='value'), x='date',y='value',
 
 
 # %% [markdown]
-
+#
 # ### review observation details
 
 # %%
@@ -528,6 +480,54 @@ cols = ['site_code','node','agency','wlm_gse', 'dem_elev', 'layer', 'hk', 'row',
 cols = ['node','wlm_gse','top_prf_int','bot_prf_int', 'interp_depth','screen_elev' ]
 stn_chk[cols]
 # # stn_chk.columns
+
+# %% [markdown]
+#
+# # general contour check
+
+# %%
+ghb_dir = join(gwfm_dir, 'GHB_data')
+year = 2019 # 2016
+filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
+# convert from ft to meters
+hd_strt = np.loadtxt(filename)*0.3048
+
+
+# %%
+# minx, miny, maxx, maxy = m_domain.geometry.unary_union.bounds
+# extent = (minx, maxx, miny, maxy)
+
+# %%
+fig,ax=plt.subplots(figsize=(6.5, 6.5))
+m_domain.plot(ax=ax,color='None')
+mapview = flopy.plot.PlotMapView(model=m,ax=ax)
+
+step=2
+levels = np.arange(base_round(hd_strt.min(),step), base_round(hd_strt.max(),step), step)
+
+cs = mapview.contour_array(hd_strt, levels=levels)
+# CS = plt.contour(gwl_arr, levels= breaks, extent = extent, colors='blue')
+
+# need to do this after calling zoom to avoid negative impacts
+ax.clabel(cs, cs.levels, inline=True, fmt="%2.0f", fontsize=10) #fmt
+plt_cln(ax=ax)
+
+# %%
+y=2019
+s='fall'
+row = 50
+hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
+head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
+head_ma = np.ma.masked_where(head==-999.99, head)  
+hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
+levels = np.arange(hmin, hmax, step)
+plt.plot(head_ma[0][row,:],label='Simulation')
+# plt.plot(head_ma[-2][row,:],label='Simulation Laguna')
+# plt.plot(head_ma[-1][row,:],label='Simulation Mehrten')
+plt.plot(hd_strt[row,:], label='Contour')
+plt.legend()
+print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
+
 
 # %% [markdown]
 # ## cross-section
@@ -613,8 +613,8 @@ ax[0].set_ylabel('Stream \n$K_{vert}$ (m/d)')
 ax[0].set_yscale('log')
 ax[4].plot(pd_sfr['Total distance (m)'], sfr_heads[0], label='GWE')
 for n, v in enumerate(var):
-    # sfrdf.loc[plt_dates].groupby('Total distance (m)').mean(numeric_only=True).plot(y=v, ax=ax[n+1], legend=False)
-    sfrdf.groupby('Total distance (m)').mean(numeric_only=True).reset_index().plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
+    sfrdf.loc[plt_dates].groupby('Total distance (m)').mean(numeric_only=True).plot(y=v, ax=ax[n+1], legend=False)
+    # sfrdf.groupby('Total distance (m)').mean(numeric_only=True).reset_index().plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
     ax[n+1].set_ylabel(label[n])
 ax[4].legend()
 # sfrdf.loc[plt_date].plot(x='Total distance (m)', y='Qout')

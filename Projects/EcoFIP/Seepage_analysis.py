@@ -20,9 +20,7 @@ from os.path import basename, dirname, join, exists
 import sys
 from importlib import reload
 import glob
-import pandas as pd
-import numpy as np
-import calendar
+from importlib import reload
 import time
 
 # standard python plotting utilities
@@ -32,21 +30,11 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 # standard geospatial python utilities
-# import pyproj # for converting proj4string
-# import shapely
+import pandas as pd
+import numpy as np
 import geopandas as gpd
 import rasterio
 
-# mapping utilities
-import contextily as ctx
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-import matplotlib.font_manager as fm
-from matplotlib.ticker import MaxNLocator
-
-# import flopy
-# import flopy.utils.binaryfile as bf
-from importlib import reload
 
 
 # %%
@@ -60,6 +48,7 @@ gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 
 bas_dir = join(gwfm_dir, 'BAS6')
 proj_dir = join(gwfm_dir,'EcoFIP')
+out_dir = join(proj_dir, 'output')
 plt_dir = join(proj_dir,'figures/')
 
 
@@ -86,16 +75,19 @@ from mf_utility import get_dates, clean_hob
 
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
-# run_dir = 'F://WRDAPP/GWFlowModel'
+run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
+base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
-model_nam = 'strhc1_scale'
+# model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
+model_nam = 'parallel_realizations/realization005'
 
 model_ws = loadpth+model_nam
+print(model_nam)
 
 
 # %%
@@ -120,6 +112,11 @@ dt_ref['dt'] = dt_ref.dt.dt.round('D')
 dt_ref = dt_ref[~dt_ref.steady]
 
 # %%
+# realizations to present the results for
+best10 = pd.read_csv(join(gwfm_dir, 'Regional','top_10_accurate_realizations.csv'))
+
+
+# %%
 sfr_dir = gwfm_dir+'/SFR_data/'
 m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
 grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
@@ -137,18 +134,24 @@ grid_sfr = reach_data_gdf(m.sfr, grid_p)
 grid_sfr[['row','column']] = grid_sfr[['i','j']] +1 # convert to 1 based to match with SFR output
 drop_iseg = grid_sfr[grid_sfr.strhc1==0].iseg.values
 grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-vka_quants = pd.read_csv(join(model_ws, 'vka_quants.csv'))
-
+vka_quants = pd.read_csv(join(base_model_ws, 'vka_quants.csv'))
+grid_sfr['facies'] = 'Mud'
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
     grid_sfr.loc[(grid_sfr.vka< facies.vka_max)&(grid_sfr.vka>= facies.vka_min),'facies'] = facies.facies
     # add color for facies plots
 
 # drop routing segments before calculating distances
-pd_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
-pd_sfr = pd_sfr.set_index(['iseg','ireach'])[['rchlen','strtop','strhc1', 'vka', 'facies']]
-pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
+gdf_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
+gdf_sfr = gdf_sfr.set_index(['iseg','ireach'])[['rchlen','strtop','strhc1', 'vka', 'facies', 'geometry']]
+gdf_sfr['Total distance (m)'] = gdf_sfr['rchlen'].cumsum()
+pd_sfr = pd.DataFrame(gdf_sfr.drop(columns=['geometry']))
 
+
+# %%
+# cleaned version of sfr reach data to save for EcoFIP reference
+gdf_sfr_out = gdf_sfr.drop(columns=['strhc1','vka','facies']).rename(columns={'Total distance (m)':'dist_m'})
+gdf_sfr_out.to_file(join(proj_dir, 'GIS','sfr_reach_reference.shp'))
 
 # %%
 from mf_utility import clean_sfr_df
@@ -184,6 +187,7 @@ mon_chk.boxplot(by='month',column='Qaquifer_rate', ax=ax[1])
 cols = ['Qaquifer','Qaquifer_rate']
 cv = (mon_chk.groupby('month').std()[cols]/mon_chk.groupby('month').mean())[cols]
 
+
 # %% [markdown]
 # The box plot shows there is significant variability due to varying hydrologic conditions, especially streamflow. Now consider if this diminishes after scaling by wetted area.
 # - when plotted on a rate scale (m/day) it's clearer that the variablity among water years and seasons is much smaller since it is within an order of magnitude. the coefficient of variation went down as well
@@ -206,4 +210,85 @@ mon_chk.plot(x='depth',y='Qaquifer_rate', kind='scatter',ax=ax)
 # ax.set_xscale('log')
 # ax.set_yscale('log')
 
+# %% [markdown]
+# # Output across realizations
+# It's pretty slow (minutes) to load the 10 realizations and post-process (10s of seconds) them. It might make sense to process indiviudal
+
 # %%
+grp_cols = ['segment','reach', 'realization', 'Total distance (m)']
+
+# simplify columns for output 
+keep_cols = np.append(grp_cols, ['dt','Qin','Qaquifer','Qout', 'Qaquifer_rate', 'width','depth'])
+
+
+# %%
+sfrdf_all = pd.DataFrame()
+for r in best10.realization.values:
+    r_ws = join(loadpth, 'parallel_realizations','realization'+str(r).zfill(3))
+    sfrdf = clean_sfr_df(r_ws, dt_ref, pd_sfr)
+    sfrdf_all = pd.concat((sfrdf_all, sfrdf.assign(realization=r)))
+
+# %%
+# drop routing segments
+sfrdf_all = sfrdf_all[~sfrdf_all.segment.isin(drop_iseg)]
+# calculate the effective rate of seepage
+sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
+
+# %%
+# about 220 MB
+sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
+                              key='monthly', complevel=4, data_columns = grp_cols)
+
+# %%
+sfr_mon_all = sfrdf_all.groupby(grp_cols).resample('MS').mean(numeric_only=True).drop(columns=grp_cols)
+sfr_mon_all = sfr_mon_all.reset_index()
+sfr_mon_all['month'] = sfr_mon_all.dt.dt.month
+
+# %%
+# produces file of 6 MB without data_columns
+# file of 12 MB with data columns of grp_cols
+sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
+                              key='monthly', complevel=4, data_columns = grp_cols)
+
+# %%
+# sfr_mon_chk = pd.read_hdf(join(out_dir,'sfrdf_mon_all.hdf5'), key='monthly')
+
+# %%
+# get average across time to plot spatial view
+sfr_avg_all = sfr_mon_all.groupby(grp_cols).mean(numeric_only=True).reset_index()
+
+# %%
+sfr_avg = sfr_mon_all.groupby(['segment','reach']).mean(numeric_only=True).reset_index()
+sfr_std = sfr_mon_all.groupby(['segment','reach']).std(numeric_only=True).reset_index()
+sfr_cv = sfr_std.Qaquifer_rate/sfr_avg.Qaquifer_rate
+
+# %%
+from report_cln import magnitude
+
+# %%
+fig,ax = plt.subplots()
+for r in best10.realization.values:
+    sfr_plt = sfr_avg_all.loc[sfr_avg_all.realization==r]
+    sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False)
+    
+ax.set_yscale('log')
+ax.set_ylim(1E-2, 10**(magnitude(sfr_avg_all.Qaquifer_rate.max())+1))
+ax.set_ylabel('Stream loss rate (m/day)')
+sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--')
+
+# %% [markdown]
+# - 230 column/5 is 46 so the first 46 rows don't have a scaling
+# - the shift in CV is around 160 which is still at column 100
+# - the first region with no 1/5 strhc scaling starts at reach 220
+# - ultimately there is an impact because that region has more high values
+# - throughout the rest of the domain there is lower seepage in the upper reaches because of the way the geologic model was sliced which shows more continuous coarse facies outcropping in the lower lying floodplain region
+#     - this could also be driven by the conditioning data over-applying fines?
+#     
+# **It would take 4 hours to run the models again with a constant strhc scalar**
+
+# %%
+print('Max column after reach 160 was %.i' %grid_sfr.iloc[160:].column.max())
+print('First reach before column 46 was %.i ' %grid_sfr[grid_sfr.column<46].index.min())
+
+# %%
+sfr_cv.plot()

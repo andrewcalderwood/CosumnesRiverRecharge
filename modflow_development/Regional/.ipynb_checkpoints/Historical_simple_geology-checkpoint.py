@@ -609,12 +609,17 @@ kriged = kriged_arr[:, bnd_rows, bnd_cols]
 ## NW is row 0, SE is last row
 kriged_NW = np.vstack((kriged_spring[:,0,:],kriged_fall[:,0,:]))
 kriged_SE = np.vstack((kriged_spring[:,nrow-1,:],kriged_fall[:,nrow-1,:] ))
-fig,ax=plt.subplots(1,2, figsize=(12,4))
+
+fig,ax=plt.subplots(1,2, figsize=(6.5,3), sharey=True, dpi=300)
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[0],linestyle='--')
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[0])
-
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[1],linestyle='--')
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[1])
+ax[0].legend(ncol=5, loc=(0.1, 1.02))
+ax[1].legend().remove()
+ax[0].set_xlabel('Column')
+ax[1].set_xlabel('Column')
+ax[0].set_ylabel('Groundwater elevation (m)')
 
 # %% [markdown]
 # ## Read in TPROGS data
@@ -831,6 +836,7 @@ seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue'
 print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
 
+
 # apply additional scaling factors by breaking columns into 5 groups
 stp = int(ncol/5)
 for n in np.arange(0, 5):
@@ -838,6 +844,13 @@ for n in np.arange(0, 5):
 
 # keep laguna/mehrten input constant
 seep_vka[-2:] = np.copy(vka[-2:])
+
+# %%
+# substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
+# substrate.
+
+# %%
+plt.imshow(seep_vka[0], norm=mpl.colors.LogNorm())
 
 # %%
 coarse = (masked_tprogs==1)|(masked_tprogs==2)
@@ -1201,6 +1214,7 @@ sfr.reach_data.slope = xs_sfr.slope.values
 sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
 # added additional 1/10 scaling to see if that fixed the issue of excess stream leakage
 strhc_scale = bc_params.loc['strhc_scale', 'StartValue']
+
 sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
 
 # UZF parameters
@@ -1529,6 +1543,9 @@ bdlknc = (lkbd_K/lkbd_thick)/bc_params.loc['bdlknc_scale', 'StartValue'] #, acco
 
 
 # %%
+# bc_params.loc['bdlknc_scale','StartValue']
+
+# %%
 lak_active = (np.sum(lakarr,axis=0)>0) # cells where lake is active
 
 # %%
@@ -1750,6 +1767,8 @@ distance = 5000
 # Silt, loess	1×10-9 to 2×10-5 m/s
 # delta soils have some sand mixed in
 delta_hk = (2E-4) *86400
+# or use calculated value from permeameter
+# delta_hk = eff_K.loc[eff_K.name=='HK', 'permeameter'].values[0]
 
 ghbdelta_spd = pd.DataFrame(np.zeros(((nlay*nrow),5)))
 ghbdelta_spd.columns = ['k','i','j','bhead','cond']
@@ -1772,6 +1791,10 @@ ghbdelta_spd.i = xz[:,0]
 ghbdelta_spd = ghbdelta_spd[ghbdelta_spd.bhead > botm[ghbdelta_spd.k, ghbdelta_spd.i, ghbdelta_spd.j]]
 # drop ghb in inactive cells?
 ghbdelta_spd = ghbdelta_spd[ibound[ghbdelta_spd.k, ghbdelta_spd.i,ghbdelta_spd.j].astype(bool)]
+
+# %%
+# comparing delta HK to calculated
+# delta_hk, eff_K.loc[eff_K.name=='HK', 'permeameter'].values[0]
 
 # %%
 # write to csv for use in UCODE file edits
@@ -2087,35 +2110,6 @@ n=6
 from swb_utility import load_swb_data, yr_lim_from_dates
 
 # %%
-# def load_swb_data(strt_date, end_date, param, uzf_dir):
-#     """Returns data in an array format with the first dimension for time
-#     and then either a 1D or 2D array representing fields or model grid cells"""
-#     nper_tr = (end_date-strt_date).days+1
-# #     nrow_p,ncol_p = (100,230)
-# #     param_arr = np.zeros((nper_tr, nrow_p,ncol_p))
-#     # years and array index, include extra year in index to fully index years
-#     years = pd.date_range(strt_date,end_date+pd.DateOffset(years=1),freq='AS-Oct')
-#     yr_ind = (years-strt_date).days
-#     years= years[:-1].year
-#     # need separte hdf5 for each year because total is 300MB
-#     for n, y in enumerate(years):
-#     # for n in np.arange(0,len(yr_ind)-1):
-#         ind_strt, ind_end = yr_lim_from_dates(y, strt_date, end_date)
-#         # fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(years[n].year+1)+".hdf5")
-#         fn = join(uzf_dir, 'basic_soil_budget',param+"_WY"+str(y+1)+".hdf5")
-#         with h5py.File(fn, "r") as f:
-#             # load first dataset then allocate array
-#             if n == 0:
-#                 dim  = list(f['array']['WY'].shape)
-#                 dim[0] = nper_tr
-#                 param_arr = np.zeros(dim)
-#             arr = f['array']['WY'][:]
-#             # print(y)
-#             # print(yr_ind[n]+ind_strt, yr_ind[n]+ind_end)
-#             param_arr[yr_ind[n]+ind_strt:yr_ind[n]+ind_end] = arr[ind_strt:ind_end]
-    # return(param_arr)
-
-# %%
 perc = load_swb_data(strt_date, end_date, 'field_percolation', uzf_dir)
 
 # perc = load_swb_data(strt_date, end_date, 'percolation')
@@ -2158,8 +2152,10 @@ adj_perc_ss = ss_perc.copy().mean(axis=0)
 adj_perc_ss[et_rain_bool] = rain_arr_ss[et_rain_bool]
 
 # %%
-# why is the adjusted percolation so high along the river?
-plt.imshow(adj_perc.mean(axis=0))
+# review percolation
+# plt.imshow(adj_perc.mean(axis=0))
+# plt.imshow(rch.rech.array[:,0,:].mean(axis=0))
+# adj_perc.max()
 
 # %%
 # have transient recharge start after the 1st spd
