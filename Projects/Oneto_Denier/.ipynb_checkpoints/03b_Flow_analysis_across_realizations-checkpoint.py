@@ -403,9 +403,8 @@ wb_chk_plt.plot(y=wb_in_cols, ax=ax[2], legend=True)
 # from mf_utility import clean_sfr_df
 
 # %%
-# rewrite = False
-rewrite = True
-
+rewrite = False
+# rewrite = True
 
 # %%
 # grid_sfr = pd.read_csv(join(model_ws,'grid_sfr.csv'),index_col=0)
