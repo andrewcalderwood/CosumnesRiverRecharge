@@ -65,51 +65,14 @@ import flopy
 add_path(doc_dir+'/GitHub/CosumnesRiverRecharge/python_utilities')
 
 from mf_utility import get_dates, get_layer_from_elev, clean_wb
-from map_cln import gdf_bnds, plt_cln, pnt_2_tup, lab_pnt
-
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, arr_lab, xy_lab, make_multi_scale, dir_arrow, plt_arrow
+from report_cln import magnitude
 
 # %%
-
-def clean_sfr_df(model_ws, m_name,  drop_iseg):
-    ## load sfr reach data ##
-    grid_sfr = pd.read_csv(model_ws+'/grid_sfr.csv')
-    # remove stream segments for routing purposes only
-    grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
-    pd_sfr = grid_sfr.set_index(['iseg','ireach'])[['rchlen','strtop', 'facies', 'color', 'strthick']]
-    pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
-    num_coarse = int(grid_sfr.facies.isin(['Gravel','Sand']).sum())
-    
-    ## load sfr out file ##
-    sfrout = flopy.utils.SfrFile(join(model_ws, m_name+'.sfr.out'))
-    sfrdf = sfrout.get_dataframe()
-    sfrdf = sfrdf.join(dt_ref.set_index('kstpkper'), on='kstpkper').set_index('dt')
-    # convert from sub-daily to daily using mean, lose kstpkper
-    sfrdf = sfrdf.groupby(['segment','reach']).resample('D').mean(numeric_only=True)
-    sfrdf = sfrdf.reset_index(['segment', 'reach'], drop=True)
-    sfrdf[['row','column']] = sfrdf[['row','column']].astype(int) - 1 # convert to python
-    
-    ## join sfr out to reach data ##
-    sfrdf = sfrdf.join(pd_sfr ,on=['segment','reach'],how='inner',lsuffix='_all')
-    sfrdf['num_coarse'] = num_coarse
-    
-    ## data transformation for easier manipulation ##
-    sfrdf['month'] = sfrdf.index.month
-    sfrdf['WY'] = sfrdf.index.year
-    sfrdf.loc[sfrdf.month>=10, 'WY'] +=1
-    # create column to calculate days flowing
-    sfrdf['flowing'] = 1
-    sfrdf.loc[sfrdf.Qout <= 0, 'flowing'] = 0
-    
-    # create different column for stream losing vs gaining seeapge
-    sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
-    sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    # booleans for plotting
-    sfrdf['gaining'] = (sfrdf.gradient <= 0)
-    sfrdf['losing'] = (sfrdf.gradient >= 0)
-    sfrdf['connected'] = (sfrdf.gradient < 1)
-    return(sfrdf)
-
-
+# from importlib import reload
+# import OD_utility
+# reload(OD_utility)
+from OD_utility import clean_sfr_df
 
 # %%
 ext_dir = 'F:/WRDAPP'
@@ -150,6 +113,11 @@ grid_p.crs = 'epsg:32610'
 # elevation to grid for reference to land surface
 dem_data = np.loadtxt(join(proj_dir, 'GIS','local_subset_dem_52_9_200m_mean.tsv'))
 grid_p['dem_elev'] = dem_data[grid_p.row-1, grid_p.column-1]
+
+# %%
+lak_shp = join(gwfm_dir,'LAK_data/floodplain_delineation')
+lak_extent = gpd.read_file(join(lak_shp,'LCRFR_ModelDom_2017/LCRFR_2DArea_2015.shp' )).to_crs('epsg:32610')
+
 
 # %%
 sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
@@ -255,7 +223,7 @@ r=11
 folder = 'realization'+ str(r).zfill(3)
 # update model workspace so outputs to right directory
 model_ws = join(all_model_ws, folder)
-sfrdf =  clean_sfr_df(model_ws, m.name, drop_iseg)
+sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, m.name)
 
 
 # %% [markdown]
@@ -272,24 +240,50 @@ for nr, r in enumerate(q_review.realization):
     folder = 'realization'+ str(r).zfill(3)
     # update model workspace so outputs to right directory
     model_ws = join(all_model_ws, folder)
-    sfrdf =  clean_sfr_df(model_ws, m.name, drop_iseg)
+    sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, m.name)
     sfrdf_all = pd.concat((sfrdf_all, sfrdf.assign(realization=r)))
 
 # %%
 plt_segs = sfrdf.segment.unique()
 plt_segs = sfrdf['Total distance (m)'].unique()
 
+# %%
+# instead of plotting just the VKA at the streambed we could plot the 2D slice? Problem is that this can infer that 2D connectivity
+# shows 3D while at 1D we must rely on 3D totally?? overhtinking it? Just try 2D and see
+sfr_hk_plt = grid_sfr_all[~grid_sfr_all.iseg.isin(drop_iseg)]
+fig,ax = plt.subplots(1, len(r_review[r_review.variable=='quant']), figsize=(8, 1), sharex=True, sharey=True, layout='constrained', dpi=300)
+
+def long_vka_plt(sfr_hk_plt, plt_segs, q_review, ax, dx=10):
+    vmin = sfr_hk_plt.strhc1.min()
+    vmax = sfr_hk_plt.strhc1.max()
+    for nr, r in enumerate(q_review.realization):
+        vka_line = np.repeat(np.reshape(sfr_hk_plt[sfr_hk_plt.realization==r].strhc1.values, (1,-1)), 5, axis=0)
+        im = ax[nr].imshow(vka_line,  norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax), aspect='auto') #aspect=10,
+        # plt.xticks([]);
+        plt.yticks([]);
+        ax[nr].set_xticks(ticks = np.arange(0, len(plt_segs), dx), labels=np.arange(0, len(plt_segs), dx), rotation=90)
+        ax[nr].set_xticks(ticks = np.arange(0, len(plt_segs), int(dx/2)), minor=True)
+
+    cbar_ax=ax.ravel().tolist()
+    fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='$K_{vert}$\n($m/day$)', shrink=1, location='right')    
+long_vka_plt(sfr_hk_plt, plt_segs, r_review[r_review.variable=='quant'], ax, dx=20)
 
 # %%
-def magnitude(x):
-    return int(np.log10(x))
+r=q_review.realization.iloc[0]
+np.repeat(np.reshape(sfr_hk_plt[sfr_hk_plt.realization==r].strhc1.values, (1,-1)), 1, axis=0).shape
 
+# %%
+grp_col='Total distance (m)'
+v='Qbase'
+sfrdf = sfrdf_all[sfrdf_all.realization==r]
+plt_arr = sfrdf.pivot(columns=grp_col, values=v).values
+plt_arr.shape
 
 
 # %%
 def heat_map(sfrdf_all, variable, var_name, q_review):
-    fig,ax = plt.subplots(len(variable)+1, len(q_review), figsize=(12, 8), 
-                          gridspec_kw={'height_ratios':(1,1,0.1)},
+    fig,ax = plt.subplots(len(variable)+1, len(q_review), figsize=(8, 5.5), 
+                          gridspec_kw={'height_ratios':(1,1,0.5)}, #np.ones(len(q_review))
                           sharex='col', sharey='row',  dpi=300)
     grp_col = 'Total distance (m)'
     for nv, v in enumerate(variable):
@@ -306,56 +300,26 @@ def heat_map(sfrdf_all, variable, var_name, q_review):
     #     # ax[0, nr].set_title(str(r)+' - '+str(q_review.value.iloc[nr])+'\nNo. Coarse:'+str(q_review.num_coarse.iloc[nr]))
     #     ax[0, nr].set_title('No. Coarse:'+str(q_review.num_coarse.iloc[nr]))
         
-    fig.tight_layout(h_pad=-0.1, w_pad=0.5);
+    fig.tight_layout(h_pad=-0.1, w_pad=0.1);
     for nv, v in enumerate(var_name):
         cbar_ax=ax[nv].ravel().tolist()
-        fig.colorbar(im, ax=cbar_ax, orientation='vertical', label=v+' ($m^3/day$)', shrink=0.5, location='right')
+        fig.colorbar(im, ax=cbar_ax, orientation='vertical', label=v+'\n($m^3/day$)', shrink=0.7, location='right')
         ax[nv,0].set_ylabel('Days from start')
-        # plt.colorbar()
-        # plt.show()
+
     ax[-1,0].set_ylabel(' ') # set blank ylabel to get proper spacing
-    ## plot VKA for streambed  
-    vmin = sfr_hk_plt.strhc1.min()
-    vmax = sfr_hk_plt.strhc1.max()
-    for nr, r in enumerate(q_review.realization):
-        ax_n = ax[-1, nr]
-        vka_line = np.repeat(np.reshape(sfr_hk_plt[sfr_hk_plt.realization==r].strhc1.values, (1,-1)), 1, axis=0)
-        im = ax[-1, nr].imshow(vka_line,  norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax), aspect='auto') #aspect=10,
-        # im = ax[-1, nr].imshow(np.reshape(sfr_hk_plt[sfr_hk_plt.realization==r].strhc1.values, (1,-1)), aspect=10, norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax))
-        # plt.xticks([]);
-        ax_n.set_ylabel('');
-        ax_n.set_yticks([]);
-        ax_n.set_xticks(ticks = np.arange(0, len(plt_segs),10), labels=np.arange(0, len(plt_segs),10), rotation=90)
-    cbar_ax=ax[-1].ravel().tolist()
-    fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='VKA\n($m/day$)', shrink=1.5, location='right')    
+    long_vka_plt(sfr_hk_plt, plt_segs, r_review[r_review.variable=='quant'], ax[-1,:], dx=20)
+
     # ax[0].set_ylabel('Days from Start')
     # fig.supylabel('Days from Start');
     # fig.supxlabel('Segment');
-    ax[-1,2].set_xlabel('Segment');
-    ax[-1,2].set_xlabel('Total distance (m)');
-
+    ax[-1,2].set_xlabel('Stream Reach');
+    # ax[-1,2].set_xlabel('Total distance (m)');
+    return(fig,ax)
+fig, ax = heat_map(sfrdf_all, ['Qrech', 'Qbase'], ['Stream Losses', 'Stream Baseflow'], r_review[r_review.variable=='quant'])
 
 
 # %% [markdown]
 # Note the lake is fed at segment 31/32 and returns flow at segment 51
-
-# %%
-# instead of plotting just the VKA at the streambed we could plot the 2D slice? Problem is that this can infer that 2D connectivity
-# shows 3D while at 1D we must rely on 3D totally?? overhtinking it? Just try 2D and see
-sfr_hk_plt = grid_sfr_all[~grid_sfr_all.iseg.isin(drop_iseg)]
-fig,ax = plt.subplots(1, len(q_review), figsize=(12, 1), sharex=True, sharey=True, layout='constrained', dpi=300)
-vmin = sfr_hk_plt.strhc1.min()
-vmax = sfr_hk_plt.strhc1.max()
-for nr, r in enumerate(q_review.realization):
-    vka_line = np.repeat(np.reshape(sfr_hk_plt[sfr_hk_plt.realization==r].strhc1.values, (1,-1)), 1, axis=0)
-    im = ax[nr].imshow(vka_line,  norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax), aspect='auto') #aspect=10,
-    # plt.xticks([]);
-    plt.yticks([]);
-    ax[nr].set_xticks(ticks = np.arange(0, len(plt_segs),10), labels=np.arange(0, len(plt_segs),10), rotation=90)
-
-cbar_ax=ax.ravel().tolist()
-fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='VKA\n($m/day$)', shrink=1, location='right')    
-
 
 # %%
 def plot_vka(r, ax, sfr_nodata, k_max):
@@ -374,11 +338,15 @@ def plot_vka(r, ax, sfr_nodata, k_max):
 
 
 # %%
+# from OD_utility import plot_vka # doesn't work because of undefined local var
+
+# %%
 sfr_seg = sfr_hk_plt.drop_duplicates('node')
 sfr_rows = sfr_seg.i.values
 sfr_cols = sfr_seg.j.values
 sfr_lays = sfr_seg.k.values
-fig,ax = plt.subplots(1, len(q_review), figsize=(12, 1), sharex=True, sharey=True, layout='constrained', dpi=300)
+fig,ax = plt.subplots(1, len(q_review), figsize=(12, 1), 
+                      sharex=True, sharey=True, layout='constrained', dpi=300)
 
 k_max = int(sfr_hk_plt.k.max())
 k_max = m.dis.nlay-1
@@ -390,36 +358,26 @@ sfr_nodata = np.zeros((k_max, len(sfr_lays)), dtype=bool)
 for n in np.arange(0,len(sfr_lays)):    
     sfr_nodata[:sfr_lays[n], n] = True
 
+
 # plot only data below ground
 for nr, r in enumerate(q_review.realization):
+    # sfr_hk, im = plot_vka_r(r, ax[nr], sfr_nodata, k_max)
     sfr_hk, im = plot_vka(r, ax[nr], sfr_nodata, k_max)
+    ax[nr].set_title(r)
 
 
 fig.supylabel('Layer')
 cbar_ax=ax.ravel().tolist()
-fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='VKA\n($m/day$)', shrink=1, location='right')    
+fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='$K_{vert}$\n($m/day$)', shrink=1, location='right')    
+
 
 # %%
-heat_map(sfrdf_all, ['Qrech', 'Qbase'], ['Seepage', 'Baseflow'], q_review)
-# plt.savefig(join(fig_dir, 'heat_map_seepage.png'), bbox_inches='tight')
-
-# %%
-q_review.realization
-
 
 # %% [markdown]
 # When it comes to seepage the zones of high streambed conductance align with zones of greater seepage. Downstream zones of higher seepage there are more uniform zones of dry channel proceeding downstream because as flow comes into that zone of high seepage it tends to be used up entirely and their is no downstream baseflow in the dry season to improve flow. We find with the realizations with more coarse segments that the area of dry channel tends to extend further upstream and increase the duration of no streamflow. The periods during the wet season that come across as no seepage are segments with baseflow to the stream.  
 # The baseflow predominantly occurs along the reconnected floodplain and upstream with a few pockets of baseflow down stream where there is a pocket of high coarse facies, although the duration of baseflow at these pockets is very intermittent. 
 #
 # - these plots are useful in mapping out how spatial heterogeneity plays a role and the number of facies plays a role
-
-# %%
-# heat_map(sfrdf_all, ['Qbase'], ['Baseflow'], q_review)
-
-# %%
-# heat map of flow is pretty consitent across segments event with log scale
-# heat_map(sfrdf_all, 'Qout', 'Flow', q_review)
-# sfrdf
 
 # %% [markdown]
 # # Conceptual Framework plots
@@ -452,7 +410,7 @@ r = 10 # realization with HCP in floodplain
 folder = 'realization'+ str(r).zfill(3)
 # update model workspace so outputs to right directory
 model_ws = join(all_model_ws, folder)
-sfrdf =  clean_sfr_df(model_ws, m.name, drop_iseg)
+sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, m.name)
 # only works when in connection or else is very bad assumption
 # sfrdf['h_aquifer'] = -(sfrdf.gradient*sfrdf.strthick - sfrdf.stage)
 
@@ -477,6 +435,7 @@ plt_dates='2017-1-16'
 
 plt_dates='2017-9-16'
 # plt_dates = pd.date_range('2017-9-15','2017-9-17')
+# switch to total distance (m)
 df_last = sfrdf[sfrdf.segment==sfrdf.segment.max()]
 # df_last.loc[plt_dates].plot(y='Qout')
 # plt.plot(df_last.loc[plt_dates].Qout.values)
@@ -546,7 +505,7 @@ fig,ax = plt.subplots(5,1,sharex=True, sharey=False, layout='constrained', dpi=3
                       # gridspec_kw={'height_ratios':(3,2, 2,2, 2, 2)}
                      )
 
-sfr_hk, im = plot_vka(r, ax[0], sfr_nodata, k_max=15)
+sfr_hk, im = plot_vka(r, ax[0], sfr_nodata, k_max=10)
 
 ax[0].set_ylabel('Layer\nElevation\n(m AMSL)')
 # grid_sfr.reset_index().vka.plot(ax=ax[1], color='black')
@@ -558,7 +517,7 @@ grp_col = 'Total distance (m)'
 def plt_profile(sfrdf, plt_dates, ax, color):
     df_mean = sfrdf.loc[plt_dates].groupby(grp_col).mean(numeric_only=True).reset_index()
     df_mean.plot(y='Qrech', ax=ax[-2], legend=False, color=color)
-    ax[-2].set_ylabel('Recharge\n($m^3/day$)')
+    ax[-2].set_ylabel('Stream Losses\n($m^3/day$)')
     df_mean.plot(y='Qbase', ax=ax[-1], legend=False, color=color)
     ax[-1].set_ylabel('Baseflow\n($m^3/day$)')
     ax[-3].axhline(y=0, color='black', alpha=0.5) # show transition from gaining to losing
@@ -586,94 +545,103 @@ fig.tight_layout(h_pad=0.1)
 
 fig.legend(handles=profile_legend_elements, loc='center', bbox_to_anchor=[0.3, 0.99], ncol=1)
 fig.colorbar(im, orientation = 'horizontal', location='top', label='$K_{vert}$ ($m/day$)', shrink=0.3)
-plt.xlabel('Stream Segment')
+plt.xlabel('Stream Reach')
 # plt.savefig(join(fig_dir, 'longitudinal_profile_stream_aquifer.png'), bbox_inches='tight')
 
-# %%
-r = 36
-hdobj1, upw_r1 = load_r(r)
-r=10
-hdobj2, upw_r2 = load_r(r)
+# %% [markdown]
+# ### Profile by realization
+# r36 shows some baseflow downstream, r10 is a realization with the median number of coarse reaches, r36 is a realization with the best fit.
 
 # %%
 plt_dates = pd.date_range('2017-1-1','2017-3-30')
-plt_dates = pd.date_range('2017-1-1','2017-1-30')
+plt_dates = pd.date_range('2017-1-1','2017-1-30') # early winter (baseflow)
+# plt_dates = pd.date_range('2017-3-1','2017-3-30') # early spring (baseflow)
+# plt_dates = pd.date_range('2017-6-1','2017-6-30') # early summer (losses)
+
+plt_realizations = [36, 10, 28]
+
+
+# %%
+# q_review[q_review.realization.isin(plt_realizations)]
+
+# %%
+
+profile_realization_lgd = [
+    # Patch(facecolor='tab:blue', alpha=0.5, label='Floodplain'),
+    Line2D([0], [0],color='tab:blue',label='Realization 36'),
+    Line2D([0], [0], color='tab:orange',  linestyle='-', label='Realization 10'),
+    Line2D([0], [0], color='tab:green',  linestyle='-', label='Realization 28'),
+
+]
+
+# %%
+sfr_heads_all = np.zeros((len(plt_realizations), len(grid_sfr)))
+for n, r in enumerate(plt_realizations):
+    hdobj, upw_r = load_r(r)
+    sfr_heads, avg_heads = sfr_load_hds(hdobj, plt_dates)
+    sfr_heads_all[n] = sfr_heads[0]
+
+# %%
 fig,ax = plt.subplots(5,1,sharex=True, sharey=False, layout='constrained', dpi=300,
                       figsize=(8, 6.5),
                       
                       # gridspec_kw={'height_ratios':(3,2, 2,2, 2, 2)}
                      )
 
-colors=['tab:blue','tab:orange']
-for n, r in enumerate([36, 10]):
+colors=['tab:blue','tab:orange', 'tab:green']
+for n, r in enumerate(plt_realizations):
     folder = 'realization'+ str(r).zfill(3)
     # update model workspace so outputs to right directory
     model_ws = join(all_model_ws, folder)
-    # sfrdf =  clean_sfr_df(model_ws, m.name, drop_iseg)
     sfrdf = sfrdf_all.loc[sfrdf_all.realization==r].copy()
 
     grid_sfr = grid_sfr_all[grid_sfr_all.realization==r].copy()
     grid_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)].reset_index()
 
     grid_sfr.vka.plot(ax=ax[0], color=colors[n])
-    ax[0].set_ylabel('Stream\nVKA (m/d)')
+    ax[0].set_ylabel('Stream\n$K_{vert}$ (m/d)')
 
     plt_profile(sfrdf, plt_dates, ax, color=colors[n])
-    hdobj, upw_r = load_r(r)
 
-    sfr_heads, avg_heads = sfr_load_hds(hdobj, plt_dates)
-    ax[1].plot(sfr_heads[0])
+    ax[1].plot(sfr_heads_all[n])
 
     ax[1].set_ylabel('GW\nElevation\n(m)')
+    
+fig.tight_layout(h_pad=0.1)
+
+fig.legend(handles=profile_realization_lgd, loc='outside upper center',  bbox_to_anchor=[0.5, 1.03], ncol=3) #bbox_to_anchor=[0.3, 0.99],
+plt.xlabel('Stream Reach')
+# plt.savefig(join(fig_dir, 'longitudinal_profile_realizations_stream_aquifer.png'), bbox_inches='tight')
 
 
 # %%
-seg_df = pd.DataFrame(seg_idx, columns=['k','i','j'])
-plt_seg = seg_df.groupby(['i','j']).idxmin()
-
-
-# %%
-# select columns (kij) and rows (dates)
-d= (out_d-strt_date).days
-plt_seg_ts = seg_ts[:, plt_seg.k.values+1][d]
-plt_seg_ts.shape
-
-# %%
-top = m.dis.top.array[0,0]
-botm = m.dis.botm.array[:,0,0]
-
-# %%
-## after reviewing it doesn't seem worth showing this since the head gradients aren't a clear indicator
-# rather the seepage with VKA should be enough
-fig,ax_n = plt.subplots(figsize=(12,12))
-max_k = 8
-ax_n.plot(sfr_seg.strtop.values, color='brown', label='Stream Top')
-
-ax_n.plot(plt_seg_ts, color='blue', label='GWE')
-# plot stage
-ax_n.plot(sfrdf.loc[out_d, 'stage'].values, color='darkgreen', label='Stream Stage')
-ax_n.plot(sfrdf.loc[out_d, 'depth'].values+sfrdf.loc[out_d, 'strtop'].values, color='pink', label='Stream Stage')
-
-ax_n.set_xticks(ticks = np.arange(0,90,10), labels = np.arange(0,9000,1000));
-ax_n.set_xlabel('Distance downstream (m)')
-ax_n.set_aspect(10) # which 1 segment = 100 m so it is 1:100)
-
-im = ax_n.imshow(sfr_hk[1:max_k], extent = [0, len(sfr_rows), botm[max_k-1], botm[0]], 
-          norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), alpha=0.3)
-# plt.colorbar(im, shrink=0.3)
-
-plt.legend()
+for r in plt_realizations:
+    grid_sfr = grid_sfr_all[grid_sfr_all.realization==r].copy()
+    print('Realization', r,'Num high Kv is', (grid_sfr.iloc[30:50].vka >20).sum())
 
 # %% [markdown]
-# I don't think there is going to be an interesting connection right at the stream channel because it is consistently connected so we need to look at the near bank storage.
-# - seepage plot longitudinally with VKA map while baseflow is going to require a XS or two
+# Profiles by realization:  
+# - Having two realizations with different coarse in the floodplain helps show the impact on baseflow as the realization with more coarse has large baseflow rates. It might be interesting to show this for the dry and wet season
+# - the pattern of differences in GW elevation is less clear in March than Januarys
+# - plotting in the summer is quite messy and there is not a clear pattern (also high seepage loss is noticeable around reach 10, likely where a GDE is of forest)
+#
 
 # %% [markdown]
-# Changing the plotted dates for averaging from the entire simulation to just spring 2018 didn't change the pattern of results which is good in a way if it means it helps show consistency
-#
-# - the distinction found by Frei of seepage vs perching is less prevalent here because the water table is elevated so that zones where recharge takes place then see slightly reduced seepage. It could be that the 1/10 strhc1 scaling is having an effect as well
-#
-# - plotting the deeper heads (5 layers below) sfr showed the same pattern with heads consistently above the stream bottom
+# #### Include aquifer cross-sections to reference in the appendix.
+
+# %%
+# plot only data below ground
+fig,ax = plt.subplots(len(plt_realizations),1, sharex=True, dpi=300, figsize=(6.5,4))
+for nr, r in enumerate(plt_realizations):
+    # sfr_hk, im = plot_vka_r(r, ax[nr], sfr_nodata, k_max)
+    sfr_hk, im = plot_vka(r, ax[nr], sfr_nodata, 15)
+    ax[nr].set_title('Realization '+str(r))
+
+
+fig.supylabel('Layer Elevation (m)')
+cbar_ax=ax.ravel().tolist()
+fig.tight_layout()
+fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='$K_{vert}$\n($m/day$)', shrink=0.7, location='right') 
 
 # %% [markdown]
 # ## Cross-section plots
@@ -704,7 +672,7 @@ sfr_iseg = sfr_pts.iseg.astype(int).values
 # %%
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
-
+# these should all be replaced by in-plot labels
 map_legend_elements = [
     Patch(facecolor='tab:blue', alpha=0.5, label='Floodplain'),
     Patch(facecolor='tab:blue', label='Cosumnes River'),
@@ -728,10 +696,19 @@ def plt_xs_map(ax, lab_col = 'iseg'):
                                         xy=(x.geometry.centroid.x, x.geometry.centroid.y), ha='right', fontsize=8,
                                        bbox=dict(boxstyle="square,pad=0.1", fc="lightgrey", ec="black", lw=0.5)),axis=1);
     
-fig,ax = plt.subplots()
+fig,ax = plt.subplots(dpi=300)
 plt_xs_map(ax=ax)
 # plt_cln(ax=ax)
 ax.axis('off')
+fontsize=8
+arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+arr_lab(lak_extent, 'Cosumnes\nRiver', ax, offset = (-100, -700), fontsize=fontsize)
+arr_lab(grid_xs[grid_xs.id==0].iloc[[-1]], 'Aquifer\nCross-Sections', ax, offset = (150, 100), arrow=True, fontsize=8)
+
+# fig.colorbar(im, orientation = 'horizontal', location='bottom', label='$K_{vert}$ ($m/day$)', shrink=0.8)
+# cax = ax.inset_axes([0.3, -0.07, 0.6, 0.04])
+# fig.colorbar(im, cax=cax, orientation='horizontal', label='$K_{vert}$ (m/d)')
+
 
 # %% [markdown]
 # It would make sense to have a XS in the middle of the floodplain, at the bottom edge where the gravel patch tends to be in the river and a little further downstream near the outlet.
@@ -754,14 +731,18 @@ for n,stps in enumerate(m.dis.nstp.array):
 
 
 # %%
-# for n in xs.id:
-for n in [2]:
-    xs_n = grid_xs[grid_xs.id==n]
-    xs_hk = upw_r.hk.array[:-1, xs_n.row-1, xs_n.column-1]
+# # for n in xs.id:
+# for n in [2]:
+#     xs_n = grid_xs[grid_xs.id==n]
+#     xs_hk = upw_r.hk.array[:-1, xs_n.row-1, xs_n.column-1]
     
-    sfr_xs_n = sfr_xs[sfr_xs.id==n]
-    lak_xs_n = lak_xs[lak_xs.id==n]
+#     sfr_xs_n = sfr_xs[sfr_xs.id==n]
+#     lak_xs_n = lak_xs[lak_xs.id==n]
 
+
+# %% [markdown]
+# Zorder
+# Patches:1, Lines:2, Text:3
 
 # %%
 
@@ -778,18 +759,18 @@ def plt_xs_spd(head, xs_n, ax):
     # ax.plot(head_sfr, color='blue', label='Head in SFR layer')
     # plot average head as well
     head_avg = head[0:10].max(axis=0)
-    ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle='--', label='Water Table')
+    ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle='--', label='Water Table',zorder=5)
     head_avg = head[0:10].mean(axis=0)
-    ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle='-.', label='Average Head - Upper')
+    # ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle='-.', label='Average Head - Upper')
     # head_avg = head[10:-1].mean(axis=0)
     # ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle='-.', label='Average Head - Lower')
-    head_avg = head[-1]
-    ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle=':', label='Head - Deep')
+    # head_avg = head[-1]
+    # ax.plot(xs_n.xs_cell, head_avg, color='blue', linestyle=':', label='Head - Deep')
 
     # plot sfr and lak stages
-    ax.scatter(sfr_xs_n.xs_cell, sfr_xs_n.strtop, zorder= -1, color='tab:blue', label='Stream Top')
-    ax.scatter(lak_xs_n.xs_cell, lak_xs_n.dem_elev, zorder= -2, color='brown', label='Lake')
-    ax.plot(xs_n.xs_cell, xs_n.dem_elev, zorder= -3, color='black', label='Land Surface')
+    ax.scatter(sfr_xs_n.xs_cell, sfr_xs_n.strtop, zorder= 4, color='tab:blue', label='Stream Top')
+    ax.scatter(lak_xs_n.xs_cell, lak_xs_n.dem_elev, zorder= 3, color='brown', label='Lake')
+    ax.plot(xs_n.xs_cell, xs_n.dem_elev, zorder= 2, color='black', label='Land Surface')
     
 
 
@@ -800,14 +781,14 @@ from matplotlib.lines import Line2D
 legend_elements = [
     Line2D([0], [0], color='black', label='Land Surface'),
     Line2D([0], [0], color='blue', linestyle='--',label='Water Table'),
-    Line2D([0], [0], color='blue', linestyle='-.', label='Average Head\n(Layers 1-10)'),
-    Line2D([0], [0], color='blue', linestyle=':', label='Head - Deep'),
+    # Line2D([0], [0], color='blue', linestyle='-.', label='Average Head\n(Layers 1-10)'),
+    # Line2D([0], [0], color='blue', linestyle=':', label='Head - Deep'),
     Line2D([0], [0], color='brown', marker='.', linestyle='', label='Floodplain'),
     Line2D([0], [0], color='tab:blue',  marker='.', linestyle='', label='Stream top'),
 ]
 
-
 # %%
+botm = m.dis.botm.array[:,0,0]
 
 def plt_xs_hk(xs_n, upw_r, ax):
     xs_hk = upw_r.hk.array[:-1, xs_n.row-1, xs_n.column-1]
@@ -815,20 +796,27 @@ def plt_xs_hk(xs_n, upw_r, ax):
     xs_hk = np.ma.masked_where(xs_ibound, xs_hk)
     im = ax.imshow(xs_hk[1:max_k], extent = [xs_n.xs_cell.min(), xs_n.xs_cell.max(), botm[max_k-1], botm[0]], 
               norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), alpha=0.3)
-fig, ax = plt.subplots(len(xs.id), figsize=(6.5,6.5), sharex=True, sharey=True, dpi=300)
+    return(im)
+fig, ax = plt.subplots(len(xs.id), figsize=(6.5,6.5), sharex=True, sharey=True, dpi=300, layout='constrained')
 max_k=10
 
 for n in xs.id:
     xs_n = grid_xs[grid_xs.id==n]
     ax[n].annotate(text='('+str(n+1)+')',xy=(0.85,0.85),  xycoords='axes fraction', fontsize=12) # add figure label
-    plt_xs_hk(xs_n, upw_r, ax[n])
+    im = plt_xs_hk(xs_n, upw_r, ax[n])
     head = hdobj.get_data(spd_stp[1200])[:, xs_n.row-1, xs_n.column-1] 
     head = np.ma.masked_where(head==-999.99, head)
 
     plt_xs_spd(head, xs_n, ax=ax[n])
     ax[n].set_aspect(1)
-# plt.colorbar(im, shrink=0.3)
-fig.tight_layout(h_pad=0.1)
+# plt.colorbar(im, ax=ax[-1], shrink=1)
+# fig.tight_layout(h_pad=0.1)
+
+# cax=ax[-1]#.ravel().tolist()
+# fig.colorbar(im, ax=ax, shrink=1)
+cax = ax[-1].inset_axes([0.3, 0.07, 0.4, 0.04])
+fig.colorbar(im, cax=cax, orientation='horizontal')
+
 
 
 # %% [markdown]
@@ -838,7 +826,7 @@ fig.tight_layout(h_pad=0.1)
 
 # %%
 plt_r = r_review[r_review.variable=='quant'].realization
-fig, ax = plt.subplots(len(xs.id), len(plt_r), figsize=(12,12), sharex=True, sharey=True)
+fig, ax = plt.subplots(len(xs.id), len(plt_r), figsize=(12,9), sharex=True, sharey=True)
 
     
 for nr, r in enumerate(plt_r):
@@ -874,7 +862,7 @@ def ax_xs(r, ax, col=''):
         ax[n].annotate(text='('+col+str(n+1)+')',xy=(0.75,0.85),  xycoords='axes fraction', fontsize=12) # add figure label
 
         xs_hd = head[:, xs_n.row-1, xs_n.column-1] 
-        plt_xs_hk(xs_n, upw_r, ax[n])
+        im = plt_xs_hk(xs_n, upw_r, ax[n])
 
         plt_xs_spd(xs_hd, xs_n, ax=ax[ n])
         
@@ -914,10 +902,24 @@ xs_plt_labels(axsLeft)
 ## map figure in center
 ax1 = subfigs[1].subplots(1, 1)
 plt_xs_map(ax=ax1, lab_col='id')
+fontsize=8
+# the annotation locations were very sensitive to adjustments
+arr_lab(lak_extent, 'Reconnected\nFloodplain', ax1, offset = (-100, 150), fontsize=fontsize)
+arr_lab(lak_extent, 'Cosumnes\nRiver', ax1, offset = (-200, -800), fontsize=fontsize)
+# arr_lab(grid_xs[grid_xs.id==0].iloc[[-1]], 'Aquifer\nCross-Sections', ax1, offset = (150, 100), arrow=True, fontsize=8)
+arr_lab(grid_xs[grid_xs.id==1].iloc[[1]], 'Aquifer\nCross\nSections', ax1, offset = (-125, -200), arrow=True, fontsize=8)
+# arr_lab(grid_xs[grid_xs.id==5].iloc[[-1]], 'Aquifer\nCross-Sections', ax1, offset = (0, -150), arrow=True, fontsize=8)
+# locating shifts graphics up
+plt_arrow(ax1, 0.9, 0.11)
+make_multi_scale(ax1, 0.15, 0.01, dist = 0.5E3, scales = [4,2,1])
+
+cax = ax1.inset_axes([0.3, -0.07, 0.6, 0.04])
+fig.colorbar(im, cax=cax, orientation='horizontal', label='$K_{vert}$ (m/d)')
+
 # plt_cln(ax=ax)
 ax1.axis('off')
 subfigs[1].legend(handles=legend_elements, loc='upper center', ncol = 1)
-subfigs[1].legend(handles=map_legend_elements, loc='lower center', ncol = 1)
+# subfigs[1].legend(handles=map_legend_elements, loc='lower center', ncol = 1)
 
 r = 12
 axsRight = subfigs[2].subplots(6, 1, sharey=True, sharex=True)

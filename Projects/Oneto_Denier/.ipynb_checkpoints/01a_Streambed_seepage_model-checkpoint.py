@@ -257,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-# model_nam = 'oneto_denier_homogeneous'
+model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -2297,7 +2297,7 @@ m.write_input()
 
 
 # %% [markdown]
-# #
+#
 
 # %%
 

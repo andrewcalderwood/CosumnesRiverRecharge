@@ -255,3 +255,52 @@
 #     return(sfrdf)
 
 
+
+# %%
+
+# %% [markdown]
+# # Plotting
+
+# %% [markdown]
+# ## Seepage and flow time series
+
+# %%
+
+# %% [markdown]
+# ## Correlations
+
+# %%
+# yearly
+# the data is already summed across the year and should be averaged across segments
+# corr_bool = sfr_yr_sum_all.groupby(['realization', 'WY']).mean()
+# corr_bool = corr_bool[['flowing','connected','gaining']]
+# # seepage data just needs to be summed again 
+# corr_seep = sfr_yr_sum_all.groupby(['realization', 'WY']).sum(numeric_only=True)[['Qbase','Qrech']]
+# # flow data should be averaged
+# corr_flow = sfr_last_all.groupby(['realization','WY']).mean(numeric_only=True)[['Qout']]
+# # join together the data for correlations
+# corr_all = corr_seep.join(corr_bool).join(corr_flow).reset_index('WY')
+
+# %%
+# corr_out = pd.DataFrame()
+# for n_wy in wy_vals:
+# # corr_all.groupby('WY').apply(lambda x : pearsonr(coarse_ref.num_coarse, x))
+#     corr_wy = corr_all[corr_all.WY==n_wy].drop(columns=['WY'])
+#     corr_out = pd.concat((corr_out, calc_corr_stats(corr_wy, coarse_ref.num_coarse).assign(WY=n_wy)))
+
+# %%
+# fig, ax = plt.subplots(3,2, figsize=(8,5.3), sharex=True, sharey=True, layout='constrained')
+# for n, v in enumerate(variables.keys()):
+#     ax_n = ax[int(n/2), n%2]
+#     corr_plt = corr_out.loc['r'][[v,'type','WY']].pivot_table(index='WY', values=v, columns='type')
+#     # correct order of tests which were resorted
+#     corr_plt[tests].plot(kind='bar', ax=ax_n, legend=False, rot=0)
+#     ax_n.set_title(variables[v])
+# ax[0,1].legend(loc='best')
+
+# %% [markdown]
+# When aggregated to a yearly level the correlations don't really change between water years.
+
+# %%
+
+# %%

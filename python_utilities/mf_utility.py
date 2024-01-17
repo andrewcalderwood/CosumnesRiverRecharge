@@ -44,10 +44,14 @@ def param_load(model_ws, file_dir, file_name):
 
 #%% Post-processing
 
-def clean_hob(model_ws, dt_ref):
+def clean_hob(model_ws, dt_ref, split_c = 'p'):
     hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
                          dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
-    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split('p',n=2, expand=True)
+    # # if only one obs exists correct naming convention
+    one_obs = ~hobout.obs_nam.str.contains('.0')
+    hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+split_c+str(1).zfill(5)
+
+    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split(split_c,n=2, expand=True)
     hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
     hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
     hobout.loc[hobout.sim_val.isin([-1e30, -999.99,-9999]), 'sim_val'] = np.nan
@@ -59,7 +63,7 @@ def clean_hob(model_ws, dt_ref):
 
 
 def get_dates(dis, ref='end'):
-    """ Given a MODFLOW DIS file return datetimes given the model start datetime
+    """ Given a flopy MODFLOW DIS object return datetimes given the model start datetime
     input:
     dis = flopy.modflow.ModflowDis object
     ref = 'strt' or 'end' to specify how datetime should be kept
@@ -102,6 +106,10 @@ def get_dates(dis, ref='end'):
     # add column to specify water year
     dt_ref['wy'] = dt_ref.dt.dt.year
     dt_ref.loc[dt_ref.dt.dt.month>=10, 'wy']+=1
+    # specify whether a stress period is steady state
+    dt_ref['steady'] = False
+    dt_ref.loc[dis.steady.array, 'steady']=True
+
 
     return(strt_date, end_date, dt_ref)
     
@@ -177,9 +185,10 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     # create different column for stream losing vs gaining seeapge
     sfrdf['Qrech'] = np.where(sfrdf.Qaquifer>0, sfrdf.Qaquifer,0)
     sfrdf['Qbase'] = np.where(sfrdf.Qaquifer<0, sfrdf.Qaquifer*-1,0 )
-    # booleans for plotting
-    sfrdf['gaining'] = (sfrdf.gradient == 0)
-    sfrdf['losing'] = (sfrdf.gradient >= 0)
-    sfrdf['connected'] = (sfrdf.gradient < 1)
+    if 'gradient' in sfrdf.columns:
+        # booleans for plotting
+        sfrdf['gaining'] = (sfrdf.gradient == 0)
+        sfrdf['losing'] = (sfrdf.gradient >= 0)
+        sfrdf['connected'] = (sfrdf.gradient < 1)
     return(sfrdf)
 

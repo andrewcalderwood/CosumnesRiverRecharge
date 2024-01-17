@@ -79,10 +79,28 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 
+# %% [markdown]
+# # Load data files
+
+# %%
+from flopy.utils.geometry import Polygon, LineString, Point
+# Original model domain, 44.7 deg angle
+# m_domain = gpd.read_file(gwfm_dir+'\\GWModelDomain_UTM10N\\GWModelDomain_Rec_UTM10N.shp')
+# New model domain 52.9 deg
+m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
+
+# Need to check this when changing model domains
+xul, yul = list(m_domain.geometry.values[0].exterior.coords)[1]
+list(m_domain.geometry.values[0].exterior.coords)
+# m_domain.geometry.values[0].exterior
+
+# %% [markdown]
+# # define model attributes
+
 # %%
 
-ss_bool = True # add steady state period
-# ss_bool = False # no steady state period
+# ss_bool = True # add steady state period
+ss_bool = False # no steady state period
 
 # %%
 
@@ -148,17 +166,25 @@ rotation=52.9
 # nlay_tprogs = int(max_num_layers/upscale)
 # tprog_thick = max_num_layers*0.5/nlay_tprogs
 
+upscale = 8 # from usual 0.5m
+tprog_thick = 0.5*upscale
+
 # elevation minimum is -1.2 m so have tprogs start at -2 to leave room for filler layer
 tprog_strt = -2
 # only need tprogs data nearer surface river-aquifer interaction
 tprog_total = 64 # 16, 64 3+ hrs #12 
-upscale = 8 # from usual 0.5m
-tprog_thick = 0.5*upscale
-nlay_tprogs = int(tprog_total/tprog_thick)
+
+# alternate version has tprogs with full layers to surface and no flow above land
+fine_tprogs = False
+if fine_tprogs:
+    tprog_strt = 40
+    # only need tprogs data nearer surface river-aquifer interaction
+    tprog_total = 104 #  
 
 # nlay_tprogs = 0
 # tprog_thick = 0
 
+nlay_tprogs = int(tprog_total/tprog_thick)
 num_leveling_layers = 1 # layers to create the upscaled unsaturated zone
 nlay = 2 + num_leveling_layers + nlay_tprogs
 
@@ -166,18 +192,6 @@ nlay = 2 + num_leveling_layers + nlay_tprogs
 # proj4_str='EPSG:26910'
 proj4_str='+proj=utm +zone=10 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 print('TPROGs layers', nlay_tprogs)
-
-# %%
-from flopy.utils.geometry import Polygon, LineString, Point
-# Original model domain, 44.7 deg angle
-# m_domain = gpd.read_file(gwfm_dir+'\\GWModelDomain_UTM10N\\GWModelDomain_Rec_UTM10N.shp')
-# New model domain 52.9 deg
-m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
-
-# Need to check this when changing model domains
-xul, yul = list(m_domain.geometry.values[0].exterior.coords)[1]
-list(m_domain.geometry.values[0].exterior.coords)
-# m_domain.geometry.values[0].exterior
 
 # %% [markdown]
 # ## Individual Users may change loadpath 
@@ -258,8 +272,6 @@ bnd_rows, bnd_cols = bnd_cells.row.values, bnd_cells.column.values
 
 # %%
 # Based on Maribeth's grid aligned with Alisha's TPROGS model
-# dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_nearest.tsv', delimiter = '\t')
-# dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_linear.tsv', delimiter = '\t')
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # import seaborn as sns
@@ -328,6 +340,12 @@ for i in np.arange(0,nlay):
 # %%
 # Set the elevation of the top layer based on the DEM
 m.dis.top = dem_data
+# top elevations of tprogs
+tprogs_top = np.full((nrow,ncol), tprog_strt + tprog_thick)
+if fine_tprogs: 
+    top = np.where(tprogs_top>dem_data, tprogs_top, dem_data)
+    m.dis.top = top
+
 # Bottom of model based on geology
 m.dis.botm = botm
 chk = dis.check()
@@ -464,9 +482,7 @@ plt.colorbar(shrink=0.5)
 # either marine or volcanic based
 deep_geology = np.invert(ibound[:,:,:].astype(bool))
 
-# reset ibound to all active cells to reduce non-linearity
-# still need to take account of no flow cells for lake package
-ibound = np.ones([nlay, nrow,ncol])
+
 
 # %%
 np.savetxt(gwfm_dir+'/BAS6/deep_geology_'+str(nlay)+'layer.tsv', np.reshape(deep_geology, (nlay*nrow,ncol)), delimiter ='\t')
@@ -504,6 +520,17 @@ if ss_bool:
 else:
     #start with adjusted head contours because the steady state is causing the model to start off
     strt[:,:,:] = hd_strt
+
+# %%
+# reset ibound to all active cells to reduce non-linearity
+# still need to take account of no flow cells for lake package
+ibound = np.ones((nlay,nrow,ncol))
+
+# find wherever layer less than min thickness to set as inactive, with thin layer version
+# ibound[thickness < 0.5] = 0
+# where bottom is above land surface set as inactive 
+ibound[botm>dem_data] = 0
+
 
 # %%
 # Basic package, BAS
@@ -582,12 +609,17 @@ kriged = kriged_arr[:, bnd_rows, bnd_cols]
 ## NW is row 0, SE is last row
 kriged_NW = np.vstack((kriged_spring[:,0,:],kriged_fall[:,0,:]))
 kriged_SE = np.vstack((kriged_spring[:,nrow-1,:],kriged_fall[:,nrow-1,:] ))
-fig,ax=plt.subplots(1,2, figsize=(12,4))
+
+fig,ax=plt.subplots(1,2, figsize=(6.5,3), sharey=True, dpi=300)
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[0],linestyle='--')
 pd.DataFrame(np.rot90(kriged_NW),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[0])
-
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Apr'].plot(ax=ax[1],linestyle='--')
 pd.DataFrame(np.rot90(kriged_SE),columns=sy_ind).loc[:,'Oct'].plot(ax=ax[1])
+ax[0].legend(ncol=5, loc=(0.1, 1.02))
+ax[1].legend().remove()
+ax[0].set_xlabel('Column')
+ax[1].set_xlabel('Column')
+ax[0].set_ylabel('Groundwater elevation (m)')
 
 # %% [markdown]
 # ## Read in TPROGS data
@@ -652,7 +684,8 @@ t=5
 tprogs_info = [80, -80, 320]
 
 tprogs_line = np.loadtxt(tprogs_files[t])
-masked_tprogs= tc.tprogs_cut_elev(tprogs_line, dem_data, tprogs_info)
+# using m.dis.top to account for cases when top is above dem
+masked_tprogs= tc.tprogs_cut_elev(tprogs_line, m.dis.top.array, tprogs_info)
 K, Sy, Ss, porosity = tc.int_to_param(masked_tprogs, params, porosity=True)
 
 # save tprogs facies array as input data for use during calibration
@@ -727,6 +760,9 @@ for p in tprogs_vals:
     vka[(vka<vka_quants.loc[p,'vka_max'])&(vka>vka_quants.loc[p,'vka_min'])] /= params.vani[p]
 
 
+# %%
+vka_quants.to_csv(join(model_ws, 'vka_quants.csv'))
+
 # %% [markdown]
 # The tuff breccia is very dense, hard and low water yielding. It is supposedly responsible for the many "haystack" hills in the eastern part of the county
 #
@@ -777,7 +813,7 @@ for k in adj_lowK.index:
 # this is causing potentially high water levels in the foothills
 # the deep_geology array shows where the mehrten formation comes out of the surface
 hk[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']
-vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']/params.loc[7,'vani']
+vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']*10/params.loc[7,'vani'] # quick test of if only 10 vani (fractured rock has lower vani)
 sy[adj_lowK_arr.astype(bool)] = params.loc[7,'Sy']
 ss[adj_lowK_arr.astype(bool)] = params.loc[7,'Ss']
 
@@ -791,11 +827,11 @@ ss[adj_lowK_arr.astype(bool)] = params.loc[7,'Ss']
 # plt.imshow(K[0,:,:])
 # plt.imshow(K[-1,:,:])
 row = 50
-plt.imshow(K[:,row,:],aspect=1/10)
-plt.show()
-plt.imshow(vka[:,row,:],aspect=5, norm=mpl.colors.LogNorm())
-plt.colorbar(shrink=0.4)
-plt.show()
+fig, ax = plt.subplots(2,1, figsize=(6.5,2),layout='constrained', sharex=True, dpi=300)
+im = ax[0].imshow(K[:,row,:],aspect=1/10)
+im = ax[1].imshow(vka[:,row,:],aspect=1, norm=mpl.colors.LogNorm())
+plt.colorbar(im, ax=ax[1], shrink=0.8)
+# plt.show()
 
 # %%
 # this may not be needed
@@ -807,13 +843,7 @@ seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue'
 print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
 
-# model review has shown that stream leakage is the cause of excess heads in the foothills
-# the solution is to scale strhc1 in the foothills by 1/10 or more (over the deep geology generally)
-# seep_vka[adj_lowK_arr[:-2].astype(bool)] /= 10
-# column 150 is just below roooney, where east wells oversimulate
-# seep_vka /= 4 # divide everything by 2
-# seep_vka[:,:,120:] /= 15
-
+# temporary block out to see how fit changes
 # apply additional scaling factors by breaking columns into 5 groups
 stp = int(ncol/5)
 for n in np.arange(0, 5):
@@ -821,6 +851,13 @@ for n in np.arange(0, 5):
 
 # keep laguna/mehrten input constant
 seep_vka[-2:] = np.copy(vka[-2:])
+
+# %%
+substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
+substrate.
+
+# %%
+plt.imshow(seep_vka[0], norm=mpl.colors.LogNorm())
 
 # %%
 coarse = (masked_tprogs==1)|(masked_tprogs==2)
@@ -948,9 +985,15 @@ XSlocs = gpd.read_file(sfr_dir+'8pointXS_locs/8pointXS_locs.shp')
 # new shapefile with an extra point for blodgett dam as site 16.5
 # XSlocs = gpd.read_file(gwfm_dir+'/Blodgett_Dam/geospatial/8pointXS_locs/8pointXS_locs.shp')
 XSlocs.crs = 32610
+# this is better done manually (causes weird numbering)
 # split segments where Oneto-Denier floodplain starts and ends for easier diversion to LAK
-XSlocs = pd.concat((XSlocs, OD_locs.drop(columns='Logger Location')))
+# XSlocs = pd.concat((XSlocs, OD_locs.drop(columns='Logger Location')))
+# identify the nearest XS to the OD sites and update the site name to improve referencing uniqueness
+OD_XSlocs = gpd.sjoin_nearest(XSlocs, OD_locs, how='right').drop(columns=['index_left','Logger Location'])
+OD_XSlocs['Site'] += [0.4, 0.8]
+XSlocs = pd.concat((XSlocs, OD_XSlocs))
 
+# it would be better to do the sjoin_nearest after creating an udpating XSg
 # XSg  = gpd.sjoin(grid_sfr, XSlocs, how = "inner", predicate= "contains", lsuffix = 'sfr',rsuffix = 'xs')
 XSg_in  = gpd.sjoin_nearest(grid_sfr_in, XSlocs, how = "right", lsuffix = 'sfr',rsuffix = 'xs')
 
@@ -958,7 +1001,7 @@ XSg_in  = gpd.sjoin_nearest(grid_sfr_in, XSlocs, how = "right", lsuffix = 'sfr',
 XSg_in = XSg_in.sort_values('Site')
 
 # to account for the iseg splitting added by Oneto-Denier forward fill information on XS
-XSg_in['Site'] = XSg_in['Site'].ffill(axis=0)
+# XSg_in['Site'] = XSg_in['Site'].ffill(axis=0)
 
 XSg_in['iseg'] = np.arange(2,len(XSg_in)+2) # add the segment that corresponds to each cross section
 
@@ -1002,60 +1045,89 @@ XSg_in['iseg'] = np.arange(2,len(XSg_in)+2) # add the segment that corresponds t
 # For the floodplain connection segments, the Site that it is connected to does not matter because they conductivity will be set to zero so the depth computed will not impact calculations. The stream bottom elevation will have an impact on the return flow because it must be below the lake bottom.
 
 # %%
+## new version from Oneto-Denier
 XSg = XSg_in.copy()
 
-if scenario != 'no_reconnection':
-    ## upstream ##
-    # od_breach is the sensor location where the breach was made in the levees for flow to leave the river
-#     od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
-    od_breach = OD_locs[OD_locs['Logger Location']=='OD_Excavation'].sjoin_nearest(XSg.reset_index(), how='inner')
-#     od_breach.z_min += od_breach.slope*20
-#     od_breach.reach -=0.2
-    # second reach to assist diversion into floodplain
-    # need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
-    od_return = od_breach.copy()
-    od_return['Logger Location'] = 'OD_Exc_Return'
-    od_return['iseg'] += 1 # adjust iseg to set sorting order
-#     od_breach.reach -=0.2
+# if scenario != 'no_reconnection':
+# identify XS to be copied for diversion reaches
+fp_grid_xs = fp_grid[['Logger Location','geometry']].copy()
+fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg.reset_index(), how='inner') #.drop(columns=['index_right'])
+# od_breach is the sensor location where the breach was made in the levees for flow to leave the river
+od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
+od_breach['Site'] -= 0.2 # adjust Site to set sorting order
+# swale is the return to downstream so it should be just upsream of the segment if possible
+od_swale = fp_grid_xs[fp_grid_xs['Logger Location']=='SwaleBreach_1'].copy()
+od_swale['Site'] -= 0.01 # adjust Site to set sorting order
 
-#     od_return.z_min -= od_return.slope*10
-    # all segments starting at the floodplain must have 2 added to accomodate the diversion and return flow
-    # includes the breach and return
-    XSg.loc[XSg.iseg>=od_breach.iseg.values[0], 'iseg'] +=2
-    
-    ## downstream ##
-    # the swale is where flow returns to the channel
-    od_swale = OD_locs[OD_locs['Logger Location']=='SwaleBreach_1'].sjoin_nearest(XSg.reset_index(), how='inner')
-#     all segments after the floodplain return must have 1 added to accomodate the return flow
-    XSg.loc[XSg.iseg>=od_swale.iseg.values[0], 'iseg'] += 1
-    
-    # add reaches for diversion
-    XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_swale)) 
-    XSg = XSg.sort_values('iseg')
-else:
-    XSg = XSg_in.reset_index().copy()
+# need to adjust elevation so transfer segment from floodplain diversion to stream is positive slope
+# return takes flow from the breach and returns it to the channel
+od_return = od_breach.copy()
+od_return['Site'] += 0.1 # adjust Site to set sorting order
+od_return.z_min = XSg[XSg.Site==int(np.ceil(od_return.Site).values[0])].z_min.max() + od_return.slope*delr
+# need another segment to transfer water between the breach and lake to avoid doubling
+od_lake = od_return.copy()
+od_lake['Site'] -= 0.05
+od_lake.z_min = od_breach.z_min - od_lake.slope*delr
+
+# add reaches for diversion
+# XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_swale)) #, od_swale (old)
+# need a segment to control diversion to lake to avoid doubling water
+XSg = pd.concat((XSg.reset_index(), od_breach, od_return, od_lake, od_swale)) #, od_swale
+# else:
+#     XSg = XSg.reset_index().copy()
 
 # %%
-if scenario != 'no_reconnection':
-    # update grid_sfr to account for added segments (3)
-    sfr_add = XSg.loc[~XSg['Logger Location'].isna(), np.append(grid_sfr_in.columns.values,['Logger Location'])]
-    # specify short lengths for identifying (don't think modflow will allow a zero length)
-    sfr_add.length_m = 1
-    # run first by simply re-writing the reach numbers to be longer
-    grid_sfr = pd.concat((grid_sfr_in,sfr_add))
-    # resort by reach number so they are in the correct spot before renumbering
-#     grid_sfr = grid_sfr.sort_values('reach')
-#     grid_sfr.reach = np.arange(1,len(grid_sfr)+1)
+# this needs to be done once the sfr reaches are in place
+# redefine Site/iseg
+def clean_reach_routing(XSg):
+    XSg['reach_order'] = np.arange(0, len(XSg)) # fix reach order
+    
+    # iterate over the added segments to fix reach ordering
+    for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+    # for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+        rn = XSg.loc[XSg.Site==xsn,'reach_order'].values[0]
+        if XSg.loc[XSg.reach_order==rn-1, 'iseg'].values== XSg.loc[XSg.reach_order==rn, 'iseg'].values:
+            XSg.loc[XSg.Site>=xsn, 'iseg'] += 1
+    # # now make sure to add 1 to downstream segments only if theyare equal
+    for xsn in XSg[~XSg['Logger Location'].isna()].Site:
+        rn = XSg.loc[XSg.Site==xsn,'reach_order'].values[0]
+        if XSg.loc[XSg.reach_order==rn, 'iseg'].values== XSg.loc[XSg.reach_order==rn+1, 'iseg'].values:
+            XSg.loc[XSg.reach_order>rn, 'iseg'] += 1
+    # need to fix reach numbering after fixing segment numbers
+    # min_reach = XSg.groupby('iseg').min(numeric_only=True)['ireach']
+    # for ns in min_reach[min_reach!=1].index:
+    #     XSg.loc[XSg.iseg==ns,'ireach'] = np.arange(1,np.sum(XSg.iseg==ns)+1)
+    return(XSg)
+    
+XSg  = XSg.sort_values(['Site','reach'])
+XSg = clean_reach_routing(XSg)
 
-else:
-    grid_sfr = grid_sfr_in.copy()
+# %%
+xs_sfr = grid_sfr_in.merge(XSg[['row','column','Logger Location','Site', 'iseg']],how='left')
+
+# specify reach 1 will have iseg from Michigan Bar icalc=4
+xs_sfr.loc[xs_sfr.reach==1,'iseg']=1
+xs_sfr = xs_sfr.sort_values(['reach', 'iseg'])
+# forward fill iseg numbers
+xs_sfr.iseg = xs_sfr.iseg.ffill()
+# rename old reach numbers to save
+xs_sfr = xs_sfr.rename(columns={'reach':'reach_order'})
+# specify new reach number for each segment
+xs_sfr['reach'] = 1
+for ns, seg in enumerate(xs_sfr.iseg.unique()):
+    xs_sfr.loc[xs_sfr.iseg==seg,'reach'] = np.arange(1,(xs_sfr.iseg==seg).sum()+1)
+    
+# get total lengths
+xs_sfr['dist_m'] = xs_sfr.length_m.cumsum()
+xs_sfr.dist_m -= xs_sfr.dist_m.iloc[0]
+
 
 # %% [markdown]
 # ### Read in 8 pt XS, revised by simplifying from Constantine 2001
 
 # %%
 # There is one reach for each cell that a river crosses
-NSTRM = -len(grid_sfr)
+NSTRM = -len(xs_sfr)
 # There should a be a stream segment if there are major changes
 # in variables in Item 4 or Item 6
 # 1st segment is for the usgs Michigan Bar rating curve, one for each XS, plus 2 for the floodplain diversion
@@ -1074,7 +1146,7 @@ ISTCB2 = 54
 # isfropt = 1 is no unsat flow
 # specifies whether unsat flow beneath stream or not, isfropt 2 has properties read for each reach, isfropt 3 also has UHC
 # read for each reach, isfropt 4 has properties read for each segment (no UHC), 5 reads for each segment with UHC
-ISFROPT = 1
+ISFROPT = 1 #3 tried out 3 for quick test of impact on leakage 
 # nstrail (int), number of trailing weave increments used to represent a trailing wave, used to represent a decrease 
 # in the surface infiltration rate. Can be increased to improve mass balance, values between 10-20 work well with error 
 # beneath streams ranging between 0.001 and 0.01 percent, default is 10 (only when isfropt >1)
@@ -1109,9 +1181,9 @@ sfr = flopy.modflow.ModflowSfr2(model = m, nstrm = NSTRM, nss = NSS, nparseg = N
 # %%
 # Add option block at the top of the sfr input file for tabfiles
 # tab_option = flopy.utils.OptionBlock(options_line = ' reachinput transroute tabfiles 1 ' + str(nper), package = sfr, block = True)
-options_line = ' reachinput transroute tabfiles 1 ' + str(nper)
+# options_line = ' reachinput transroute tabfiles 1 ' + str(nper)
 
-# options_line = ' reachinput transroute tabfiles 1 ' + str(nper) + ' no_reach_layer_change'
+options_line = ' reachinput transroute tabfiles 1 ' + str(nper) + ' no_reach_layer_change'
 tab_option = flopy.utils.OptionBlock(options_line = options_line, package = sfr, block = True)
 sfr.options = tab_option
 
@@ -1121,56 +1193,13 @@ sfr.options = tab_option
 # Originally used loops to fill reach and iseg numbers. Updated to rejoin with cross-section numbering to then apply forward fill to specify iseg then a loop can be applied to fill reach numbers only.
 
 # %%
-# join iseg to grid_sfr
-xs_sfr = grid_sfr.merge(XSg[['row','column', 'iseg']],how='left')
-if scenario=='reconnection':
-    xs_sfr = grid_sfr.merge(XSg[['row','column','Logger Location', 'iseg']],how='left')
-# specify reach 1 will have iseg from Michigan Bar icalc=4
-xs_sfr.loc[xs_sfr.reach==1,'iseg']=1
-xs_sfr = xs_sfr.sort_values(['reach', 'iseg'])
-# forward fill iseg numbers
-xs_sfr.iseg = xs_sfr.iseg.ffill()
-# rename old reach numbers to save
-xs_sfr = xs_sfr.rename(columns={'reach':'reach_order'})
-# specify new reach number for each segment
-xs_sfr['reach'] = 1
-for ns, seg in enumerate(xs_sfr.iseg.unique()):
-    xs_sfr.loc[xs_sfr.iseg==seg,'reach'] = np.arange(1,(xs_sfr.iseg==seg).sum()+1)
-    
-# get total lengths
-xs_sfr['dist_m'] = xs_sfr.length_m.cumsum()
-xs_sfr.dist_m -= xs_sfr.dist_m.iloc[0]
-
-if scenario=='reconnection':
-    # fix diversion elevation ( must be lower but not so low flow can't partly return to channel)
-    od_xs = xs_sfr.loc[xs_sfr['Logger Location']=='OD_Excavation'].copy()
-    od_xs.z_min = xs_sfr[xs_sfr.iseg==od_xs.iseg.iloc[0]-1].z_min.min() - od_xs.slope*10
-    # # fix return elevation
-    ret_xs = xs_sfr.loc[xs_sfr['Logger Location']=='OD_Exc_Return'].copy()
-    ret_xs.z_min = od_xs.z_min.iloc[0] - ret_xs.slope*10
-    # fix downstream elevation outlet elevation ( must be higher than lower segment)
-    out_xs = xs_sfr.loc[xs_sfr['Logger Location']=='SwaleBreach_1'].copy()
-    out_xs.z_min = xs_sfr[xs_sfr.iseg==out_xs.iseg.iloc[0]+1].z_min.max() + out_xs.slope*10
-    # fix elevations of floodplain connector segments
-    xs_sfr = pd.concat((xs_sfr[xs_sfr['Logger Location'].isna()], od_xs, ret_xs, out_xs))
-    xs_sfr = xs_sfr.sort_values(['iseg','reach'])
-
-# %%
-# error checking
-# fig,ax = plt.subplots()
-# xs_sfr[xs_sfr.iseg==32].tail(2).plot( 'iseg',ax=ax, alpha=0.6)
-
-# xs_sfr[xs_sfr.iseg==33].plot('iseg',ax=ax,  alpha=0.6,color='red')
-# xs_sfr[xs_sfr.iseg==34].head(3).plot('iseg',ax=ax,  alpha=0.6,edgecolor='green',color='none')
-
-# %%
 sfr_rows = (xs_sfr.row.values-1).astype(int)
 sfr_cols = (xs_sfr.column.values-1).astype(int)
 # Determine which layer the streamcell is in
 # since the if statement only checks whether the first layer is greater than the streambed elevation, 
 sfr_top = xs_sfr.z_min.values 
 sfr_bot =  sfr_top - soildepth_array[sfr_rows, sfr_cols]
-sfr_lay = get_layer_from_elev(sfr_bot, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
+sfr_lay = get_layer_from_elev(sfr_bot-0.1, botm[:, sfr_rows, sfr_cols], m.dis.nlay)
 
 
 # %%
@@ -1190,7 +1219,9 @@ sfr.reach_data.strtop = sfr_top
 sfr.reach_data.slope = xs_sfr.slope.values
  # a guess of 2 meters thick streambed was appropriate
 sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
-sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]
+# added additional 1/10 scaling to see if that fixed the issue of excess stream leakage
+strhc_scale = bc_params.loc['strhc_scale','StartValue']
+sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
 
 # UZF parameters
 sfr.reach_data.thts = soiln_array[sfr.reach_data.i, sfr.reach_data.j]/100
@@ -1284,12 +1315,15 @@ sfr_seg.roughch[(sfr_seg.icalc==1) | (sfr_seg.icalc==2)] = 0.048
 sfr_seg.roughbk[(sfr_seg.icalc==2) | (sfr_seg.icalc==5)] = 0.083# higher due to vegetation
 
 # %%
+# added extra segments 2024-1-10 (based on Oneto-Denier)
 if scenario != 'no_reconnection':
     # diversion segment
-    od_div = XSg[XSg['iseg']==od_breach.iseg.values[0]]
-    od_ret = XSg[XSg['iseg']==od_return.iseg.values[0]]
+    od_div = XSg[XSg['Site']==od_breach.Site.values[0]]
+    od_ret = XSg[XSg['Site']==od_return.Site.values[0]]
+    od_lak = XSg[XSg['Site']==od_lake.Site.values[0]]
     # downstream channel segment
-#     od_sfr = XSg[XSg.iseg==np.round(od_div.iseg.values[0])]
+    # od_sfr = XSg[XSg.Site==np.round(od_div.Site.values[0])]
+    # od_sfr = od_sfr[od_sfr['Logger Location'].isna()]
     # upstream segment to diversion and channel
     up_div = XSg[XSg.iseg == od_div.iseg.values[0]-1]
 
@@ -1299,10 +1333,21 @@ if scenario != 'no_reconnection':
     # pull segments for easier indexing
     div_seg = od_div.iseg.iloc[0]
     ret_seg = od_ret.iseg.iloc[0]
-#     chan_seg = od_sfr.iseg.iloc[0]
+    lak_seg = od_lak.iseg.iloc[0]
+    chan_seg = od_sfr.iseg.iloc[0]
     up_seg = div_seg - 1
-    chan_seg = up_seg +3
-    out_seg = od_out.iseg.iloc[0]
+    chan_seg = ret_seg + 1
+    out_seg = od_out.iseg.iloc[0] # still needed?
+
+# %%
+# check order (forced chan_seg for now to be ret_seg +1)
+up_seg, div_seg, ret_seg, lak_seg, out_seg, chan_seg,
+
+# %%
+# pull out floodplain activation flows
+fp_flow = bc_params.loc['fp_active_flow','StartValue']*86400
+print('Baseline flow is %.2f  m^3/day ' %fp_flow)
+
 
 # %%
 if scenario != 'no_reconnection':
@@ -1314,9 +1359,11 @@ if scenario != 'no_reconnection':
      # there will be a diversion from the river to the dam above 27 cms, of which 20% will be returned to the side channel
     sfr_seg.iupseg[sfr_seg.nseg==div_seg] = up_seg
     sfr_seg.iprior[sfr_seg.nseg==div_seg] = -3 # iprior=-3 any flows above the flow specified will be diverted
-    sfr_seg.flow[sfr_seg.nseg==div_seg] = 23*86400 # 23 cms is floodplain threshold per Whipple in the Cosumnes
-    sfr_seg.outseg[sfr_seg.nseg==div_seg] = -1 #outflow from segment is OD floodplain
-
+    sfr_seg.flow[sfr_seg.nseg==div_seg] = fp_flow # 23 cms is floodplain threshold per Whipple in the Cosumnes
+    # outflow from the segment is a downstream segment then the lake to avoid diverison routing issues
+    sfr_seg.outseg[sfr_seg.nseg==div_seg] = lak_seg
+    sfr_seg.outseg[sfr_seg.nseg==lak_seg] = -1
+    
     # adjust for flow from diversion segment back to  channel
     sfr_seg.iupseg[sfr_seg.nseg==ret_seg] = div_seg
     sfr_seg.iprior[sfr_seg.nseg==ret_seg] = -2 # the flow diverted is a % of the total flow in the channel
@@ -1335,6 +1382,7 @@ if scenario != 'no_reconnection':
     sfr.reach_data.strhc1[sfr.reach_data.iseg== div_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== ret_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== out_seg] = 0
+    sfr.reach_data.strhc1[sfr.reach_data.iseg== lak_seg] = 0
 
 # %%
 if scenario != 'no_reconnection':
@@ -1395,7 +1443,7 @@ XS8pt.columns = XS8pt.columns.astype('float')
 sfr.channel_geometry_data = {0:{j:[] for j in np.arange(2,len(XSg)+2)}  }
 
 xsnum = 2
-for k in XSg.Site.values:
+for k in np.floor(XSg.Site.values): # round is fix for subtracting to id diversion segments
     pos = int(XS8pt.columns.get_loc(k))
     XCPT = XS8pt.iloc[:,pos].values
     ZCPT = XS8pt.iloc[:,pos+1].values
@@ -1552,6 +1600,7 @@ if scenario != 'no_reconnection':
     lak.tabdata = True
 
 
+
 # %%
 # lak.write_file()
 
@@ -1561,7 +1610,7 @@ if scenario != 'no_reconnection':
 # %%
 if scenario != 'no_reconnection':
     ibound[lakarr>0] = 0
-    bas = flopy.modflow.ModflowBas(model = m, ibound=ibound, strt = strt, stoper = None) #
+    bas = flopy.modflow.ModflowBas(model = m, ibound=ibound, strt = strt, stoper = None, hnoflo=-999.99) #
 
 # %% [markdown]
 # ## Add Gage for lake output
@@ -1631,12 +1680,13 @@ df_mon['year'] = df_mon.index.year
 df_mon['month'] = df_mon.index.month
 
 df_mon[['row','column']] = df_mon[['row','column']].astype(int)
-# for one year this calculation doesn't take long
+# for one year this calculation doesn't take long (add 1 to make 1-based)
 df_mon['layer'] = get_layer_from_elev(df_mon.value.values, botm[:, df_mon.row, df_mon.column], m.dis.nlay)
-# correct kriged elevations so if head is below cell bottom it is set to the mid elevation of the cell
+# correct kriged elevations so if head is below cell bottom it is removed
 df_mon['botm'] = botm[df_mon.layer, df_mon.row, df_mon.column] 
-df_mon['botm_adj'] = (df_mon.botm + botm[df_mon.layer-1, df_mon.row, df_mon.column])/2
-df_mon.loc[df_mon.value < df_mon.botm, 'value'] = df_mon.loc[df_mon.value < df_mon.botm, 'botm_adj']
+# df_mon['botm_adj'] = (df_mon.botm + botm[df_mon.layer, df_mon.row, df_mon.column])/2
+# df_mon.loc[df_mon.value < df_mon.botm, 'value'] = df_mon.loc[df_mon.value < df_mon.botm, 'botm_adj']
+df_mon = df_mon[df_mon.value > df_mon.botm]
 
 # can calculate nw, se and upstream boundary uniformly
 # just drop row,col on delta boundary
@@ -1651,6 +1701,8 @@ df_mon = df_mon[ibound[df_mon.layer, df_mon.row,df_mon.column].astype(bool)]
 # ghb_ss = df_mon.groupby(['layer','row','column']).mean()
 # use heads that should appear at start for steady state
 ghb_ss = df_mon.loc[strt_date].groupby(['layer','row','column']).mean().reset_index()
+ghb_ss = ghb_ss[ibound[ghb_ss.layer, ghb_ss.row,ghb_ss.column].astype(bool)]
+
 # ghb_ss.value < ghb
 
 
@@ -1661,22 +1713,25 @@ def prep_ghb_df(ghb_df):
     # pull out head for rows and columns
     rows = ghb_df.row.values
     cols = ghb_df.column.values
+    ghb_lay = ghb_df.layer.values
     ghb_hd = ghb_df.set_index(['row','column'])
     head = ghb_hd.loc[list(zip(rows, cols))].value.values
-    ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay)
+    # ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay) #0-based
 
     df = pd.DataFrame(np.zeros((np.sum(nlay - ghb_lay),5)))
     df.columns = ['k','i','j','bhead','cond']
     # get all of the i, j,k indices to reduce math done in the for loop
     n=0
-    nk = -1
+    nk = 0 
     for i, j in list(zip(rows,cols)):
-        nk +=1
         for k in np.arange(ghb_lay[nk], nlay):
             df.loc[n,'i'] = i
             df.loc[n,'j'] = j
             df.loc[n,'k'] = k
             n+=1
+        # update layer sampling location
+        nk +=1
+
     df[['k','i','j']] = df[['k','i','j']].astype(int)
 #     hk = hk[df.k, df.i, df.j] # old hk with cell by cell values
     hk = eff_K.loc[eff_K.name=='HK_Y', 'permeameter'].values[0] # permeameter effective K
@@ -1733,7 +1788,8 @@ ghbdelta_spd.bhead = 0
 ghbdelta_spd.k = xz[:,1]
 ghbdelta_spd.j = 0
 ghbdelta_spd.i = xz[:,0]
-
+# only keep cells where boundary head is above cell botm
+ghbdelta_spd = ghbdelta_spd[ghbdelta_spd.bhead > botm[ghbdelta_spd.k, ghbdelta_spd.i, ghbdelta_spd.j]]
 # drop ghb in inactive cells?
 ghbdelta_spd = ghbdelta_spd[ibound[ghbdelta_spd.k, ghbdelta_spd.i,ghbdelta_spd.j].astype(bool)]
 
@@ -1775,7 +1831,7 @@ ghb = flopy.modflow.ModflowGhb(model=m, stress_period_data =  ghb_dict, ipakcb=5
 # ghb.stress_period_data =  {0: ghbdn_spd}
 
 # %%
-# ghb.check()
+ghb.check()
 # ghb.write_file()
 
 # %%
@@ -2005,6 +2061,10 @@ ievt[et_rows, et_cols] = et_layer
 # I checked that these are all active cells in ibound
 
 # %%
+evtr_mean = evtr.mean(axis=0)
+evt_active = evtr_mean>0
+
+# %%
 plt.imshow(ext_dp)
 plt.colorbar(shrink=0.5)
 
@@ -2111,10 +2171,15 @@ plt.show()
 # where GDEs are active the rain should be directly applied instead of SWB percolation
 # as we don't want to double count ET
 adj_perc = perc.copy()
-adj_perc[:, ext_dp>2] = rain_arr[:, ext_dp>2]
+et_rain_bool = (evt_active)&(ext_dp>2)
+adj_perc[:, et_rain_bool] = rain_arr[:, et_rain_bool]
 
 adj_perc_ss = ss_perc.copy().mean(axis=0)
-adj_perc_ss[ext_dp>2] = rain_arr_ss[ext_dp>2]
+adj_perc_ss[et_rain_bool] = rain_arr_ss[et_rain_bool]
+
+# %%
+# why is the adjusted percolation so high along the river?
+plt.imshow(adj_perc.mean(axis=0))
 
 # %%
 # have transient recharge start after the 1st spd
@@ -2402,15 +2467,17 @@ hob_dir = gwfm_dir+'/HOB_data'
 all_obs = pd.read_csv(hob_dir+'/all_obs_grid_prepared.csv') #,index_col='date', parse_dates=['date'])
 # all_obs = pd.read_csv(hob_dir+'/all_obs_grid_prepared_auto_QAQC.csv',index_col='date', parse_dates=True)
 # remove date time portion since regional model is daily scale, subdaily variation isn't critical
-if (all_obs.date is object):
-    all_obs['date'] = all_obs.date.str.extract(r'(\d{4}-\d+-\d+)')
+if (all_obs.date.dtype == 'object'):
+    all_obs['mdy'] = all_obs.date.str.extract(r'(\d+/\d+/\d+)')
+    # pd.to_datetime(all_obs['date'], errors='coerce')
+    all_obs['date'] = pd.to_datetime(all_obs.mdy)
 all_obs.date = pd.to_datetime(all_obs.date, errors='coerce')
 
 all_obs = all_obs.set_index('date')
 all_obs_ss = all_obs.copy()
 all_obs = all_obs.loc[(all_obs.index>strt_date)&(all_obs.index<end_date)]
 
-# # # get spd corresponding to dates
+# # # # get spd corresponding to dates
 all_obs['spd'] = (all_obs.index-strt_date).days.values
 
 if ss_bool:
@@ -2422,7 +2489,7 @@ if ss_bool:
     all_obs_ss['date'] = strt_date
     all_obs_ss['obs_nam'] = 'N'+all_obs_ss.node.astype(int).astype(str)+'.00000'
 #     # join steady state
-    all_obs = pd.concat((all_obs, all_obs_ss))
+    all_obs = pd.concat((all_obs, all_obs_ss.set_index('date')))
 
 
 
@@ -2438,15 +2505,12 @@ print('Number of wells kept',all_obs[all_obs.site_code.isin(hob_use)].site_code.
 all_obs = all_obs[all_obs.site_code.isin(hob_use)]
 
 # %%
-# all_obs.row
-
-# %%
 if all_obs.avg_screen_depth.isna().sum()>0:
     print('Some OBS missing screen depth')
 
 all_obs['screen_elev'] = dem_data[all_obs.row-1, all_obs.column-1] - all_obs.avg_screen_depth
 # keep 1 based layer
-all_obs['layer'] = get_layer_from_elev(all_obs.screen_elev, botm[:,all_obs.row-1, all_obs.column-1], m.dis.nlay) + 1
+all_obs['layer'] = get_layer_from_elev(all_obs.screen_elev.values, botm[:,all_obs.row-1, all_obs.column-1], m.dis.nlay) + 1
 
 # %%
 stns = all_obs.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
@@ -2576,20 +2640,23 @@ oc.write_file()
 
 # For later model runs when all the data is needed to be saved
 spd = {}
-# spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,nper,1)}
-spd = { (j,0): ['save head'] for j in np.arange(0,nper,1)}
+spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,nper,1)}
+# spd = { (j,0): ['save head'] for j in np.arange(0,nper,1)}
 
 for j in month_intervals:
-#     spd[j, 0] = ['save head', 'save budget','print budget']
-    spd[j, 0] = ['save head', 'print budget']
+    spd[j, 0] = ['save head', 'save budget','print budget']
+    # spd[j, 0] = ['save head', 'print budget']
     
 oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True)
 
 # %%
 # oc.write_file()
 
+# %%
+
 # %% [markdown]
 # ## Newton Solver
+# New version of OHWM requires CONTINUE to be specified before SPECIFIED
 
 # %%
 nwt = flopy.modflow.ModflowNwt(model = m, headtol=1E-4, fluxtol=500, maxiterout=200, thickfact=1e-05, 
@@ -2611,7 +2678,7 @@ nwt_dict['fluxtol'] = 500
     # update NWT sovler parameters
 nwt.__dict__ = nwt_dict
 
-nwt.write_file()
+# nwt.write_file()
 
 # %% [markdown]
 # # Model checks
@@ -2655,12 +2722,7 @@ m.check()
 m.write_input()
 
 
-
-
 # %% [markdown]
 # The parameters used with the model run that had the 0% CME were the parametersf rom Box (e.g., 100 vani). BC_params from box also had the 10 coarse scale and 23 fp_active flow. Maybe something in the py script?
 #
 # Looking back it seems that cumulative erro was 0% but the 1st period might have had really high error.
-
-# %%
-bc_params
