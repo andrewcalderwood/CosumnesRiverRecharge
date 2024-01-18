@@ -49,7 +49,7 @@ gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 bas_dir = join(gwfm_dir, 'BAS6')
 proj_dir = join(gwfm_dir,'EcoFIP')
 out_dir = join(proj_dir, 'output')
-plt_dir = join(proj_dir,'figures/')
+fig_dir = join(proj_dir,'figures')
 
 
 # %%
@@ -75,7 +75,7 @@ from mf_utility import get_dates, clean_hob
 
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
-run_dir = 'F://WRDAPP/GWFlowModel'
+# run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
@@ -84,7 +84,7 @@ base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
 # model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
-model_nam = 'parallel_realizations/realization005'
+# model_nam = 'parallel_realizations/realization005'
 
 model_ws = loadpth+model_nam
 print(model_nam)
@@ -135,7 +135,7 @@ grid_sfr[['row','column']] = grid_sfr[['i','j']] +1 # convert to 1 based to matc
 drop_iseg = grid_sfr[grid_sfr.strhc1==0].iseg.values
 grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
 vka_quants = pd.read_csv(join(base_model_ws, 'vka_quants.csv'))
-grid_sfr['facies'] = 'Mud'
+grid_sfr['facies'] = ''
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
     grid_sfr.loc[(grid_sfr.vka< facies.vka_max)&(grid_sfr.vka>= facies.vka_min),'facies'] = facies.facies
@@ -145,6 +145,7 @@ for p in vka_quants.index:
 gdf_sfr = grid_sfr[~grid_sfr.iseg.isin(drop_iseg)]
 gdf_sfr = gdf_sfr.set_index(['iseg','ireach'])[['rchlen','strtop','strhc1', 'vka', 'facies', 'geometry']]
 gdf_sfr['Total distance (m)'] = gdf_sfr['rchlen'].cumsum()
+gdf_sfr['rch_order'] = np.arange(1,len(gdf_sfr)+1) # reach order for easier referencing
 pd_sfr = pd.DataFrame(gdf_sfr.drop(columns=['geometry']))
 
 
@@ -215,43 +216,65 @@ mon_chk.plot(x='depth',y='Qaquifer_rate', kind='scatter',ax=ax)
 # It's pretty slow (minutes) to load the 10 realizations and post-process (10s of seconds) them. It might make sense to process indiviudal
 
 # %%
-grp_cols = ['segment','reach', 'realization', 'Total distance (m)']
+gdf_sfr = gpd.read_file(join(proj_dir, 'GIS','sfr_reach_reference.shp'))
+gdf_sfr = gdf_sfr.rename(columns={'iseg':'segment','ireach':'reach','dist_m':'Total distance (m)'})
+
+
+# %%
+df_sfr = pd.DataFrame(gdf_sfr.drop(columns=['geometry']))
+
+
+# %%
+grp_cols = ['segment','reach', 'realization', 'Total distance (m)','rch_order']
 
 # simplify columns for output 
 keep_cols = np.append(grp_cols, ['dt','Qin','Qaquifer','Qout', 'Qaquifer_rate', 'width','depth'])
 
 
 # %%
-sfrdf_all = pd.DataFrame()
-for r in best10.realization.values:
-    r_ws = join(loadpth, 'parallel_realizations','realization'+str(r).zfill(3))
-    sfrdf = clean_sfr_df(r_ws, dt_ref, pd_sfr)
-    sfrdf_all = pd.concat((sfrdf_all, sfrdf.assign(realization=r)))
+rewrite=False
 
 # %%
-# drop routing segments
-sfrdf_all = sfrdf_all[~sfrdf_all.segment.isin(drop_iseg)]
-# calculate the effective rate of seepage
-sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
+if rewrite:
+    sfrdf_all = pd.DataFrame()
+    for r in best10.realization.values:
+        r_ws = join(loadpth, 'parallel_realizations','realization'+str(r).zfill(3))
+        sfrdf = clean_sfr_df(r_ws, dt_ref, pd_sfr)
+        sfrdf_all = pd.concat((sfrdf_all, sfrdf.assign(realization=r)))
+    
+    # drop routing segments
+    sfrdf_all = sfrdf_all[~sfrdf_all.segment.isin(drop_iseg)]
+    # calculate the effective rate of seepage
+    sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
+    # about 220 MB
+    sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
+                                  key='all', complevel=4, data_columns = grp_cols)
 
 # %%
-# about 220 MB
-sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
-                              key='monthly', complevel=4, data_columns = grp_cols)
+sfrdf_all = pd.read_hdf(join(out_dir, 'sfrdf_all.hdf5'),  key='all', complevel=4)
+# add total distance which was missing 
+sfrdf_all = sfrdf_all.merge(df_sfr)
 
 # %%
-sfr_mon_all = sfrdf_all.groupby(grp_cols).resample('MS').mean(numeric_only=True).drop(columns=grp_cols)
-sfr_mon_all = sfr_mon_all.reset_index()
+
+if rewrite:
+    sfr_mon_all = sfrdf_all.groupby(grp_cols).resample('MS').mean(numeric_only=True).drop(columns=grp_cols)
+    sfr_mon_all = sfr_mon_all.reset_index()
+    sfr_mon_all['month'] = sfr_mon_all.dt.dt.month
+    
+    # produces file of 6 MB without data_columns
+    # file of 12 MB with data columns of grp_cols
+    sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
+                                  key='monthly', complevel=4, data_columns = grp_cols)
+
+# %%
+sfr_mon_all = pd.read_hdf(join(out_dir,'sfrdf_mon_all.hdf5'), key='monthly')
+# add reference columns
+sfr_mon_all = sfr_mon_all.merge(df_sfr)
 sfr_mon_all['month'] = sfr_mon_all.dt.dt.month
 
 # %%
-# produces file of 6 MB without data_columns
-# file of 12 MB with data columns of grp_cols
-sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
-                              key='monthly', complevel=4, data_columns = grp_cols)
-
-# %%
-# sfr_mon_chk = pd.read_hdf(join(out_dir,'sfrdf_mon_all.hdf5'), key='monthly')
+sfr_mon_all.columns
 
 # %%
 # get average across time to plot spatial view
@@ -266,14 +289,18 @@ sfr_cv = sfr_std.Qaquifer_rate/sfr_avg.Qaquifer_rate
 from report_cln import magnitude
 
 # %%
+# plt.rcdefaults() # reset
+
+# %%
 fig,ax = plt.subplots()
 for r in best10.realization.values:
     sfr_plt = sfr_avg_all.loc[sfr_avg_all.realization==r]
-    sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False)
+    sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, label=r,legend=False)
     
 ax.set_yscale('log')
 ax.set_ylim(1E-2, 10**(magnitude(sfr_avg_all.Qaquifer_rate.max())+1))
 ax.set_ylabel('Stream loss rate (m/day)')
+ax.legend(loc='upper left', title='Realization')
 sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--')
 
 # %% [markdown]
@@ -291,4 +318,163 @@ print('Max column after reach 160 was %.i' %grid_sfr.iloc[160:].column.max())
 print('First reach before column 46 was %.i ' %grid_sfr[grid_sfr.column<46].index.min())
 
 # %%
-sfr_cv.plot()
+# sfr_cv.plot()
+
+# %%
+# plot histogram of leakage rate
+r = 5
+sfr_mon = sfr_mon_all[sfr_mon_all.realization==r].copy()
+
+# %%
+r=100
+# test the monthly at a reach to look at relationship of flow and seepage
+mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]]
+fig,ax = plt.subplots(2,1, layout='constrained')
+mon_chk.boxplot(by='month',column='Qaquifer', ax=ax[0])
+mon_chk.boxplot(by='month',column='Qaquifer_rate', ax=ax[1])
+
+# %% [markdown]
+# Define limits for data by reach to help decide how much range there is. We can use quartiles and whiskers or confidence intervals.
+
+# %%
+# check normality if needed
+# from scipy.stats import normaltest
+# normaltest(mon_chk.Qaquifer_rate)
+
+# %%
+import statsmodels.stats.api as sms
+    for r in np.arange(0, len(df_sfr)):
+        mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]].copy()
+        # get the confidence intervals 
+        ci_l, ci_h = sms.DescrStatsW(mon_chk.Qaquifer_rate).tconfint_mean()
+
+# %%
+# fig,ax = plt.subplots()
+# sfr_mon.boxplot(by='Total distance (m)', column='Qaquifer_rate',ax=ax)
+# ax.set_yscale('log')
+# ax.set_ylim(1E-2, None)
+# ax.set_xticklabels(ax.get_xticklabels(), rotation=90);
+# boxplots are messy 
+
+# seaborn is slow to plot but works well
+# g = sns.lineplot(sfr_mon_all, x='Total distance (m)', y='Qaquifer_rate',
+#                  hue='realization', errorbar=('ci',95))
+r = 5
+# r = best10.realization.iloc[1]
+sfr_mon = sfr_mon_all[sfr_mon_all.realization==r].copy()
+
+g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+# g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', err_style="bars", errorbar=("se", 2))
+
+g.set(yscale='log', ylim=(1E-2, None), title = 'Realization '+str(r))
+g.set(xlim = (13E3, 40E3), ylabel='Qaquifer (m/day)')
+# sns.set(rc={'figure.figsize':(6.5,6.5)})
+plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
+
+# %%
+for r in best10.realization.values:
+    sfr_mon = sfr_mon_all[sfr_mon_all.realization==r].copy()
+    
+    g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+    # g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', err_style="bars", errorbar=("se", 2))
+    
+    g.set(yscale='log', ylim=(1E-2, None), title = 'Realization '+str(r))
+    g.set(xlim = (13E3, 40E3), ylabel='Qaquifer (m/day)')
+    # sns.set(rc={'figure.figsize':(6.5,6.5)})
+    plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
+    plt.close()
+
+# %% [markdown]
+# # Linear regression
+# Perform linear regression between leakage rate and depth to identify regions where a scale leakage rate might be appropriate.
+
+# %%
+# statistics functions
+from sklearn.metrics import r2_score, mean_squared_error
+from sklearn import datasets, linear_model
+# pands has this built in with the DataFrame.corr()
+# from scipy.stats import pearsonr, spearmanr, kendalltau 
+
+# %%
+from hyd_utility import mark_outlier
+
+# %%
+mon_chk_plt = mark_outlier(mon_chk.Qaquifer_rate)
+mon_chk_plt = mon_chk.loc[~mon_chk_plt.flier]
+x_var = 'depth'
+y_var='Qaquifer_rate'
+
+
+# %%
+# ax_n.set_xscale('log')
+def plt_reg(df_plt, x_var, y_var, logx=False, logy=False):
+    # linear, regression
+
+    # perform the regression
+    regr = linear_model.LinearRegression()
+    regr.fit(df_plt[[x_var]].values, df_plt[[y_var]].values)
+    x_range = np.array([[df_plt.depth.min()], [df_plt.depth.max()]])
+    ax_n.plot(x_range, regr.predict(x_range), color='black', linewidth=1)
+    r2_val = r2_score(df_plt[[y_var]], regr.predict(df_plt[[x_var]].values))
+    ax_n.annotate('$R^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes fraction')
+    # return the coefficient, intercept, and R2 fit
+    return([regr.coef_[0][0], regr.intercept_[0], r2_val])
+
+r=150
+mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]]
+mon_chk_plt = mark_outlier(mon_chk.Qaquifer_rate)
+mon_chk_plt = mon_chk.loc[~mon_chk_plt.flier]
+
+fig,ax_n = plt.subplots()
+mon_chk_plt.plot(x=x_var,y=y_var, kind='scatter',ax=ax_n)
+m, x0, r2_val = plt_reg(mon_chk_plt.copy(), x_var, y_var)
+plt.title('Reach '+str(r))
+
+
+# %%
+def get_lin_reg(sfr_mon, df_sfr):
+    lin_fit = pd.DataFrame(np.zeros((len(df_sfr), 3)), columns=['coef','intercept','R2'])
+    for r in np.arange(0, len(df_sfr)):
+        mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]]
+        mon_chk_plt = mark_outlier(mon_chk.Qaquifer_rate)
+        mon_chk_plt = mon_chk.loc[~mon_chk_plt.flier]
+        m, x0, r2_val = plt_reg(mon_chk_plt, x_var, y_var)
+        lin_fit.loc[r,:] = (m, x0, r2_val)
+    return(lin_fit)
+
+lin_fit = get_lin_reg(sfr_mon.copy(), df_sfr)
+lin_fit.plot(y='R2')
+
+
+# %%
+lin_fit_all = pd.DataFrame()
+for r in best10.realization.values:
+    sfr_mon = sfr_mon_all[sfr_mon_all.realization==r].copy()
+    lin_fit = get_lin_reg(sfr_mon.copy(), df_sfr)
+    lin_fit_all = pd.concat((lin_fit_all, lin_fit.assign(realization=r)))
+# make rch_order one based
+lin_fit_all.index+=1
+lin_fit_all.index.name='rch_order'
+
+
+# %%
+lin_fit_all.to_csv(join(out_dir, 'linear_regression_alltime.csv'))
+
+
+# %% [markdown]
+# For the regions with mostly disconnection, the fit is good. Bad fit in the foothills but we don't care as much about that region and bad fit in the lower most reaches which again we are less concerned about.
+# - to further refine this, the seepage regression could also be done by month because in the summer much more of the system including the lower river is disconnected.
+
+# %%
+fig,ax = plt.subplots(2,1, sharex=True)
+for r in best10.realization.values:
+    lin_fit = lin_fit_all[lin_fit_all.realization==r].copy()
+    lin_fit.plot(y='R2',ax=ax[0],label=r, legend=False)
+    lin_fit.plot(y='coef',ax=ax[1],label=r, legend=False)
+
+# plt.ylim(-1,1)
+ax[0].legend( loc=(1.01,-0.4), title='Realization')
+plt.xlabel('Reach')
+ax[0].set_ylabel('$R^2$ score')
+ax[1].set_ylabel('Lin. Reg. Coeff.')
+ax[1].set_yscale('log')
