@@ -326,12 +326,12 @@ r = 5
 sfr_mon = sfr_mon_all[sfr_mon_all.realization==r].copy()
 
 # %%
-r=100
+r=200
 # test the monthly at a reach to look at relationship of flow and seepage
 mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]]
-fig,ax = plt.subplots(2,1, layout='constrained')
-mon_chk.boxplot(by='month',column='Qaquifer', ax=ax[0])
-mon_chk.boxplot(by='month',column='Qaquifer_rate', ax=ax[1])
+fig,ax = plt.subplots( layout='constrained')
+# mon_chk.boxplot(by='month',column='Qaquifer', ax=ax[0])
+mon_chk.boxplot(by='month',column='Qaquifer_rate', ax=ax)
 
 # %% [markdown]
 # Define limits for data by reach to help decide how much range there is. We can use quartiles and whiskers or confidence intervals.

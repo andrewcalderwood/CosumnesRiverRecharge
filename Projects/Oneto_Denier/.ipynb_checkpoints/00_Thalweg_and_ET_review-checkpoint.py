@@ -162,7 +162,7 @@ ny=3
 nx=2
 fig,ax = plt.subplots(nx,ny, sharex=True, sharey=True, figsize=(6.5, 4),dpi=600)
 
-for n in np.arange(0,len(axes)):
+for n in np.arange(0,nx*ny):
     # ax_n = ax[n%nx, int(n/nx)]
     ax_n = ax[int(n/ny), n%ny]
     gwl_long[gwl_long.Well==mw[n]].plot(x='dt',y='obs', ax=ax_n, legend=False)
@@ -171,6 +171,8 @@ for n in np.arange(0,len(axes)):
     mw_dat = rm_elev[rm_elev.Sensor ==mw[n]]
     # ax_n.axhline(mw_dat['MPE (meters)'].values[0], ls='--', linewidth=1, color='brown')
     ax_n.axhline(mw_dat['z_m_min_cln'].values[0]-1, ls='--', linewidth=1, color='blue')
+    # label each monitoring well
+    ax_n.annotate(mw[n].replace('_',' '), xy = (0.01,0.9), xycoords = 'axes fraction')
 fig.supylabel('Elevation (m)')
 fig.supxlabel('Date')
 # alternate title scheme
