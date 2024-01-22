@@ -96,6 +96,10 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
     """ Plot legend with multi distances (3) at fractional axes offset
     A typical scalebar has distance and two time distances and half the distance
     With labels for just the distance and two times
+    Input:
+    ax: matplotlib subplot axis
+    xoff, yoff: = x and y off fractional offset to ax
+    dist: distance in 
     """
     minx, maxx = ax.get_xlim()
     miny, maxy = ax.get_ylim()
@@ -105,7 +109,10 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
     height = (maxy-miny)*0.02 # height of bar
     if units=='km':
         km = 1E3
+    elif units=='m':
+        km = 1
     for n, adj in enumerate(scales):
+        # alternate colors black, white, black
         color='black'
         if n%2==1:
             color='white'
@@ -113,12 +120,16 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
         gpd.GeoSeries(rect).plot(color=color, edgecolor='black', ax=ax)
         # round to 1 decimal, and drop decimal if it is only a .0
         dist_lab = str(np.round(dist*adj/km, 1)).replace('.0','')
-        # dist_lab = str(int(dist*adj/km)) # old version
-        # ax.annotate(dist_lab, (lx+dist*adj-dist*0.2,ly-2*height), xycoords='data') # original, manual adjust to make clean
-        if len(dist_lab)>1:
-            dec_xoff = 3
-        else:
-            dec_xoff = 1
-        ax.annotate(dist_lab, (lx+dist*adj-dist*0.2*dec_xoff,ly-2*height), xycoords='data')
-    adj = scales[0]
-    ax.annotate(units, (lx+dist*adj+dist*0.4,ly-2*height), xycoords='data')
+        if n ==0:
+            dist_lab += ''+units
+        # if len(dist_lab)>1:
+        #     dec_xoff = 3
+        # else:
+        #     dec_xoff = 1
+            # dec_xoff = int(np.log10(1E3)) # way to scale offset
+        dec_xoff = len(dist_lab)
+        # add slight offset to location of rectangle
+        # ax.annotate(dist_lab, (lx + dist*adj - dist*0.2*dec_xoff, ly-2*height), xycoords='data')
+        ax.annotate(dist_lab, (lx + dist*adj , ly-2*height), xycoords='data', ha='center')
+    # adj = scales[0]
+    # ax.annotate(units, (lx + dist*adj + dist*0.4, ly-2*height), xycoords='data', ha='center')

@@ -314,9 +314,13 @@ arr_lab(m_domain, 'Cosumnes\nWatershed', axins, offset = (125, 40), arrow=False,
 
 # ## Interior floodplain plot of wells
 
+import map_cln
+reload(map_cln)
+from map_cln import make_multi_scale
+
 # +
 fig, ax =plt.subplots(figsize=(6.5,6.5))
-ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+# ax.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
 
 plt_bnds = gdf_bnds(rm_t,ax=ax, buf=200)
 
@@ -336,7 +340,54 @@ rm_t.apply(lambda x: ax.annotate(x.Sensor.replace('MW_',''), xy=x.geometry.coord
 
 ctx.add_basemap(ax=ax, source = ctx.providers.Esri.WorldImagery, attribution=False, attribution_size=6,
                 crs = 'epsg:26910', alpha=0.7)
+
+plt_arrow(ax, 0.925, 0.27)
+make_multi_scale(ax, 0.6, 0.1, dist = 200, scales = [4,2,1], units='m')
+# make_multi_scale(ax, 0.6, 0.1, dist = 0.2E3, scales = [4,2,1], units='km')
+plt_cln(ax=ax)
 # fig.savefig(join(fig_dir, 'floodplain_map.png'), bbox_inches='tight')
+# -
+
+# ## Land use plot
+# Show local land use to share in the appendix and make  a table with irrigation types and efficiencies. May need map of irrigation types.
+#
+
+ag = gpd.read_file(join(gwfm_dir, 'UZF_data', 'county_landuse', 'domain_ag_lu_2018.shp'))
+ag = gpd.overlay(ag, m_domain)
+
+# identify crops to plot
+ag['local_area'] = ag.geometry.area
+area_sum = ag[['name','local_area']].groupby('name').sum()
+# simplify to crop with >5% area for map
+# 1% limit shows ~10, while 5% shows expected 4 plus rice
+plt_crops = area_sum.loc[(area_sum/ area_sum.sum()>0.05).values].index.values
+ag_plt = ag[ag.name.isin(plt_crops)]
+
+fig, ax = plt.subplots(figsize=(6.5, 6.5))
+ag_plt.plot('name', legend=True, ax=ax, legend_kwds = {'loc':'upper right'})
+plt_cln(ax=ax)
+plt_arrow(ax, 0.05, 0.15)
+make_multi_scale(ax, 0.1, 0.1, dist = 0.5E3, scales = [4,2,1])
+plt.savefig(join(fig_dir, 'ag_land_use_type_main_crops.png'))
+
+# +
+irr_types = ag.irr_name.unique()
+# save a table with the crop type and 
+ag[['name','irr_name']].drop_duplicates()
+
+# ag[['name','irr_name']].drop_duplicates().groupby('name').sum()
+
+# to simplify for the reader we can save a table with the average irr. eff. by crop
+sum_area = ag[['name','local_area']].groupby('name').sum().multiply(1/1E4).round(1) # hectares
+mean_eff= ag[['name','Avg_eff']].groupby('name').mean().round(1)
+crop_sum = pd.concat((sum_area, mean_eff), axis=1)
+crop_sum = crop_sum.rename(columns={'local_area':'Area (ha)','Avg_eff':'Average Irrigation Efficiency'})
+crop_sum.index.name = 'Crop'
+crop_sum.to_csv(join(fig_dir, 'irr_eff_by_crop.csv'))
+
+# save a table with the irrigation type and efficiency
+# ag[['irr_name', 'Avg_eff']].drop_duplicates()
+
 # -
 
 # ### Need to identify extent of floodplain on channel
