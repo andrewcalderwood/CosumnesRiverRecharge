@@ -422,7 +422,7 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 # %%
 # plot plain contours for reference
 # hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=True, contour=True, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -606,17 +606,19 @@ sfr_heads, avg_heads = sfr_load_hds(hdobj, grid_sfr[~grid_sfr.iseg.isin(drop_ise
 
 var = ['Qrech','Qbase', 'Qout','stage']
 label=['Stream\nLosses ($m^3/d$)', 'Stream\nBaseflow ($m^3/d$)','Streamflow\n($m^3/d$)', 'Elevation (m)']
+var = ['Qaquifer', 'Qout','stage']
+label=['Stream\nSeepage ($m^3/d$)', 'Streamflow\n($m^3/d$)', 'Elevation (m)']
 fig, ax = plt.subplots(len(var)+1, 1, sharex=True, figsize=(6.5,8),dpi=300)
 pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0], legend=False)
 ax[0].set_ylabel('Stream \n$K_{vert}$ (m/d)')
 # pd_sfr.plot(x='Total distance (m)', y='vka', ax=ax[0])
 ax[0].set_yscale('log')
-ax[4].plot(pd_sfr['Total distance (m)'], sfr_heads[0], label='GWE')
+ax[-1].plot(pd_sfr['Total distance (m)'], sfr_heads[0], label='GWE')
 for n, v in enumerate(var):
     sfrdf.loc[plt_dates].groupby('Total distance (m)').mean(numeric_only=True).plot(y=v, ax=ax[n+1], legend=False)
     # sfrdf.groupby('Total distance (m)').mean(numeric_only=True).reset_index().plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
     ax[n+1].set_ylabel(label[n])
-ax[4].legend()
+ax[-1].legend()
 # sfrdf.loc[plt_date].plot(x='Total distance (m)', y='Qout')
 
 # %%
@@ -628,6 +630,8 @@ sfrdf_sum = sfrdf.resample('D').mean(numeric_only=True)
 
 # plt_date = ['2017-1-1']
 var = ['Qout', 'Qrech', 'Qbase']
+var = ['Qout', 'Qaquifer']
+label=[ 'Streamflow\n($m^3/d$)', 'Stream\nSeepage ($m^3/d$)']
 fig, ax = plt.subplots(len(var), 1, sharex=True, figsize=(6.5,3),dpi=300)
 # pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0])
 # pd_sfr.plot(x='Total distance (m)', y='vka', ax=ax[0])
@@ -636,7 +640,7 @@ fig, ax = plt.subplots(len(var), 1, sharex=True, figsize=(6.5,3),dpi=300)
 for n, v in enumerate(var):
     # sfrdf.loc[plt_date].plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
     sfrdf_sum.plot( y=v, ax=ax[n], legend=False)
-    ax[n].set_ylabel(v)
+    ax[n].set_ylabel(label[n])
 
 
 # %% [markdown]

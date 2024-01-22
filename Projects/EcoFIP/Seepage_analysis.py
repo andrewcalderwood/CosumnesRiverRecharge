@@ -152,7 +152,7 @@ pd_sfr = pd.DataFrame(gdf_sfr.drop(columns=['geometry']))
 # %%
 # cleaned version of sfr reach data to save for EcoFIP reference
 gdf_sfr_out = gdf_sfr.drop(columns=['strhc1','vka','facies']).rename(columns={'Total distance (m)':'dist_m'})
-gdf_sfr_out.to_file(join(proj_dir, 'GIS','sfr_reach_reference.shp'))
+# gdf_sfr_out.to_file(join(proj_dir, 'GIS','sfr_reach_reference.shp'))
 
 # %%
 from mf_utility import clean_sfr_df
@@ -248,12 +248,13 @@ if rewrite:
     sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
     # about 220 MB
     sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
-                                  key='all', complevel=4, data_columns = grp_cols)
+                                  key='all', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
 sfrdf_all = pd.read_hdf(join(out_dir, 'sfrdf_all.hdf5'),  key='all', complevel=4)
 # add total distance which was missing 
 sfrdf_all = sfrdf_all.merge(df_sfr)
+
 
 # %%
 
@@ -265,16 +266,13 @@ if rewrite:
     # produces file of 6 MB without data_columns
     # file of 12 MB with data columns of grp_cols
     sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
-                                  key='monthly', complevel=4, data_columns = grp_cols)
+                                  key='monthly', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
 sfr_mon_all = pd.read_hdf(join(out_dir,'sfrdf_mon_all.hdf5'), key='monthly')
 # add reference columns
 sfr_mon_all = sfr_mon_all.merge(df_sfr)
 sfr_mon_all['month'] = sfr_mon_all.dt.dt.month
-
-# %%
-sfr_mon_all.columns
 
 # %%
 # get average across time to plot spatial view
@@ -296,12 +294,15 @@ fig,ax = plt.subplots()
 for r in best10.realization.values:
     sfr_plt = sfr_avg_all.loc[sfr_avg_all.realization==r]
     sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, label=r,legend=False)
+
     
 ax.set_yscale('log')
 ax.set_ylim(1E-2, 10**(magnitude(sfr_avg_all.Qaquifer_rate.max())+1))
 ax.set_ylabel('Stream loss rate (m/day)')
-ax.legend(loc='upper left', title='Realization')
-sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--')
+
+sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--',label='Mean')
+plt.legend(title='Realization')
+
 
 # %% [markdown]
 # - 230 column/5 is 46 so the first 46 rows don't have a scaling
@@ -342,11 +343,11 @@ mon_chk.boxplot(by='month',column='Qaquifer_rate', ax=ax[1])
 # normaltest(mon_chk.Qaquifer_rate)
 
 # %%
-import statsmodels.stats.api as sms
-    for r in np.arange(0, len(df_sfr)):
-        mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]].copy()
-        # get the confidence intervals 
-        ci_l, ci_h = sms.DescrStatsW(mon_chk.Qaquifer_rate).tconfint_mean()
+# import statsmodels.stats.api as sms
+#     for r in np.arange(0, len(df_sfr)):
+#         mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]].copy()
+#         # get the confidence intervals 
+#         ci_l, ci_h = sms.DescrStatsW(mon_chk.Qaquifer_rate).tconfint_mean()
 
 # %%
 # fig,ax = plt.subplots()
@@ -369,7 +370,7 @@ g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', errorbar=('
 g.set(yscale='log', ylim=(1E-2, None), title = 'Realization '+str(r))
 g.set(xlim = (13E3, 40E3), ylabel='Qaquifer (m/day)')
 # sns.set(rc={'figure.figsize':(6.5,6.5)})
-plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
+# plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
 
 # %%
 for r in best10.realization.values:
@@ -420,7 +421,7 @@ def plt_reg(df_plt, x_var, y_var, logx=False, logy=False):
     # return the coefficient, intercept, and R2 fit
     return([regr.coef_[0][0], regr.intercept_[0], r2_val])
 
-r=150
+r=250
 mon_chk = sfr_mon[sfr_mon['Total distance (m)']==df_sfr['Total distance (m)'].iloc[r]]
 mon_chk_plt = mark_outlier(mon_chk.Qaquifer_rate)
 mon_chk_plt = mon_chk.loc[~mon_chk_plt.flier]
@@ -478,3 +479,14 @@ plt.xlabel('Reach')
 ax[0].set_ylabel('$R^2$ score')
 ax[1].set_ylabel('Lin. Reg. Coeff.')
 ax[1].set_yscale('log')
+
+# %%
+# sfrdf_all.Qaquifer_rate
+
+# %%
+# need to use daily data maybe to do regression within monthss
+# sfrdf = sfrdf_all[sfrdf_all.realization==r].copy()
+# lin_fit = get_lin_reg(sfrdf.copy(), df_sfr)
+
+
+# %%
