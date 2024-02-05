@@ -71,6 +71,31 @@ import Basic_soil_budget_monthly as swb
 
 
 # %%
+    
+import h5py
+# using write deletes other datasets, may need to use append instead
+def crop_arr_to_h5(arr, crop, h5_fn):
+    # convert arrays of annual rates to hdf5 files individually
+    with h5py.File(h5_fn, "a") as f:
+        grp = f.require_group('array') # makes sure group exists
+        grp.attrs['units'] = 'meters/day'
+        grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
+        dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = arr
+    
+def crop_yr_to_h5(arr, crop, year, dates, soil_crop, h5_fn):
+    # convert arrays of annual rates to hdf5 files individually
+    with h5py.File(h5_fn, "a") as f:
+        grp = f.require_group(crop) # makes sure group exists
+        grp.attrs['units'] = 'meters/day'
+        grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
+        dset = grp.require_dataset(year, arr.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = arr
+        dset = grp.require_dataset(year, arr.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = arr
+
+
+# %%
 # resampled ground surface elevation
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
@@ -82,8 +107,13 @@ load_only = ['DIS','BAS6']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws=model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt', load_only=load_only)
 botm = np.copy(m.dis.botm.array)
+os.makedirs(join(model_ws, 'field_SWB'), exist_ok=True)
+
+# %% [markdown]
+# A simple way to operate the script is to have it read in a file with the year that is specified by the main script.
 
 # %%
+model_ws
 
 # %%
 year = int(2015)
@@ -95,6 +125,19 @@ crop='Corn'
 crop_list = ['Corn','Alfalfa','Pasture','Misc Grain and Hay', 'Grape']
 
 
+
+# %%
+
+def init_h5(h5_fn):
+    """ Initiate hdf5 files for the given year before appending data for each crop"""
+    with h5py.File(h5_fn, "w") as f:
+        grp = f.require_group('array') # makes sure group exists
+        grp.attrs['units'] = 'meters/day'
+        grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
+
+for var in ['percolation','GW_applied_water', 'SW_applied_water']:
+    name = join(model_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+    init_h5(name)
 
 # %%
 for crop in crop_list:
@@ -216,7 +259,7 @@ for crop in crop_list:
     avg_irr_eff = pd.read_csv(join(proj_dir, 'model_inputs', 'avg_irr_eff_by_crop.csv'),index_col=0)
     irr_eff_mult = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
     gen_dict['irr_eff_mult'] = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
-    
+    print(pred_dict[crop], crop)
     soil_crop = swb.load_soil(pred_dict[crop], crop_in)
     # another option instead of looping over texture classes would be to sort by texture
     # then the data would be ordered to reference the nearest similar texture
@@ -302,12 +345,12 @@ for crop in crop_list:
     # %%
     # so if you have a dictionary d and want to access (read) its values with the syntax x.foo instead of the clumsier d['foo'], just do
     # convert a dictionary to an object with object style referencing
-    class Bunch(object):
+    class cost_variables(object):
       def __init__(self, adict):
         self.__dict__.update(adict)
     
     # convert dictionary of variables to class for easier referencing, constant over different soil
-    gen = Bunch(gen_dict)
+    gen = cost_variables(gen_dict)
     
     from scipy.optimize import Bounds
     bounds = Bounds(lb = 0)
@@ -342,7 +385,7 @@ for crop in crop_list:
     
         # prep_soil(soil_ag, etc_arr, var_crops)
         soil_dict = prep_soil_dict(soil_ag, etc_arr, var_crops)
-        soil = Bunch(soil_dict)
+        soil = cost_variables(soil_dict)
         
         if ns > 1:
             irr_lvl[:] = irr_all[ns-1]
@@ -384,8 +427,8 @@ for crop in crop_list:
 # calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen)
 
     # %%
-    import matplotlib.pyplot as plt
-    plt.bar(x = np.arange(0, irr_all.shape[1]), height=irr_all[0])
+    # import matplotlib.pyplot as plt
+    # plt.bar(x = np.arange(0, irr_all.shape[1]), height=irr_all[0])
 
 # %% [markdown]
 #     # It wasn't until running grapes which have 3 times the number of irrigations that I realized that each solver takes about 2 min instead of 0.2 min (Corn). Alfalfa had run times of 0.3 min. Misc. grain and hay never found positive profit  (-250 to -300), and took multiple minutes as well.
@@ -420,48 +463,19 @@ for crop in crop_list:
 
 
 # %%
-    
-    import h5py
-    # using write deletes other datasets, may need to use append instead
-    def crop_arr_to_h5(arr, crop, h5_fn):
-        # convert arrays of annual rates to hdf5 files individually
-        with h5py.File(h5_fn, "a") as f:
-            grp = f.require_group('array') # makes sure group exists
-            grp.attrs['units'] = 'meters/day'
-            grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
-            dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
-            dset[:] = arr
-        
-    def crop_yr_to_h5(arr, crop, year, dates, soil_crop, h5_fn):
-        # convert arrays of annual rates to hdf5 files individually
-        with h5py.File(h5_fn, "a") as f:
-            grp = f.require_group(crop) # makes sure group exists
-            grp.attrs['units'] = 'meters/day'
-            grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
-            dset = grp.require_dataset(year, arr.shape, dtype='f', compression="gzip", compression_opts=4)
-            dset[:] = arr
-            dset = grp.require_dataset(year, arr.shape, dtype='f', compression="gzip", compression_opts=4)
-            dset[:] = arr
-
-    # %%
-    os.makedirs(join(model_ws, 'field_SWB'), exist_ok=True)
-
-
-# %%
-def arr_2_df(arr,name):
-    """
-    Clean array with rows of fields and columns of dates into a long form dataframe
-    """
-    df = pd.DataFrame(arr, columns=dates, index=soil_crop.UniqueID)
-    df_long = df.melt(ignore_index=False, var_name='date',value_name=name)
-    return(df_long)
-
+# def arr_2_df(arr,name):
+#     """
+#     Clean array with rows of fields and columns of dates into a long form dataframe
+#     """
+#     df = pd.DataFrame(arr, columns=dates, index=soil_crop.UniqueID)
+#     df_long = df.melt(ignore_index=False, var_name='date',value_name=name)
+#     return(df_long)
 
 # %%
 # pd.merge(pd.merge(arr_2_df(pc_all, 'pc'), arr_2_df(irr_sw_out, 'irr_sw')), arr_2_df(irr_gw_out, 'irr_gw'))
 # arr_2_df(pc_all, 'pc').merge(arr_2_df(irr_sw_out, 'irr_sw'), on=['UniqueID','date'])
-arr_2_df(pc_all, 'pc')
-arr_2_df(irr_sw_out, 'irr_sw')
+# arr_2_df(pc_all, 'pc')
+# arr_2_df(irr_sw_out, 'irr_sw')
 
 # %%
     

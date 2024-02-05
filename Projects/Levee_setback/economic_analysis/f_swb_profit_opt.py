@@ -36,6 +36,11 @@ import shapely
 import geopandas as gpd
 
 # %%
+from scipy.optimize import minimize
+from scipy.optimize import Bounds
+
+
+# %%
 usr_dir = expanduser('~')
 doc_dir = join(usr_dir,'Documents')
 
@@ -64,10 +69,38 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 import Basic_soil_budget_monthly as swb
-# from importlib import reload
-# reload(swb)
-from Basic_soil_budget_monthly import calc_yield, calc_profit, prep_soil
-#, calc_S, calc_pc
+
+
+
+# %%
+# import swb_functions
+# reload(swb_functions)
+from swb_functions import prep_soil_dict, calc_S, calc_pc, calc_yield, calc_profit, run_swb, mak_irr_con
+
+
+# %%
+def init_h5(h5_fn):
+        """ Initiate hdf5 files for the given year before appending data for each crop"""
+        with h5py.File(h5_fn, "w") as f:
+            grp = f.require_group('array') # makes sure group exists
+            grp.attrs['units'] = 'meters/day'
+            grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
+
+# these hdf5 files are written at the start so they can be appended to for each year and crop
+def crop_arr_to_h5(arr, crop, h5_fn):
+    # convert arrays of annual rates to hdf5 files individually
+    with h5py.File(h5_fn, "a") as f:
+        grp = f.require_group('array') # makes sure group exists
+        # grp.attrs['units'] = 'meters/day'
+        # grp.attrs['description'] = 'Each layer of the array is a day in the water year'
+        dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = arr
+
+# so if you have a dictionary d and want to access (read) its values with the syntax x.foo instead of the clumsier d['foo'], just do
+# convert a dictionary to an object with object style referencing
+class cost_variables(object):
+  def __init__(self, adict):
+    self.__dict__.update(adict)
 
 
 # %%
@@ -76,14 +109,37 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-year = int(2015)
+# testing
+year = int(2020)
 crop='Grape'
 # crop='Corn'
 crop='Alfalfa'
 # crop='Pasture' # will require extra work due to AUM vs hay
 # crop = 'Misc Grain and Hay'
 
-def load_run_swb(crop, year):
+# %%
+# # testing
+# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Regional/'
+# base_model_ws = loadpth + 'crop_soilbudget'
+# crop_in = pd.read_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+# dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.csv'), 
+#                      index_col=0, parse_dates=['dt'])
+# dtw_df.columns = dtw_df.columns.astype(int)
+
+# %%
+
+
+def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df):
+    ''' 
+    Function to import variables related to soil water budget function
+    to then run the function in a profit optimizer before saving the results in hdf5 format
+    Input:
+    crop: character string of shortened crop name
+    year: water year
+    crop_in: dataframe with parcel_id, (crop) name, pod (point of diversion)
+    base_model_ws: directory to save files to
+    dtw_df: dataframe with depth to water for each daily step needed for the year
+    '''
     # %%
     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
 
@@ -97,14 +153,13 @@ def load_run_swb(crop, year):
     dates = pd.date_range(strt_date, end_date, freq='D')
     nper = (end_date-strt_date).days +1
     print('Start', strt_date.date(), ', End', end_date.date(),', No. days', nper)
+    # not use, base_model_ws is better since all files have the year attached
+    # model_ws = join(base_model_ws, crop+'_'+str(strt_date.date()))
 
     # %%
-    # the model will run the irrigation optimizer on specified dates (multiple crops can be done at once or in sequence)
-    # the modflow model will be run for the periods between the specified irrigation optimizer dates
-    loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Regional/'
-    
-    model_ws = loadpth + 'crop_soilbudget/'+crop+'_'+str(strt_date.date())
-
+    for var in ['percolation','GW_applied_water', 'SW_applied_water']:
+        name = join(base_model_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name)
 
     # %%
     Kc, Kc_dates = swb.load_Kc(year)
@@ -126,23 +181,24 @@ def load_run_swb(crop, year):
     ETc = ETo_df.values*Kc_df.Kc.values
 
     # %%
-    ## Load crop type predictions
-    # double check with Yusuke whether crop2016 or crop_cat2016 is the original or predicted
-    crop_wide = pd.read_excel(join(proj_dir, 'crop_prediction', 'wide_dataset.xls'))
-    # if a dataset has a diversion then enable decision between SW and GW
-    # very few parcels are considered to have a POD (0.5%)
-    frac_no_pod = (crop_wide.pod=='No Point of Diversion on Parcel').sum()/len(crop_wide)
-    print('%.2f parcels have no POD' %(frac_no_pod*100))
-    # crop_wide.waterbody_type.unique()
-    # filter to relevant columns for SWB
-    keep_cols = crop_wide.columns.str.extract(r'(crop\d{4})').dropna().iloc[:,0].tolist()
-    crop_wide = crop_wide.set_index(['parcel_id','pod'])[keep_cols]
-    # crop_wide = crop_wide.set_index(['parcel_id','pod'])[['crop2016']]
+    # ## Load crop type predictions
+    # # double check with Yusuke whether crop2016 or crop_cat2016 is the original or predicted
+    # # this would be better to be explicitly called I think
+    # crop_wide = pd.read_excel(join(proj_dir, 'crop_prediction', 'wide_dataset.xls'))
+    # # if a dataset has a diversion then enable decision between SW and GW
+    # # very few parcels are considered to have a POD (0.5%)
+    # frac_no_pod = (crop_wide.pod=='No Point of Diversion on Parcel').sum()/len(crop_wide)
+    # print('%.2f parcels have no POD' %(frac_no_pod*100))
+    # # crop_wide.waterbody_type.unique()
+    # # filter to relevant columns for SWB
+    # keep_cols = crop_wide.columns.str.extract(r'(crop\d{4})').dropna().iloc[:,0].tolist()
+    # crop_wide = crop_wide.set_index(['parcel_id','pod'])[keep_cols]
+    # # crop_wide = crop_wide.set_index(['parcel_id','pod'])[['crop2016']]
 
     # %%
-    # long format then filter for year
-    crop_long = crop_wide.melt(ignore_index=False,value_name='name', var_name='crop_yr')
-    crop_long['year'] = crop_long.crop_yr.str.extract(r'(\d+)').astype(int)
+    # # long format then filter for year
+    # crop_long = crop_wide.melt(ignore_index=False,value_name='name', var_name='crop_yr')
+    # crop_long['year'] = crop_long.crop_yr.str.extract(r'(\d+)').astype(int)
 
 
     # %%
@@ -185,13 +241,14 @@ def load_run_swb(crop, year):
 
     # %%
     # decide later best way to identify but in future the predicted data will be available for each year
-    crop_in = crop_long[crop_long.year==2016].reset_index()
+    # crop_in = crop_long[crop_long.year==year].reset_index()
 
     # %%
     avg_irr_eff = pd.read_csv(join(proj_dir, 'model_inputs', 'avg_irr_eff_by_crop.csv'),index_col=0)
     irr_eff_mult = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
     gen_dict['irr_eff_mult'] = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
-    
+    print(pred_dict[crop], ',',crop)
+
     soil_crop = swb.load_soil(pred_dict[crop], crop_in)
     # another option instead of looping over texture classes would be to sort by texture
     # then the data would be ordered to reference the nearest similar texture
@@ -207,89 +264,23 @@ def load_run_swb(crop, year):
 
 
     # %%
-    loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-    model_ws = loadpth+'historical_simple_geology_reconnection'
-    load_only = ['DIS','BAS6']
-    m = flopy.modflow.Modflow.load('MF.nam', model_ws=model_ws, 
-                                    exe_name='mf-owhm.exe', version='mfnwt', load_only=load_only)
-    botm = np.copy(m.dis.botm.array)
-
-    # %%
-    # also need shapefile of pumping well locations for each parcel
-    parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
-    frow = parcel_wells.row-1
-    fcol = parcel_wells.column-1
-    # # parcel_wells layers (make 1-based
-    parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], m.dis.nlay) + 1
-    # subset to crops
-    parcel_wells.UniqueID = parcel_wells.UniqueID.astype(int)
-    crop_wells = soil_crop[['UniqueID']].merge(parcel_wells)
-    crop_dem = dem_data[crop_wells.row-1, crop_wells.column-1]
-
-    # %%
-    # sample heads
-    # model_ws_last = loadpth + 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date())
-    # hdobj = flopy.utils.HeadFile(model_ws_last + '/MF.hds')
-    hdobj = flopy.utils.HeadFile(model_ws + '/MF.hds')
-    # sp_last = hdobj.get_kstpkper()[-1]
-
-
-    # %%
-    m_strt = pd.to_datetime(str(year-1)+'-10-1')
-    m_strt
-    # m_end = all_run_dates.iloc[m_per+1].date
-
-    # %%
-    # it's going to be very slow to sample the time series for all wells for all stress periods and time steps
-    # it does seem more efficient to sample on a monthly scale like a farmer would (irrigation dates) and interpolate
-    well_kij = list(zip(parcel_wells.layer-1, parcel_wells.row-1, parcel_wells.column-1))
-    # hdobj.get_ts(well_kij)
-    head = hdobj.get_data(kstpkper = (0,0))
-    head[crop_wells.layer-1, crop_wells.row-1, crop_wells.column-1].shape
-
-    # %%
-    # for spd in np.arange(1,
-    crop_dtw = np.zeros((nper,nfield_crop))
-    spd_strt = (strt_date-m_strt).days
-    dtw_days = np.hstack((irr_days,[nper-1])) # irr_days alternate
-    for n, kper in enumerate(dtw_days):
-    # for kper in np.arange(0,nper): # daily sampling
-        head = hdobj.get_data(kstpkper = (0,kper+spd_strt))
-        crop_dtw[kper,:] = crop_dem - head[crop_wells.layer-1, crop_wells.row-1, crop_wells.column-1]
-        # if n >=1: # not necessary except for plotting
-        #     # fill in between as farmer might expect linear change
-        #     crop_dtw[irr_days[n-1]:kper+1,:] = np.linspace(crop_dtw[irr_days[n-1]], crop_dtw[kper], kper-irr_days[n-1]+1)
-    # convert from meters to feet
-    crop_dtw /= 0.3048
+    # crop_dtw = 
+    # crop_wells = soil_crop[['UniqueID']].merge(parcel_wells)
+    # select parcels in the simulation
+    crop_dtw = dtw_df.loc[:,soil_crop['UniqueID'].values]
+    # select dates being simulated
+    crop_dtw = crop_dtw.loc[dates].values
 
 # %% [markdown]
 #     # ## Iterate over each unique soil condition
 
-    # %%
-    # import swb_functions
-    # reload(swb_functions)
-    from swb_functions import prep_soil_dict, calc_S, calc_pc, calc_yield, calc_profit, run_swb, mak_irr_con
+# %%
 
-
-    # %%
-    # so if you have a dictionary d and want to access (read) its values with the syntax x.foo instead of the clumsier d['foo'], just do
-    # convert a dictionary to an object with object style referencing
-    class Bunch(object):
-      def __init__(self, adict):
-        self.__dict__.update(adict)
-    
     # convert dictionary of variables to class for easier referencing, constant over different soil
-    gen = Bunch(gen_dict)
+    gen = cost_variables(gen_dict)
     
-    from scipy.optimize import Bounds
     bounds = Bounds(lb = 0)
 
-
-    # %%
-    from scipy.optimize import minimize
-
-    # %%
-    plt.plot(K_Y)
 
     # %%
     t0 = time.time()
@@ -307,8 +298,8 @@ def load_run_swb(crop, year):
     for n in np.arange(nper):
         etc_arr[n] = ETc[n]
     
-    # for ns in np.arange(0,nfield_crop):
-    for ns in np.arange(0,10):
+    for ns in np.arange(0,nfield_crop):
+    # for ns in np.arange(0,10):
         soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
         nfield = soil_ag.shape[0]
     
@@ -317,7 +308,7 @@ def load_run_swb(crop, year):
     
         # prep_soil(soil_ag, etc_arr, var_crops)
         soil_dict = prep_soil_dict(soil_ag, etc_arr, var_crops)
-        soil = Bunch(soil_dict)
+        soil = cost_variables(soil_dict)
         
         if ns > 1:
             irr_lvl[:] = irr_all[ns-1]
@@ -349,14 +340,8 @@ def load_run_swb(crop, year):
         # print final results
         print('Soil ', str(ns),'%.2f' %(-out.fun),'$ ,in %.2f' %(out.execution_time/60),'min')
     t1 = time.time()
-    print('Total time was %.2f min' %((t1-t0)/60))
+    print('Total time was %.2f min' %((t1-t0)/60), 'for', ns,'parcels')
 
-    # %%
-    import matplotlib.pyplot as plt
-    plt.bar(x = np.arange(0, irr_all.shape[1]), height=irr_all[0])
-
-    # %%
-    gen.gap_irr
 
 # %% [markdown]
 #     # It wasn't until running grapes which have 3 times the number of irrigations that I realized that each solver takes about 2 min instead of 0.2 min (Corn). Alfalfa had run times of 0.3 min. Misc. grain and hay never found positive profit  (-250 to -300), and took multiple minutes as well.
@@ -372,11 +357,11 @@ def load_run_swb(crop, year):
     
     # scale by irrigation efficiency of the crop after optimizing
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
-    irr_true[0]
+    # irr_true[0]
     p_true = np.copy(p_all)
     pc_all = np.zeros((nfield_crop, gen.nper))
-    # for ns in np.arange(0,nfield_crop):
-    for ns in np.arange(0,10):
+    for ns in np.arange(0,nfield_crop):
+    # for ns in np.arange(0,10):
         # p_true[ns] = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr)
         p_true[ns], pc, K_S  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
@@ -391,25 +376,14 @@ def load_run_swb(crop, year):
 
 
 # %%
-        
-    def crop_arr_to_h5(arr, crop, h5_fn):
-        # convert arrays of annual rates to hdf5 files individually
-        with h5py.File(h5_fn, "w") as f:
-            grp = f.require_group('array') # makes sure group exists
-            grp.attrs['units'] = 'meters/day'
-            grp.attrs['description'] = 'Each layer of the array is a day in the water year'
-            dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
-            dset[:] = arr
-
-# %%
     
     # need separte hdf5 for each year because total is 300MB, group by crop in array
-    fn = join(model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+    fn = join(base_model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
     crop_arr_to_h5(pc_all, crop, fn)
     
     # applied water (GW and SW are separate)
-    fn = join(model_ws, 'field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
+    fn = join(base_model_ws, 'field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
     crop_arr_to_h5(irr_gw_out, crop, fn)
     
-    fn = join(model_ws, 'field_SWB', "SW_applied_water_WY"+str(year)+".hdf5")
+    fn = join(base_model_ws, 'field_SWB', "SW_applied_water_WY"+str(year)+".hdf5")
     crop_arr_to_h5(irr_sw_out, crop, fn)

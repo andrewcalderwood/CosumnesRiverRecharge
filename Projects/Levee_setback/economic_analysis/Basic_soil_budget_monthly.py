@@ -179,6 +179,10 @@ def get_Kc_dates(Kc_dates_c, Kc_c):
 
 # %%
 def load_soil(crop, crop_in):
+    ''' Imports soil data for all fields and subsets to those for the parcels
+    with the current crop
+    crop: string specifying the crop
+    crop_in: dataframe with parcel_id, name (crop), pod'''
     field_ids = 'parcel' # 'ag'
     # load cleaned soil data for ag fields
     soil_path = join(uzf_dir,'clean_soil_data')
@@ -230,36 +234,6 @@ def prep_soil(soil_ag, etc_arr, var_crops):
     P = p_table22 + 0.04*((5-(etc_arr*1000))) # Calculate adjusted daily soil water depletion fraction for no stress
     raw = taw*P # Calculate readily available water in the root zone
 
-
-# %%
-# def calc_S(wc, Smax, wc_f, soil_por):
-#     """ Given an array of water contents return potential soil retention"""
-#     S = np.zeros(Smax.shape)
-#     # when water content is less than 1/2 field capacity, full retention
-#     S[wc < wc_f/2] = Smax[wc < wc_f/2]
-#     # wc > porosity then set as porosity for calculations (avoids S >1)
-#     wc_calc = np.where(wc<soil_por, wc, soil_por)
-#     # when water content is greater than 1/2 field capacity, partial retention 
-#     S1 = Smax * (1 - ((wc_calc - wc_f/2)/(soil_por - wc_f/2)))
-#     S[wc >= wc_f/2]= S1[wc >= wc_f/2]
-#     # convert S from inches to meters
-#     S *= (0.3048/12)
-    return(S)
-
-# %%
-# def calc_pc(wc, soil_por, soil_Ks, soil_m):
-#     """ explicit calculation of percolation assuming water content of prior to 
-#     percolation is representative of conditions controlling percolation"""
-#     # calculate soil saturation as water content can be greater than porosity assuming it represents ponding
-#     sat = wc/soil_por
-#     sat  = np.where(sat>1, 1, sat)
-#     # explicit calculation of percolation
-#     pc = soil_Ks*(sat)*(1- (1-(sat)**(1/soil_m))**soil_m)**2
-#     return(pc)
-
-# calc_pc(wc[100], soil_por, soil_Ks, soil_m)
-
-
 # %% [markdown]
 # Total available water (TAW) is the water available between field content and the wilting point times the depth of the root zone (this could be assumed to be the soil depth at times).  
 # Per the FAO report, rooting depths are:
@@ -290,125 +264,4 @@ def prep_soil(soil_ag, etc_arr, var_crops):
 # The FAO model assumes "that water can be stored in the root zone until field capacity is reached. Although following heavy rain or irrigation the water content might temporally exceed field capacity, the total amount of water above field capacity is assumed to be lost the same day by deep percolation, following any ET for that day. By assuming that the root zone is at field capacity following heavy rain or irrigation, the minimum value for the depletion Dr, i is zero."  
 #
 # -> this contrasts with IDC where water content is allowed to exceed porosity with the assumption that it has become ponded water.
-
-
-# %%
-# def calc_yield(ETc, K_S, K_Y, y_max, yield_ind,  nfield, nper):
-#     ## Calculate daily crop outcomes 
-#     ETc_adj = np.transpose(K_S)*ETc # Calculate daily crop ET with soil water stress, pairwise functoin check?
-#     ## Calculate economic outcomes 
-#     arr1 = np.ones((nfield,nper))
-#     # average the yield scaling across the season
-#     # yield max changes during the season so update this to be fluid for alfalfa (mean for eaching cutting then sum means)
-#     Y_A_arr = np.zeros(len(y_max))
-#     for n in np.arange(0,len(yield_ind)-1):
-#         # subset the yield scaling by the growing period then multiply by the appropriate yield max for that period
-#         Y_A_arr[n] = y_max[n]*np.mean((arr1- (arr1 - (ETc_adj/ETc))*K_Y)[:, yield_ind[n]:yield_ind[n+1]])
-#     # the total yield is the sum of individual yields
-#     Y_A = Y_A_arr.sum()
-#     return(Y_A)
-    
-
-
-# %%
-       
-# def calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o):
-#     in_2_m = (1/12)*0.3048 # convert from inches to meters
-#     c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0])/in_2_m) # Calcualte total groundwater pumping costs for the season ($/acre)
-#     c_swtot = np.multiply(p_sw, irr_sw[:,0])/in_2_m # Calcualte total surface water costs for the season ($/acre)
-#     cost = c_gwtot+c_swtot
-#     # calculate profit (daily values must be summed for the seasonal value)
-#     pi = -((p_c*Y_A - np.sum(cost))- p_o) # Calculate profit ($/acre)
-#     # forced internal boundary to prevent negatives
-#     # if any(irr_lvl <0):
-#     #     # set a scalable penalty, assuming p_o would be a sizable penalty
-#     #     pi = irr_lvl[irr_lvl<0].sum()*-p_o*10
-#     return(pi)
-
-
-# %%
-
-    
-# def run_swb(irr_lvl):
-#     global wc, pc, rp, ETa, D, K_S
-# #     global c_gwtot, c_swtot
-#     m2_ac = (1/0.3048**2)/43560 # convert from m2 to acres
-#     in_2_m = (1/12)*0.3048 # convert from inches to meters
-#     nper = (end_date-strt_date).days +1
-
-#     tic = time.time()
-
-#     irr_sw = np.zeros((nper,nfield))
-#     irr_gw = np.zeros((nper,nfield))
-#     for i in np.arange(0,n_irr):
-#         irr_sw[irr_days[i]] = irr_lvl[i]
-#         irr_gw[irr_days[i]] = irr_lvl[i+n_irr]
-        
-#     wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
-#     pc = np.zeros((nper, nfield)) # percolation
-#     rp = np.zeros((nper, nfield)) # runoff 
-#     ETa = np.zeros((nper, nfield)) # actual ET
-#     wb_sum= np.zeros((nper, nfield)) # water budget check
-#     # time units are days for everything
-
-#     D = np.zeros((nper+1, nfield)) # soil depletion, add initial conditions with +1
-#     K_S = np.zeros((nper, nfield)) # crop water stress
-    
-#     # initial water content and root zone depletion are pulled from the last step of the previous run
-    
-#     # -1 starts at IC for BC
-#     # WC/D starts at 0
-#     for ns, n in enumerate(np.arange(-1, nper-1)):
-#         ## Runoff ##
-#         S = calc_S(wc[ns+1], Smax, wc_f, soil_por)
-#         water_in = rain[n+1] 
-#         # calculate runoff only when there is rain, and rain is uniform
-#         if (water_in>0).any():
-#             rp[n+1] = ((water_in - 0.2*S)**2)/(water_in + 0.8*S)
-#         # where rainfall is less than initial abstraction (0.2S) set runoff as 0
-#         rp[n+1] = np.where(water_in<0.2*S, 0, rp[n+1])
-#         # add in irrigation after runoff (assume farm is set up to avoid runoff for irrigation season)
-#         water_in = water_in + irr_sw[n+1] + irr_gw[n+1]
-#         ## explicit percolation ##
-#         pc[n+1] = calc_pc(wc[ns], soil_por, soil_Ks, soil_m)
-#         # stepwise water budget, explicit to avoid iteration
-#         # add rain and take away runoff first
-#         wc[ns+1] = (wc[ns]*soildepth + (water_in - rp[n+1]))/soildepth
-#         # take away ET, add term to prevent going to zero
-#         ETa[n+1] = np.where(ETc[n+1] <= wc[ns+1]*soildepth, ETc[n+1], wc[ns+1]*soildepth - 1E-9)
-#         wc[ns+1] = wc[ns+1] + (-ETa[n+1])/soildepth
-#         # take away percolation
-#         pc[n+1] = np.where(pc[n+1] <= wc[ns+1]*soildepth, pc[n+1], wc[ns+1]*soildepth - 1E-9)
-#         wc[ns+1] = wc[ns+1] + (-pc[n+1])/soildepth
-#         # check water budget error
-#         wb_sum[n+1] = (wc[ns]-wc[ns+1])*soildepth + water_in - rp[n+1] - ETa[n+1] - pc[n+1] 
-#         if (wb_sum[n+1]>1E-3).any()|(wb_sum[n+1]<-1E-3).any():
-#             print('WB error exceeds 1E-3',n )
-#             ## additional code for optimizing irrigation
-#         # calculate soil depletion for irrigation decision (must use ETc to see how much should be depleted)
-#         D[ns+1] = D[ns] - water_in + ETc[n+1] + rp[n+1] + pc[n+1] 
-#         # root zone depletion can't be greater than TAW 
-#         D[ns+1] = np.min([D[ns+1], taw], axis=0)
-#         # root zone depletion should be greater than 0
-#         D[ns+1] = np.where(D[ns+1]<0,0, D[ns+1])
-#         # default value of water stress is 1 (none): # potentially unnecessary just fill in 1
-#         K_S[n+1] = 1
-#         # where rootzone depletion is greater than RAW there is water stress
-#         K_S_ws = (taw - D[ns+1])/((1 - P[n+1])*taw);
-#         K_S[n+1] = np.where(D[ns+1]>raw[n+1], K_S_ws, K_S[n+1])
-
-#     ## Calculate yield outcomes 
-#     Y_A = calc_yield(ETc, K_S, K_Y, y_max, yield_ind,  nfield, nper)
-    
-#     ## profit simplified to a function
-#     pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw)  
-#     toc = time.time()
-# #     print('Run time was %.2f minutes' %((toc-tic)/60))
-#     if wb_sum.sum(axis=1).mean() > 1E-6:
-#         print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
-#     return(pi)
-
-
-
-
 

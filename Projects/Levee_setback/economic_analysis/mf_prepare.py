@@ -21,12 +21,33 @@ model_ws = loadpth+'historical_simple_geology_reconnection'
 m = flopy.modflow.Modflow.load('MF.nam', model_ws=model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt')
 
-# %%
 
 # %%
 
 # %% [markdown]
+# # Load SWB output
+
+# %%
+def load_run_swb(crop, year):
+
+
+    # %%
+    def crop_arr_to_h5(arr, crop, h5_fn):
+        # convert arrays of annual rates to hdf5 files individually
+        with h5py.File(h5_fn, "a") as f:
+            grp = f.require_group('array') # makes sure group exists
+            grp.attrs['units'] = 'meters/day'
+            grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
+            dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
+            dset[:] = arr
+
+# %% [markdown]
 # # WEL update
+
+# %%
+fn = join(model_ws, 'field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
+        with h5py.File(h5_fn, "r") as f:
+
 
 # %%
 # also need shapefile of pumping well locations for each parcel
@@ -50,3 +71,12 @@ frow = fields_spd.row
 fcol = fields_spd.column
 fields_spd['layer'] = get_layer_from_elev(dem_data[frow,fcol] - fields_spd.depth_m*0.9, botm[:, frow,fcol], m.dis.nlay)
 
+
+# %% [markdown]
+# # RCH update
+
+# %%
+fn = join(model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+
+
+# %%

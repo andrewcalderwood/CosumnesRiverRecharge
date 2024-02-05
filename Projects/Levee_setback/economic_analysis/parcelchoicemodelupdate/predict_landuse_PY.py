@@ -9,8 +9,6 @@ import pandas as pd
 import numpy as np
 import os
 
-#
-
 # +
 # # Set working directory (not needed if input data are in folder)
 # os.chdir('U:/SESYNC/Cosumnes_Ag')
@@ -29,6 +27,8 @@ data = pd.read_csv("data_model/parcel_data_test.csv")
 
 # Import prior year revenue data by crop
 rev_prior_yr_df = pd.read_csv("data_model/rev_prior_yr.csv")
+
+logit_coefs
 
 # Add water year critical or dry indicator
 data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
