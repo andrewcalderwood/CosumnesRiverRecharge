@@ -109,6 +109,7 @@ gel = m.__getattr__(gel_nam)
 
 # %%
 # gel = flopy.modflow.ModflowUpw.load(join(model_ws, 'MF.upw'), model=m)
+# sfr = flopy.modflow.ModflowSfr2.load(join(model_ws, 'MF.sfr'), model=m)
 
 # %%
 sfr_dir = gwfm_dir+'/SFR_data/'
@@ -258,6 +259,7 @@ ax[0].set_ylabel('Inflow\n($10^6 m^3/day$)')
 ax[1].set_ylabel('Outflow\n($10^6 m^3/day$)')
 plt.xlabel('Date')
 # plt.savefig(join(plt_dir, 'total_water_budget_time_series.png'),  bbox_inches='tight')
+
 
 
 # %% [markdown]
@@ -529,6 +531,7 @@ plt.legend()
 print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
 
 
+
 # %% [markdown]
 # ## cross-section
 
@@ -598,6 +601,9 @@ sfrdf = clean_sfr_df(model_ws, dt_ref, pd_sfr)
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
 
 # %%
+drop_iseg
+
+# %%
 # plt_dates = ['2016-1-1']
 plt_dates = pd.date_range('2017-1-1','2017-4-1')
 sfr_heads, avg_heads = sfr_load_hds(hdobj, grid_sfr[~grid_sfr.iseg.isin(drop_iseg)], plt_dates, dt_ref)
@@ -608,6 +614,7 @@ var = ['Qrech','Qbase', 'Qout','stage']
 label=['Stream\nLosses ($m^3/d$)', 'Stream\nBaseflow ($m^3/d$)','Streamflow\n($m^3/d$)', 'Elevation (m)']
 var = ['Qaquifer', 'Qout','stage']
 label=['Stream\nSeepage ($m^3/d$)', 'Streamflow\n($m^3/d$)', 'Elevation (m)']
+
 fig, ax = plt.subplots(len(var)+1, 1, sharex=True, figsize=(6.5,8),dpi=300)
 pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0], legend=False)
 ax[0].set_ylabel('Stream \n$K_{vert}$ (m/d)')

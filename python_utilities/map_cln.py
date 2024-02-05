@@ -78,8 +78,8 @@ def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
 def plt_cln(ax):
     """ Set basic xy axis labels, reduce axis clutter"""
     ax.ticklabel_format(style='plain')
-    plt.xlabel('Easting (m)')
-    plt.ylabel('Northing (m)')
+    ax.set_xlabel('Easting (m)')
+    ax.set_ylabel('Northing (m)')
     # adjust major locators
     plt.locator_params(axis='x', nbins=5)
     plt.locator_params(axis='y', nbins=5)
