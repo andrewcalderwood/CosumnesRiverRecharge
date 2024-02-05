@@ -2,6 +2,7 @@
 import sys
 import os
 from os.path import basename, dirname, join, exists, expanduser
+import glob
 
 import pandas as pd
 import numpy as np
@@ -11,12 +12,27 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 # +
+import contextily as ctx
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+import matplotlib.font_manager as fm
+
+
+
+# +
 usr_dir = expanduser('~')
 doc_dir = join(usr_dir,'Documents')
+## UCD
 gwfm_dir = join(usr_dir,'Box/research_cosumnes/GWFlowModel')
 
 sfr_dir = join(gwfm_dir,'SFR_data')
 map_dir = join(gwfm_dir,'Mapping')
+
+## LWA 
+db_dir = join(usr_dir,'Dropbox (LWA)', '01_Project-Teams')
+proj_dir = join(db_dir, '669.03 - DWR Cosumnes Floodplain Recharge')
+fig_dir = join(proj_dir, 'figures')
+contour_dir = join(fig_dir, 'head_contours')
 
 
 # +
@@ -157,23 +173,23 @@ dry_lgd = [Patch(facecolor='tab:red', label='Drier', alpha=0.7),
 
 
 # +
-def plt_wyt(wyt_sac, ax):
+def plt_wyt(wyt_sac, ax, alpha=0.5):
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     for n in wyt_sac.wy_group.unique():
         wy = wyt_sac.loc[wyt_sac.wy_group==n]
         ax.fill_between([wy.date.min(), wy.date.max()+pd.DateOffset(months=11)], 
-                         ylim[1], ylim[0], color=wy.color, alpha=0.5)
+                         ylim[1], ylim[0], color=wy.color, alpha=alpha)
     ax.set_xlim(xlim[0],xlim[1])
     ax.legend(handles=wy_lgd, loc='lower right')
     
-def plt_dry(wyt_sac, ax):
+def plt_dry(wyt_sac, ax, alpha=0.5):
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     for n in wyt_sac.dry_group.unique():
         wy = wyt_sac.loc[wyt_sac.dry_group==n]
         ax.fill_between([wy.date.min(), wy.date.max()+pd.DateOffset(months=11)], 
-                         ylim[1], ylim[0], color=wy.dry, alpha=0.5)
+                         ylim[1], ylim[0], color=wy.dry, alpha=alpha)
     ax.set_xlim(xlim[0],xlim[1])
     # plt.legend(handles=dry_lgd, loc='lower right')
 
@@ -195,6 +211,28 @@ rain_m = rain_in/1000
 # create array for every period of rainfall
 rain_df = rain_m.resample('D').interpolate('zero')['Fair Oaks']
 # only 1997- present
+
+# +
+rain_plt = rain_df.copy()
+
+plt_strt = '1999-10-1'
+plt_end = '2020-9-30'
+fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
+rain_mon = rain_plt.resample('AS-Oct').sum()
+rain_mon = rain_mon.loc[plt_strt:plt_end]
+
+ax.bar(np.arange(0, len(rain_mon)), rain_mon.values)
+# ax.set_xticks(np.arange(0, len(rain_mon))[3::12], rain_mon.index[3::12].year, rotation=90);
+ax.set_xticks(np.arange(0, len(rain_mon))[::], rain_mon.index[::].year+1, rotation=90);
+# for n in wy:
+#     xy_lab((np.where(rain_mon.index==wyt.loc[n, 'plt_date'])[0][0], rain_mon.quantile(0.95))
+#            ,wyt.loc[n, 'name'].replace(' ','\n'), offset = (0,2), fontsize=10, bbox=True)
+
+ax.set_ylabel('Monthly Rainfall Total (m)');
+ax.set_xlabel('Date');
+# plt.savefig(join(fig_dir, 'monthly_rainfall.png'), bbox_inches='tight')
+# plt.close()
+# -
 
 strt = pd.to_datetime('1960-10-1')
 end = pd.to_datetime('2021-10-1')
@@ -242,16 +280,23 @@ import seaborn as sns
 sns.relplot(gwe_riv_cln, x='msmt_date', y='gwe',hue='site_code',  
             col='gwe_group', col_wrap=3, legend=False, kind='line', facet_kws={'sharey':True})
 
+gwe_plt = gwe_riv_cln[gwe_riv_cln.msmt_date>'2000-1-1']
 for n in np.arange(1,4):
-    df_plt = gwe_riv_cln[gwe_riv_cln.gwe_group==n]
-    ax = sns.lineplot(df_plt,x='msmt_date',y='gwe',
-                      color='black',
-                      hue='site_code',legend=False
-                     )
+    # df_plt = gwe_riv_cln[gwe_riv_cln.gwe_group==n]
+    df_plt = gwe_plt[gwe_plt.gwe_group==n]
+    fig,ax = plt.subplots()
+    for s in df_plt.site_code.unique():
+        df_plt[df_plt.site_code==s].plot(x='msmt_date',y='gwe', color='black',
+                                         kind='line',ax=ax, legend=False)
+    # ax = sns.lineplot(df_plt,x='msmt_date',y='gwe',
+    #                   color='black',
+    #                   hue='site_code',
+    #                   legend=False
+    #                  )
     plt_dry(wyt_sac, ax)
-    fig.supylabel('Groundwater Elevation (ft amsl)')
+    plt.ylabel('Groundwater Elevation (ft amsl)')
     plt.xlabel('Date')
-    plt.savefig(join(fig_dir, 'gw_hydrographs_near_river.png'), bbox_inches='tight')
+    # plt.savefig(join(fig_dir, 'gw_hydrographs_near_river.png'), bbox_inches='tight')
     plt.show()
     plt.close()
 
@@ -385,12 +430,6 @@ for season in ['fall']:
         # gwe_in = gwe_in.sort_values('gwe').reset_index()
         Z = lin_krige(gwe_in.geometry.x.values, gwe_in.geometry.y.values, gwe_in.gwe.values,
                   gwe_gdf.crs, season, year, folder, write=True, res=100)
-# -
-
-import contextily as ctx
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-import matplotlib.font_manager as fm
 
 # +
 from matplotlib.patches import Patch
@@ -407,10 +446,6 @@ legend_elements = [Line2D([0], [0], color='b', lw=4, label='Groundwater \nElevat
                   ]
 # -
 
-db_dir = join(usr_dir,'Dropbox (LWA)', '01_Project-Teams')
-proj_dir = join(db_dir, '669.03 - DWR Cosumnes Floodplain Recharge')
-fig_dir = join(proj_dir, 'figures')
-contour_dir = join(fig_dir, 'head_contours')
 
 
 def plt_contours(gwe_in, gwl_arr, bounds):

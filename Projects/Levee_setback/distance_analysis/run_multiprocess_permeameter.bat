@@ -1,0 +1,3 @@
+call activate geo_env
+multiprocess_permeameter.py
+PAUSE
