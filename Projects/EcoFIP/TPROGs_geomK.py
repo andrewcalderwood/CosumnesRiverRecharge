@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -58,6 +58,7 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 upw_dir = gwfm_dir+'/UPW_data/'
 
 proj_dir = join(gwfm_dir, 'Projects','EcoFIP')
+gis_dir = join(proj_dir,'GIS')
 
 
 # %%
@@ -72,6 +73,7 @@ from importlib import reload
 git_dir =join(doc_dir,'GitHub') 
 py_dir = join(git_dir,'CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
+add_path(join(git_dir, 'flopy'))
 
 from mf_utility import get_layer_from_elev
 from report_cln import base_round
@@ -99,6 +101,33 @@ grid_sfr = gpd.read_file(sfr_dir+'/final_grid_sfr/grid_sfr.shp')
 
 # %%
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+
+# %% [markdown]
+# ## water level data
+
+# %%
+grid_id= 'parcel'
+season='spring'
+gdf_gw_long = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 
+                         'GW_elevations_long_'+grid_id+'_'+season+'.shp'))
+gdf_gw_long.year = gdf_gw_long.year.astype(int)
+
+# %%
+ghb_dir = join(gwfm_dir, 'GHB_data')
+season='spring'
+# year=2020
+# load water surface data for recent years
+# units are in feet
+wse_yrs = np.arange(2000,2021)
+wse_arr = np.zeros((len(wse_yrs), nrow,ncol))
+for n,year in enumerate(wse_yrs):
+    wse_arr[n] = np.loadtxt(join(ghb_dir, 'final_WSEL_arrays', season+str(year)+'_kriged_WSEL.tsv'), delimiter='\t')
+# covert from feet to meters
+wse_arr *= 0.3048
+# correct where above land surface to 1 m below
+for n,year in enumerate(wse_yrs):
+    wse_arr[n, wse_arr[n] >dem_data] = dem_data[wse_arr[n]>dem_data] - 1 
+
 
 # %% [markdown]
 # # TPROGs Cosumnes
@@ -171,9 +200,9 @@ if not os.path.exists(fn):
         K, Sy, Ss= int_to_param(masked_tprogs, params)
         soil_tprogs = get_tprogs_for_elev(K, top, bot_arr, tprogs_info)
         soil_K[r,:,:] = gmean(soil_tprogs,axis=0) 
-        # K, Sy, Ss= int_to_param(masked_tprogs, params_new)
-        # soil_tprogs = get_tprogs_for_elev(K, top, bot_arr, tprogs_info)
-        # soil_K_new[r,:,:] = gmean(soil_tprogs,axis=0) 
+        K, Sy, Ss= int_to_param(masked_tprogs, params_new)
+        soil_tprogs = get_tprogs_for_elev(K, top, bot_arr, tprogs_info)
+        soil_K_new[r,:,:] = gmean(soil_tprogs,axis=0) 
         toc = time.time()
         print(r, end=' ')
     #     print('Realization', t,'done in %.2f sec' %(toc-tic), end=' ')
@@ -196,9 +225,9 @@ m_top = np.full((nrow,ncol), 80)
 top = dem_data
 bot_arr = dem_data - soil_thick
 
-tprogs_line = np.loadtxt(tprogs_files[r])
-masked_tprogs= tprogs_cut_elev(tprogs_line, m_top, tprogs_info)
-# these are rates in m/d
+with h5py.File(tprogs_fn, mode='r') as f:
+    tprogs_arr = f['tprogs']['r'+str(r).zfill(3)][:].astype(float)
+masked_tprogs= tprogs_arr_cut_elev(tprogs_arr, m_top, tprogs_info)# these are rates in m/d
 K, Sy, Ss= int_to_param(masked_tprogs, params)
 soil_tprogs = get_tprogs_for_elev(K, top, bot_arr, tprogs_info)
 soil_tprogs = gmean(soil_tprogs,axis=0) 
@@ -218,9 +247,6 @@ im = ax[1].imshow(soil_tprogs_new, norm=mpl.colors.LogNorm())
 fig.colorbar(im, ax=ax[1], shrink=0.3)
 
 
-# %% [markdown]
-# Switching from Fleckenstein to Maples parameters does significantly down shift the hydraulic conductivity. Most noticeably in moderate to low K. The model would still need an additional vertical anisotropy because a rate of 67.5 m/day is much too high (could scale with soils data).
-
 # %%
 r = 0
 percentiles=[0,25,50,75,100]
@@ -229,4 +255,106 @@ p_new = np.nanpercentile(soil_tprogs_new, percentiles)
 for n in np.arange(0,len(percentiles)):
     print('%.2E' %p[n], '%.2E' %p_new[n])
 
+# %% [markdown]
+# Switching from Fleckenstein to Maples parameters does significantly down shift the hydraulic conductivity. Most noticeably in moderate to low K. The model would still need an additional vertical anisotropy because a rate of 67.5 m/day is much too high (could scale with soils data).
+# - we need to use the Maples et al. 2019 parameters to use the geologic proxy parameter regression to get recharge potential in cm/day
+# - 
+
 # %%
+gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
+# gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
+
+# simpler geodataframe to bring dataframe to geodataframe
+gdf_id = gdf_elev[['Region','geometry']].copy()
+
+# %%
+# calculate mean water surface elevation (2011-2020)
+wse_mean = np.nanmean(wse_arr[11:], axis=0)
+
+# %%
+r=0
+m_top = np.full((nrow,ncol), 80)
+top = dem_data
+# soil_thick = 10
+# bot_arr = dem_data - soil_thick
+bot_arr = wse_mean
+
+with h5py.File(tprogs_fn, mode='r') as f:
+    tprogs_arr = f['tprogs']['r'+str(r).zfill(3)][:].astype(float)
+masked_tprogs= tprogs_arr_cut_elev(tprogs_arr, m_top, tprogs_info)# these are rates in m/d
+# use new paramter set
+K, Sy, Ss= int_to_param(masked_tprogs, params_new)
+# sample tprogs between land surface and the water table
+soil_tprogs_depth = get_tprogs_for_elev(K, top, bot_arr, tprogs_info)
+soil_tprogs_new = gmean(soil_tprogs_depth,axis=0) 
+
+# %%
+# plt.imshow(soil_tprogs_depth[:,30])
+
+# %%
+plt.imshow(soil_tprogs_new, norm = mpl.colors.LogNorm())
+plt.colorbar(shrink=0.5, label='$K_{geom}$ (m/d)')
+
+
+# %%
+## join the tprogs data to the grid shapefile to spatial join with the EcoFIP analysis units
+# convert to shapefile
+tprogs_gdf = grid_p.copy()
+tprogs_gdf['K_m_d'] = soil_tprogs_new[tprogs_gdf.row-1, tprogs_gdf.column-1]
+tprogs_gdf['wse_m_arr'] = wse_mean[tprogs_gdf.row-1, tprogs_gdf.column-1]
+# spatial join to EcoFIP
+tprogs_grid = gpd.overlay(tprogs_gdf, gdf_id)
+
+# %%
+# need to take the average vertical geometric mean for the analysis unit
+# tprogs_K = tprogs_grid.groupby('Region').mean(numeric_only=True)[['K_m_d','wse_m_arr']].reset_index()
+# average may underestimate
+tprogs_K = tprogs_grid.groupby('Region').max(numeric_only=True)[['K_m_d','wse_m_arr']].reset_index()
+
+# %%
+# sample the recent period for the analysis
+gdf_gw = gdf_gw_long[gdf_gw_long.year>2010].dropna(subset='dtw_m').groupby('Region').mean(numeric_only=True)
+gdf_gw = gdf_id.merge(gdf_gw.reset_index())
+
+
+# %%
+# preliminary test of the recharge potential based on Steve's work
+rech_est = gdf_gw.merge(tprogs_K)
+
+rech_est['geomK_dtw'] = rech_est.K_m_d*rech_est.dtw_m
+
+# 30 day average recharge estimate (cm/day)
+rech_est['rch_cm_d'] = rech_est.geomK_dtw*0.0376+5.288
+
+# %%
+print('Std Dev between raster GWE to parcel and array GWE to parcel is %.2f m' %(rech_est.gwe_m - rech_est.wse_m_arr).std())
+
+# %%
+hr_area = rech_est[rech_est.rch_cm_d>25].geometry.area.sum()
+lr_area = rech_est[rech_est.rch_cm_d<10].geometry.area.sum()
+tot_area = rech_est.geometry.area.sum()
+print('High recharge (>25 cm/day) covers %.1f %% of the estimated area' %(100*hr_area/tot_area))
+print('Low recharge (<10 cm/day) covers %.1f %% of the estimated area' %(100*lr_area/tot_area))
+print('Steve noted only 6% of area would have > 25 cm/day and 84% would be <10 cm/day')
+
+# %%
+fig,ax_n = plt.subplots(figsize=(6.5,5.5),dpi=300)
+# log scale doesn't improve things much
+rech_est.plot('rch_cm_d', ax = ax_n, legend=True,
+             # norm = mpl.colors.LogNorm(vmin = rech_est.rch_cm_d.min(), vmax = rech_est.rch_cm_d.max())
+              legend_kwds = {'shrink':0.7,'label':'30-day average recharge (cm/day)'}
+             )
+
+ax_n.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+gdf_id.plot(ax=ax_n, color='None', linewidth=0.1, alpha=0.7)
+# gdf_bnds(gdf_id, ax=ax_n, buf=2E3)
+
+ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
+                crs='epsg:26910', attribution=False)
+
+# %% [markdown]
+# If we use the average of the $ K_{geom} $ for a parcel then we don't see any parcels with recharge rates >25 cm/d. If we switch to the maximum of the rates then we see more distinction visually, 1.4% >25 cm/d and 94.3% < 10 cm/d instead of 99.8%
+# - likely a result of the smaller high K formations in the Cosumnes that are predicted by TPROGs so the muds tend to overwhelm them.
+#
+# **It appears that the Maples et al. 2020 recharge regression may work but simply have lower high recharge proportions because there is not a direct IVF analog in the TProGS realizations. The realizations may not be useful because of their randomness.**

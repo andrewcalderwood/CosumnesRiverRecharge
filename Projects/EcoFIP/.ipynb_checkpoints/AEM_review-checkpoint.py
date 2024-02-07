@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -66,7 +66,6 @@ from importlib import reload
 py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 
-from mf_utility import get_layer_from_elev
 from report_cln import base_round
 
 # %% [markdown]
@@ -162,8 +161,9 @@ print('Max depth %.1f' %aem_depth.Depth_Bott.max())
 
 # %%
 # define the cutoffs between facies
-facies_frac = [0, 40, 50, 75,100] # matches new Cosumnes proportions
-facies_frac = [0, 30, 40, 60,100]
+# none of the percent coarse actually equals zero, but some equals 5%
+facies_frac = [0, 40, 50, 80,100] # matches new Cosumnes proportions
+# facies_frac = [0, 30, 40, 60,100]
 facies = ['mud','sandy mud', 'sand', 'gravel']
 # default is mud as most common, and > lower means 0 must be included as default
 aem_depth['facies'] = 'mud' 
@@ -176,6 +176,8 @@ aem_depth['facies_num'] = facies_num.loc[aem_depth.facies].values
 
 aem_depth.to_file(join(upw_dir, aem_folder, 'aem_depth.shp'))
 
+
+# %%
 
 # %%
 # shallow data to be more representative of alluvium - need to decide alluvium bottom
