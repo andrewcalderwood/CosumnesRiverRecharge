@@ -10,8 +10,8 @@ import geopandas as gpd
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+# -
 
-# +
 import contextily as ctx
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -280,7 +280,15 @@ import seaborn as sns
 sns.relplot(gwe_riv_cln, x='msmt_date', y='gwe',hue='site_code',  
             col='gwe_group', col_wrap=3, legend=False, kind='line', facet_kws={'sharey':True})
 
+long_sites = gwe_plt.groupby('site_code').count()['gwe']
+long_sites = long_sites[long_sites>npts].index
+
+
 gwe_plt = gwe_riv_cln[gwe_riv_cln.msmt_date>'2000-1-1']
+npts = 40
+long_sites = gwe_plt.groupby('site_code').count()['gwe']
+long_sites = long_sites[long_sites>npts].index
+gwe_plt = gwe_plt[gwe_plt.site_code.isin(long_sites)]
 for n in np.arange(1,4):
     # df_plt = gwe_riv_cln[gwe_riv_cln.gwe_group==n]
     df_plt = gwe_plt[gwe_plt.gwe_group==n]
@@ -300,8 +308,31 @@ for n in np.arange(1,4):
     plt.show()
     plt.close()
 
+# +
+# # grahpic for exit seminar/simplify to a few wells
+# fig,ax = plt.subplots(dpi=300)
+# ls = ['--','-.',':']
+# lc = ['black','gray','lightgray']
+# for n in np.arange(1,4):
+#     df_plt = gwe_plt[gwe_plt.gwe_group==n]
+#     # g_sites = df_plt.site_code.unique()
+#     # ordered sites for plotting
+#     g_sites = df_plt.groupby('site_code').mean(numeric_only=True).sort_values('gwe').index.values
+#     g_sites = g_sites[[int(len(g_sites)/2)]]
+#     for s in g_sites:
+#         df_plt[df_plt.site_code==s].plot(x='msmt_date',y='gwe', 
+#                                          color=lc[n-1], #color='black', linestyle=ls[n-1],
+#                                          kind='line',ax=ax, legend=False)
+
+# plt_dry(wyt_sac, ax)
+# plt.ylabel('Groundwater Elevation (ft amsl)')
+# plt.xlabel('Date')
+
+# -
+
 n=2
-df_plt = gwe_riv_cln[gwe_riv_cln.gwe_group==n]
+# df_plt = gwe_riv_cln[gwe_riv_cln.gwe_group==n]
+df_plt = gwe_plt[gwe_plt.gwe_group==n]
 # sns.relplot(df_plt, x='msmt_date',y='gwe',
 fig,axes=plt.subplots(len(df_plt.site_code.unique()),figsize=(6.5,6.5),dpi=300, sharex=True)
 for mw_n, mw in enumerate(df_plt.site_code.unique()):
