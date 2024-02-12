@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -47,7 +47,7 @@ git_dir = join(doc_dir, 'GitHub')
 gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 
 bas_dir = join(gwfm_dir, 'BAS6')
-proj_dir = join(gwfm_dir,'EcoFIP')
+proj_dir = join(gwfm_dir, 'Projects','EcoFIP')
 out_dir = join(proj_dir, 'output')
 fig_dir = join(proj_dir,'figures')
 
@@ -74,6 +74,12 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
+# method to set default plot parameters, no longer need to specify 300 dpi each time, may not need to specify dimensions either
+# sns.set_theme(rc={"figure.dpi": 300})
+plt.rcParams.update({"figure.dpi": 300})
+
+
+# %%
 run_dir = 'C://WRDAPP/GWFlowModel'
 # run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
@@ -82,7 +88,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
-# model_nam = 'strhc1_scale'
+model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
 # model_nam = 'parallel_realizations/realization005'
 
@@ -247,7 +253,7 @@ if rewrite:
     # calculate the effective rate of seepage
     sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
     # about 220 MB
-    sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
+    sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'),  format='table',
                                   key='all', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
@@ -265,7 +271,7 @@ if rewrite:
     
     # produces file of 6 MB without data_columns
     # file of 12 MB with data columns of grp_cols
-    sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
+    sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'),  format='table',
                                   key='monthly', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
@@ -290,7 +296,7 @@ from report_cln import magnitude
 # plt.rcdefaults() # reset
 
 # %%
-fig,ax = plt.subplots()
+fig,ax = plt.subplots(figsize=(6.5,5),dpi=300)
 for r in best10.realization.values:
     sfr_plt = sfr_avg_all.loc[sfr_avg_all.realization==r]
     sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, label=r,legend=False)
@@ -302,6 +308,12 @@ ax.set_ylabel('Stream loss rate (m/day)')
 
 sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--',label='Mean')
 plt.legend(title='Realization')
+
+
+# %%
+g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+g.set(yscale='log', ylim=(1E-2, 1E2), title = '10 Realizations')
+g.set( ylabel='Qaquifer (m/day)')
 
 
 # %% [markdown]
@@ -369,8 +381,11 @@ g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', errorbar=('
 
 g.set(yscale='log', ylim=(1E-2, None), title = 'Realization '+str(r))
 g.set(xlim = (13E3, 40E3), ylabel='Qaquifer (m/day)')
+
 # sns.set(rc={'figure.figsize':(6.5,6.5)})
 # plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
+
+# %%
 
 # %%
 for r in best10.realization.values:

@@ -80,6 +80,7 @@ def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
 def plt_cln(ax, nbins=5, label=True):
     """ Set basic xy axis labels, reduce axis clutter"""
     ax.ticklabel_format(style='plain')
+
     if label:
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
@@ -95,7 +96,7 @@ def plt_arrow(ax, xoff = 0.7, yoff=0.15):
     x, y, arrow_length = xoff, yoff, 0.1
     ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
                 arrowprops=dict(facecolor='black', width=5, headwidth=15),
-                ha='center', va='center', fontsize=20, 
+                ha='center', va='top', fontsize=20, 
                 xycoords=ax.transAxes)
     return None
 
@@ -131,5 +132,6 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
             dist_lab += ''+units
 
         # use ha = 'center' to center under lines
-        ax.annotate(dist_lab, (lx + dist*adj , ly-2*height), xycoords='data', ha='center')
+        # ax.annotate(dist_lab, (lx + dist*adj , ly-2*height), xycoords='data', ha='center', va='top')
+        ax.annotate(dist_lab, (lx + dist*adj , ly-0.25*height), xycoords='data', ha='center', va='top')
     return None

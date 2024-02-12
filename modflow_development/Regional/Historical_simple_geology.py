@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -55,7 +55,8 @@ doc_dir = join(usr_dir, 'Documents')
 
 # dir of all gwfm data
 gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
-gwfm_dir
+print(gwfm_dir)
+sfr_dir = gwfm_dir+'/SFR_data/'
 
 
 # %%
@@ -826,6 +827,10 @@ im = ax[1].imshow(vka[:,row,:],aspect=1, norm=mpl.colors.LogNorm())
 plt.colorbar(im, ax=ax[1], shrink=0.8)
 # plt.show()
 
+# %% [markdown]
+# ## Surface vka adjustments
+# Need to adjust the surface rates to be more representative and to avoid excess leakage. 
+
 # %%
 # this may not be needed
 # reduce sand/gravel vka for seepage in LAK/SFR assuming some fining
@@ -837,17 +842,33 @@ print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
 
 
+# uniformly scale by one seep_vka value
+seep_vka[~adj_lowK_arr.astype(bool)] /= bc_params.loc['seep_vka','StartValue']
 # apply additional scaling factors by breaking columns into 5 groups
-stp = int(ncol/5)
-for n in np.arange(0, 5):
-    seep_vka[:, :, n*stp:(n+1)*stp] /= bc_params.loc['seep_vka'+str(n+1), 'StartValue']
+# stp = int(ncol/5)
+# for n in np.arange(0, 5):
+#     seep_vka[:, :, n*stp:(n+1)*stp] /= bc_params.loc['seep_vka'+str(n+1), 'StartValue']
 
 # keep laguna/mehrten input constant
 seep_vka[-2:] = np.copy(vka[-2:])
 
+# %% [markdown]
+# The substrate profile from Constantine seems to agree with the assessment by Meirovitz and the AEM data that the central region has more coarse facies.
+
 # %%
-# substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
-# substrate.
+
+substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
+# assign numeric value to help plottin
+substrate['pc'] = 0
+substrate.loc[substrate.substrate=='alternating','pc'] =0.5
+substrate.loc[substrate.substrate=='alluvial','pc'] =1
+# backward fill the information on substrate
+new_river_km = np.arange(0,substrate.end_river_km.max(),0.5)
+substrate = substrate.set_index('end_river_km').reindex(new_river_km).bfill().reset_index()
+
+# %%
+substrate.plot(x='end_river_km',y='pc')
+
 
 # %%
 plt.imshow(seep_vka[0], norm=mpl.colors.LogNorm())
@@ -947,7 +968,6 @@ lak_grid = gpd.read_file(join(lak_shp, 'lak_grid_cln.shp'))
 # # SFR
 
 # %%
-sfr_dir = gwfm_dir+'/SFR_data/'
 
 # %% [markdown]
 # ## Adjust Blodgett Dam scenario here
@@ -1225,7 +1245,7 @@ sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data
 
 
 # %%
-# sfr.write_file()
+# sfr.write_file() # -> need to keep going to overwrite reaches for transfers only with 0
 
 # %%
 mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
@@ -1377,6 +1397,9 @@ if scenario != 'no_reconnection':
     sfr.reach_data.strhc1[sfr.reach_data.iseg== ret_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== out_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== lak_seg] = 0
+
+# %%
+# sfr.write_file() # need to re-write zero strhc1 overlays before writing out
 
 # %%
 if scenario != 'no_reconnection':
@@ -1535,7 +1558,8 @@ for n in np.arange(0,len(lak_row)):
     
 # set Ksat same as vertical conductivity, 
 lkbd_thick = 2
-lkbd_K = np.copy(seep_vka)
+lkbd_K = np.copy(vka) # keep separate from sfr scaling now
+# lkbd_K = np.copy(seep_vka)
 lkbd_K[lakarr==0] = 0 # where lake cells don't exist set K as 0
 # leakance is K/lakebed thickness, reduce by 1/10 for cloggin
 # bdlknc = (lkbd_K/lkbd_thick)

@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -73,13 +73,15 @@ from importlib import reload
 # other functions
 py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
+add_path(join(doc_dir, 'GitHub','flopy'))
 
 import map_cln
 reload(map_cln)
 
 from mf_utility import get_layer_from_elev
 from report_cln import base_round
-from map_cln import plt_cln
+from map_cln import gdf_bnds, lab_pnt, plt_cln, arr_lab, xy_lab, make_multi_scale, dir_arrow, plt_arrow
+
 
 # %% [markdown]
 # # Load data
@@ -112,88 +114,87 @@ mr = rivers_clip[rivers_clip.GNIS_Name=='Mokelumne River']
 # ## ecofip reference
 
 # %%
-# ecofip parcel scale analysis
-ecofip_grid_name = 'accumAvg_Hist_regionRanks-g0'
-sq_grid = gpd.read_file(join(gis_dir, ecofip_grid_name+'_10AcGrid',ecofip_grid_name+'.shp'))
-parcel_grid = gpd.read_file(join(gis_dir, ecofip_grid_name+'_Parcels',ecofip_grid_name+'.shp'))
-grid_cols = ['Region','FullArea','AnlysArea','RchIds','geometry']
-# simplify to parcel ids only
-sq_id = sq_grid[grid_cols]
-parcel_id = parcel_grid[grid_cols]
+gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
+# gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
+
+# simpler geodataframe to bring dataframe to geodataframe
+gdf_id = gdf_elev[['Region','geometry']].copy()
 
 
 # %%
-def elev_stats(raster_name, gdf):
-    # takes several minutes
-    zs_parcels = zonal_stats(gdf, raster=raster_name, stats=['min', 'max', 'mean', 'std'])
-    # convert to dataframe
-    zs_df = pd.DataFrame(zs_parcels)
-    # join zone stats of DEM to parcel data
-    zs_df = gdf.join(zs_df)
-    return zs_df
-    
-
-
-# %%
-dem_raster_name = gwfm_dir+"/DEM_data/USGS_ten_meter_dem/modeldomain_10m_transformed.tif"
-parcel_elev = elev_stats(dem_raster_name, parcel_id.to_crs(raster_crs))
-parcel_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
-
-sq_elev = elev_stats(dem_raster_name, sq_id.to_crs(raster_crs))
-sq_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
-
 
 # %% [markdown]
 # ## load interpolated groundwater data
+# Spring data is better to use as it will be more conservative in terms of the available space for recharge
 
 
 # %%
-ghb_dir = join(gwfm_dir, 'GHB_data')
-# elevations are in feet
-ghb_fp = join(ghb_dir, 'interpolated_data')
-
-# os.listdir(ghb_fp)
-y=2014
-raster_name = join(ghb_fp, 'fall'+str(y)+'_kriged.tif')
-with rasterio.open(raster_name) as r:
-    # print(r.meta)
-    raster_crs = r.crs
+grid_id= 'parcel'
+season='spring'
+gdf_gw_long = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 
+                         'GW_elevations_long_'+grid_id+'_'+season+'.shp'))
+gdf_gw_long.year = gdf_gw_long.year.astype(int)
 
 # %%
 
-# %%
-parcel_gw = parcel_elev.copy()
-parcel_gw = parcel_gw[grid_cols+['mean']].rename(columns={'mean':'gse_m'})
-# gw_df.plot('mean', legend=True)
-# sampling is pretty quick for an individual year
-# sample the groundwater elevation to the parcel level 
-for y in np.arange(2014,2021):
-    raster_name = join(ghb_fp, 'fall'+str(y)+'_kriged.tif')
-    gw_df = elev_stats(raster_name, parcel_id.to_crs(raster_crs))
-    parcel_gw['gwe'+str(y)] =  gw_df['mean'] * 0.3048
+# %% [markdown]
+# For fall groundwater elevations that parcels have a mean standard deviation of 2.64 m across all years (2000-2020), for spring that goes down to 2.28 m.
+#
+# Looking at sorted values from different time periods it seems like we are getting more extremes in the basin.
 
 # %%
-# parcel_gw
-# calculate the mean groudnwater elevation for the period to represent average conditions
-gw_cols = 'gwe'+pd.Series(np.arange(2014,2021).astype(str)).values
-parcel_gw['gwe_mean'] = parcel_gw[gw_cols].mean(axis=1)
-# calculate depth to water
-parcel_gw['dtw_mean'] = parcel_gw.gse_m - parcel_gw.gwe_mean
+# compare groundwater elevation distribution by period
+gw_early_mean = gdf_gw_long[gdf_gw_long.year<=2010].groupby('Region').mean(numeric_only=True)
+gw_late_mean = gdf_gw_long[gdf_gw_long.year>2010].groupby('Region').mean(numeric_only=True)
+gw_recent_mean = gdf_gw_long[gdf_gw_long.year>=2018].groupby('Region').mean(numeric_only=True)
+plt.plot(gw_early_mean.dtw_m.sort_values().values, label='2000-2010')
+plt.plot(gw_late_mean.dtw_m.sort_values().values,label='2011-2020')
+plt.plot(gw_recent_mean.dtw_m.sort_values().values, label='2018-2020')
+plt.legend()
+
+plt.close()
 
 # %%
-# parcel_gw.plot('dtw_mean', legend=True)
+# sample the recent period for the analysis
+gdf_gw = gdf_gw_long[gdf_gw_long.year>2010].dropna(subset='dtw_m').groupby('Region').mean(numeric_only=True)
+gdf_gw = gdf_id.merge(gdf_gw.reset_index())
+
+fig,ax_n = plt.subplots(figsize=(6.5,5.5),dpi=300)
+gdf_gw.plot('dtw_m', ax=ax_n, legend=True, 
+            legend_kwds = {'label':'Depth to water (m)','shrink':0.6})
+
+# plt_arrow(ax_n, 0.925, 0.20)
+# make_multi_scale(ax_n, 0.6, 0.1, dist = 2E3, scales = [4,2,1], units='km')
+ax_n.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+gdf_id.plot(ax=ax_n, color='None', linewidth=0.1, alpha=0.7)
+# gdf_bnds(gdf_id, ax=ax_n, buf=2E3)
+
+ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
+            crs='epsg:26910', attribution=False)
+
 
 # %% [markdown]
 # ## AEM data
 
 # %%
 aem_folder = 'statewide_aem_survey_coarse_fraction_depth_slices_and_average'
-aem_domain_f = join(upw_dir, aem_folder, 'domain_aem_data.shp')
+# aem_domain_f = join(upw_dir, aem_folder, 'domain_aem_data.shp')
 
 # %%
 aem_depth = gpd.read_file(join(upw_dir, aem_folder, 'aem_depth.shp'))
 aem_depth['thick'] = aem_depth.Depth_Bott - aem_depth.Depth_Top_ 
 
+
+# %%
+# pull out the polygons for the AEM data
+aem_surf = aem_depth[aem_depth.Depth_Top_==0].copy()
+aem_surf = gpd.overlay(aem_surf, gdf_id.to_crs(aem_surf.crs))
+
+aem_depth_poly = aem_surf[['Id','Region','gridcode','geometry']]
+
+# %%
+# aem_depth
 
 # %%
 # slow to read because of high cell count
@@ -210,6 +211,17 @@ aem_depth['thick'] = aem_depth.Depth_Bott - aem_depth.Depth_Top_
 # # Visualize
 
 # %%
+# # convert aem to wide format for quick plotting in shapefile
+# aem_shp_out = aem_depth[aem_depth.Depth_Mid_<30]
+# aem_shp_out = aem_shp_out.pivot(columns='Depth_Mid_', index='Id', values='PC_avg')
+# aem_shp_out = aem_surf[['Id','geometry']].merge(aem_shp_out.reset_index())
+# aem_shp_out.columns = aem_shp_out.columns.astype(str)
+# aem_shp_out.to_file(join(gis_dir,'shallow_percent_coarse_by_depth_cols.shp'))
+
+# %%
+np.sort(aem_depth.Depth_Bott.unique())
+
+# %%
 vmin = aem_depth.PC_avg.min()
 vmax = aem_depth.PC_avg.max()
 depths =np.sort(aem_depth.Depth_Mid_.unique())[:6]
@@ -217,20 +229,53 @@ depths =np.sort(aem_depth.Depth_Mid_.unique())[:6]
 # depths =np.sort(aem_grid.bin_higher.unique())[6:-2]
 nx = 3
 ny = int(np.ceil(len(depths)/nx))
-fig,ax = plt.subplots(ny, nx, sharex=True, sharey=True, figsize=(6.5, 6.5*(ny/nx)), dpi=300)
+fig,ax = plt.subplots(ny, nx, sharex=True, sharey=True, figsize=(6.5, 5.5*(ny/nx)), dpi=300)
+
 for n, d in enumerate(depths):
     ax_n = ax[int(n/nx), n%nx]
     ax_n.annotate(str(d)+' m', (0.1,0.9), xycoords='axes fraction')
     # aem_plt = aem_grid[aem_grid.bin_higher==d]
     aem_plt = aem_depth[aem_depth.Depth_Mid_==d]
     aem_plt.plot('PC_avg', ax=ax_n, vmin = vmin, vmax=vmax)
+    # Esri.WorldStreetMap
+    ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
+                crs='epsg:26910', attribution=False)
+    ax_n.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
 
-fig.tight_layout(pad=-0.25)
+    gdf_id.plot(ax=ax_n, color='None', linewidth=0.1, alpha=0.7)
+    gdf_bnds(gdf_id, ax=ax_n, buf=2E3)
+
+# fig.tight_layout(pad=-0.25) # for square plot
+fig.tight_layout(h_pad=0.25, w_pad=0.25) # rectangular
 plt.ticklabel_format(style='plain')
 
-for n in np.arange(0,ny):
-    ax[n,0].set_yticklabels(labels=ax[n,0].get_yticklabels(), rotation=90, verticalalignment = "center");
-    ax[n,0].locator_params(axis='y', nbins=1);
+# for n in np.arange(0,ny):
+    # ax[n,0].set_yticklabels(labels=ax[n,0].get_yticklabels(), rotation=90, verticalalignment = "center");
+    # ax[n,0].locator_params(axis='y', nbins=1);
+ax_n = ax[0,0]
+# arrow and scale sizing isn't workign
+# plt_arrow(ax_n, 0.925, 0.15)
+# make_multi_scale(ax_n, 0.6, 0.1, dist = 2E3, scales = [4,2,1], units='km')
+
+
+
+# %%
+def plt_arrow(ax, xoff = 0.7, yoff=0.15):
+    x, y, arrow_length = xoff, yoff, 0.1
+    ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
+                arrowprops=dict(facecolor='black', width=5, headwidth=15),
+                ha='center', va='center', fontsize=20, 
+                xycoords=ax.transAxes)
+    return None
+
+# %%
+# # # quick way to make a figure legend, to crop in for powerpoint
+# fig,ax_n = plt.subplots()
+# im = aem_plt.plot('PC_avg', ax=ax_n, legend=True, legend_kwds={'label':'Percent Coarse'},
+#                   vmin = vmin, vmax=vmax)
+
+# plt_arrow(ax_n, 0.925, 0.15)
+# make_multi_scale(ax_n, 0.7, 0.1, dist = 2E3, scales = [4,2,1], units='km')
 
 
 # %%
@@ -244,13 +289,12 @@ for n in np.arange(0,ny):
 # cr.plot(ax=ax[1], color='black', linestyle='--', alpha=0.6)
 
 # %% [markdown]
-# Estimate the vertical conductance for the unsaturated zone.
+# Estimate the vertical conductance for the unsaturated zone.  
 # - quick test just go down to 30 m
-#
 # - An important question to address with cbec is do they want seepage rates or recharge rates.
-# - The averaging also needs to be scaled by the depth of each layer: multiply or exponent to account for additional impact.
-#     - harmonic mean: $\frac{\Sigma b}{\frac{b_1}{x_1}+\frac{b_2}{x_2}}$
-#     - geometric mean: $ \sqrt[n]{x_1^{b_1} x_2^{b_2}}$
+# - The averaging also needs to be scaled by the depth of each layer: multiply or exponent to account for additional impact.  
+#     - harmonic mean: $\frac{\Sigma b}{\frac{b_1}{x_1}+\frac{b_2}{x_2}}$  
+#     - geometric mean: $ \sqrt[n]{x_1^{b_1} x_2^{b_2}}$  
 
 # %%
 # fill in hydraulic parameters
@@ -267,12 +311,6 @@ for n, lith in enumerate(params.Lithology):
 # %%
 from scipy.stats import gmean, hmean
 
-# %%
-# pull out the polygons for the AEM data
-aem_surf = aem_depth[aem_depth.Depth_Top_==0].copy()
-aem_surf = gpd.overlay(aem_surf, parcel_id.to_crs(avg_K.crs))
-
-aem_depth_poly = aem_surf[['Id','Region','gridcode','geometry']]
 
 # %%
 # quick check, inaccurate
@@ -287,11 +325,28 @@ aem_depth_poly = aem_surf[['Id','Region','gridcode','geometry']]
 # avg_K.plot()
 
 # %%
+def calc_unsat_thickness(avg_K):
+    # any aem with their bottom above depth to water is fully useable
+    avg_K_unsat = avg_K[avg_K.Depth_Bott<avg_K.dtw_m].copy()
+    # data with water depth in the layer should have thickness subset to unsat thickness
+    avg_K_part_unsat = avg_K[(avg_K.Depth_Top_ < avg_K.dtw_m)&(avg_K.Depth_Bott>avg_K.dtw_m)].copy()
+    # update the thickness based on the unsaturated thickenss
+    avg_K_part_unsat['thick'] = avg_K_part_unsat.dtw_m - avg_K_part_unsat.Depth_Top_
+    # the line above could be done for all cells and then replace thickness smaler than the original
+    # and drop negative thicknesses
+    avg_K = pd.concat((avg_K_unsat, avg_K_part_unsat))
+    return avg_K
+
+
+# %%
 avg_K = aem_depth.copy()
 # crop on the parcel level
-avg_K = gpd.overlay(avg_K, parcel_id.to_crs(avg_K.crs))
+avg_K = gpd.overlay(avg_K, gdf_id.to_crs(avg_K.crs))
+# join K data with dtw to subset
+avg_K = avg_K.merge(gdf_gw[['Region','dtw_m']])
 # preliminary cut for unsaturated zone (improve with kriged DTW)
-avg_K = avg_K[avg_K.Depth_Bott<35]
+# avg_K = avg_K[avg_K.Depth_Bott<35]
+avg_K = calc_unsat_thickness(avg_K)
 cols = ['Id', 'Region', 'thick','Depth_Mid_', 'PC_avg','K_m_d']
 grp_col = ['Id','Region']
 
@@ -302,15 +357,14 @@ geom_K = avg_K[grp_col+val_cols].groupby(grp_col).aggregate(np.prod).reset_index
 thick_sum = avg_K[cols].groupby(grp_col).sum()['thick'].values
 geom_K[val_cols] = geom_K[val_cols].pow((1/thick_sum), axis=0)
 
-
 # %%
-def calc_gmean(K, thick):
-    """ Given hydraulic conductivity and layer thickness
-    calculate the geometric mean while accounting for thickenss """
-    K_scale = K**thick
-    thick_sum = np.sum(thick)
-    geom_K = np.prod(K)**(1/thick_sum)
-    return geom_K
+# def calc_gmean(K, thick):
+#     """ Given hydraulic conductivity and layer thickness
+#     calculate the geometric mean while accounting for thickenss """
+#     K_scale = K**thick
+#     thick_sum = np.sum(thick)
+#     geom_K = np.prod(K)**(1/thick_sum)
+#     return geom_K
 
 # %%
 
@@ -323,16 +377,10 @@ def calc_gmean(K, thick):
 # (geom_K.K_m_d/geom_K.K_final).plot()
 
 # %%
-
-
-# %%
 # join to geodataframe for plotting
 # geom_K_gdf = aem_depth_poly.merge(geom_K_scale.reset_index())
 geom_K_gdf = aem_depth_poly.merge(geom_K)
 
-
-# %%
-geom_K_gdf.to_file(join(proj_dir, 'GIS', 'Kgeometric_mean.shp'))
 
 # %%
 fig,ax= plt.subplots(1,2, figsize=(6.5, 6.5), dpi=300, sharey=True)
@@ -343,16 +391,34 @@ geom_K_gdf.plot('PC_avg', ax=ax[0], legend=True, legend_kwds={'shrink':0.3},
                # norm = mpl.colors.LogNorm(vmin=1, vmax=100)
                )
 
-cr.plot(ax=ax[0], color='black', linestyle='--', alpha=0.6, linewidth=0.5)
 # geom_K_gdf.plot('PC_avg', ax=ax[1], legend=True, legend_kwds={'shrink':0.5})
 geom_K_gdf.plot('K_m_d', ax=ax[1], legend=True, legend_kwds={'shrink':0.3},
-                norm = mpl.colors.LogNorm(vmin = geom_K_gdf.K_m_d.min(), vmax = geom_K_gdf.K_m_d.max())
+                norm = mpl.colors.LogNorm(vmin = geom_K_gdf.K_m_d.min(), vmax = geom_K_gdf.K_m_d.max() )
 )
-cr.plot(ax=ax[1], color='black', linestyle='--', alpha=0.6, linewidth=0.5)
 
 ax[0].set_title('Percent Coarse')
 ax[1].set_title('$K_{geom}$ (m/day)')
 # plt_cln(ax=ax[0])
+
+ax_n = ax[0]
+# plt_arrow(ax_n, 0.925, 0.3)
+# make_multi_scale(ax_n, 0.6, 0.1, dist = 2.5E3, scales = [4,2,1], units='km')
+for n in [0,1]:
+    ax_n = ax[n]
+    cr.plot(ax=ax_n, color='black', linestyle='--', alpha=0.6, linewidth=0.5)
+
+    ax_n.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+    
+    gdf_id.plot(ax=ax_n, color='None', linewidth=0.1, alpha=0.7)
+    # gdf_bnds(gdf_id, ax=ax_n, buf=2E3)
+    
+    ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
+                crs='epsg:26910', attribution=False)
+    
+fig.tight_layout()
+
+# %%
+geom_K_gdf.to_file(join(proj_dir, 'GIS', 'Kgeometric_mean.shp'))
 
 # %% [markdown]
 # The shallow upscaling does help show some hot spots near rooney and another mid-way up the Cosumnes.
@@ -366,22 +432,39 @@ ax[1].set_title('$K_{geom}$ (m/day)')
 
 # %%
 # preliminary test of the recharge potential based on Steve's work
-rech_est = geom_K_gdf.merge(parcel_gw)
-rech_est = parcel_gw.merge(geom_K)
-rech_est['geomK_dtw'] = rech_est.K_m_d*rech_est.dtw_mean
+# rech_est = geom_K_gdf.merge(gdf_gw)
+rech_est = gdf_gw.merge(geom_K)
+rech_est['geomK_dtw'] = rech_est.K_m_d*rech_est.dtw_m
 
 # 30 day average recharge estimate (cm/day)
 rech_est['rch_cm_d'] = rech_est.geomK_dtw*0.0376+5.288
 
 # %%
-rech_est.to_file(join(gis_dir,'recharge_results','recharge_estimate.shp'))
+hr_area = rech_est[rech_est.rch_cm_d>25].geometry.area.sum()
+lr_area = rech_est[rech_est.rch_cm_d<10].geometry.area.sum()
+tot_area = rech_est.geometry.area.sum()
+print('High recharge (>25 cm/day) covers %.1f %% of the estimated area' %(100*hr_area/tot_area))
+print('Low recharge (<10 cm/day) covers %.1f %% of the estimated area' %(100*lr_area/tot_area))
+print('Steve noted only 6% of area would have > 25 cm/day and 84% would be <10 cm/day')
 
 # %%
+fig,ax_n = plt.subplots(figsize=(6.5,5.5),dpi=300)
 # log scale doesn't improve things much
-rech_est.plot('rch_cm_d',legend=True,
+rech_est.plot('rch_cm_d', ax = ax_n, legend=True,
              # norm = mpl.colors.LogNorm(vmin = rech_est.rch_cm_d.min(), vmax = rech_est.rch_cm_d.max())
               legend_kwds = {'shrink':0.7,'label':'30-day average recharge (cm/day)'}
              )
+
+ax_n.tick_params(labelleft=False, labelbottom=False, left = False, bottom = False)
+
+gdf_id.plot(ax=ax_n, color='None', linewidth=0.1, alpha=0.7)
+# gdf_bnds(gdf_id, ax=ax_n, buf=2E3)
+
+ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
+                crs='epsg:26910', attribution=False)
+
+# %%
+rech_est.to_file(join(gis_dir,'recharge_results','recharge_estimate.shp'))
 
 # %% [markdown]
 # The 30 day recharge estimate looks like it will be helpful in characterizing additionally simply by making the cutoff with depth to water and hydraulic conductivity simpler to look at in one image with the knowledge that an unsat model predicted similar recharge rates.
