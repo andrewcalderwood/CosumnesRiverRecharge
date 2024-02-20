@@ -21,8 +21,8 @@ def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info):
     """
     tprogs_elev = np.copy(np.reshape(tprogs_line,
                              (tprogs_info[-1], dem_data.shape[0], dem_data.shape[1])))
-    masked_trogs = tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info)
-    return masked_tprogs
+    masked_tprogs = tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info)
+    return(masked_tprogs)
 
 def tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info, **kwargs):
     """

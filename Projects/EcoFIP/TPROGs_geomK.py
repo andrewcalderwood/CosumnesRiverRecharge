@@ -159,14 +159,18 @@ params_new = pd.read_csv(upw_dir+'/ZonePropertiesInitial_Maples.csv',index_col='
 
 
 # %%
+# grp_keys
+
+# %%
 import h5py
 tprogs_fn = join(upw_dir, tprogs_name+'.hdf5')
 
 # loads very quickly now! 
-# with h5py.File(tprogs_fn, mode='r') as f:
-#     grp = f['tprogs']
-#     dset = grp['r001']
-#     arr = dset[:]
+with h5py.File(tprogs_fn, mode='r') as f:
+    grp = f['tprogs']
+    grp_keys = f.keys()
+    dset = grp['r001']
+    arr = dset[:]
 
 # %% [markdown]
 # Switching from loading the tprogs line to using an h5py array sped up the load time from 30 min to a 1.5 minutes.

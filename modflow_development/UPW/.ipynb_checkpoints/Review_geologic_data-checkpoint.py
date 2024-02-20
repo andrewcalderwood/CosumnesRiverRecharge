@@ -57,11 +57,12 @@ nrow_p, ncol_p = (100, 230)
 # mf_tprogs_dir = gwfm_dir+'/UPW_data/tprogs_final/'
 tprogs_name = 'tprogs_final'
 mf_tprogs_dir = join(gwfm_dir,'UPW_data', tprogs_name)
-tprogs_files = glob.glob(mf_tprogs_dir+'*')
+tprogs_files = glob.glob(mf_tprogs_dir+'/*')
 
 
 r = 0
 tprogs_line = np.loadtxt(tprogs_files[r])
+
 
 
 tprogs_arr = np.reshape(tprogs_line, (tprogs_info[-1], nrow_p, ncol_p))
@@ -80,6 +81,11 @@ if not exists(fn):
             tprogs_arr = np.reshape(tprogs_line, (tprogs_info[-1], nrow_p, ncol_p))
             dset = grp.create_dataset('r'+str(r).zfill(3), tprogs_arr.shape, dtype='i')
             dset[:] = tprogs_arr
+
+# +
+# file ends up 2.8 GB, too large for box
+# os.remove(fn)
+# -
 
 # loads very quickly now! 
 with h5py.File(fn, mode='r') as f:

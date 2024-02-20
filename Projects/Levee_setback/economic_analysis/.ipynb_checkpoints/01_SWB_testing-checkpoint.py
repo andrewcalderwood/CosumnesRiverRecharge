@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -220,6 +220,7 @@ grid_crop = grid_soil.merge(soil_crop[['UniqueID']])
 # %%
 loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
 model_ws = loadpth+'historical_simple_geology_reconnection'
+model_ws = loadpth+'strhc1_scale'
 load_only = ['DIS','BAS6']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws=model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt', load_only=load_only)
@@ -448,6 +449,24 @@ out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr),method='
 print('Optimization time %.2f sec' %out.execution_time)
 
 # %%
+tol = 0.01
+t0 = time.time()
+out_new = minimize(run_swb, irr_lvl, args=(soil, gen, rain, ETc, dtw_arr), 
+         #jac=func_deriv, 
+         constraints=[linear_constraint], 
+         bounds = bounds,
+         tol = 1E-4,
+         method='SLSQP', options={'disp': True})
+
+t1 = time.time()
+print('Optimization time %.2f sec' %(t1-t0))
+
+
+# %% [markdown]
+# SLSQP runs slightly faster (77 to 58 sec), but requires a tighter tolerance because with 1E-2 it didn't finish solving and at 1E-4 it did (1E-3 was slightly off too).
+# - not a clear way to estiamte jacobian (gradient) since it is a pretty nonlinear function
+
+# %%
 # pi, pc, K_S = run_swb(out.x, soil, gen, rain, ETc, dtw_arr, arrays=True)
 # Y_A = calc_yield(ETc, K_S, gen)
 
@@ -455,23 +474,39 @@ print('Optimization time %.2f sec' %out.execution_time)
 # Test irrigation efficiency impact. The solver can be run for all fields then irrigation efficiency can be applied before re-running all SWBs.
 
 # %%
-irr_true = out.x * irr_eff_mult # scale by irrigation efficiency of the crop after optimizing
-run_swb(irr_true, soil, gen, rain, ETc, dtw_arr), run_swb(out.x, soil, gen, rain, ETc, dtw_arr)
+def check_true_swb(irr_out):
+    irr_true = irr_out * irr_eff_mult # scale by irrigation efficiency of the crop after optimizing
+    p_true = run_swb(irr_true, soil, gen, rain, ETc, dtw_arr)
+    p = run_swb(irr_out, soil, gen, rain, ETc, dtw_arr)
+    print('True profit %.2f' %(-p_true), 'profit no irr. inefficiency %.2f' %(-p))
 
-# %%
-sw_irr_in= (out.x[:n_irr]/0.3048).sum()*12
-gw_irr_in = (out.x[n_irr:]/0.3048).sum()*12
-print('Irr (in) GW %.2f'%gw_irr_in, 'SW %.2f'%sw_irr_in)
-# print('Cost ($/acre) GW %.2f' %(c_gwtot.sum()),'SW %.2f'%(c_swtot.sum()))
+check_true_swb(out.x)
+check_true_swb(out_new.x)
+
 
 # %%
 import matplotlib.pyplot as plt
-plt.bar(np.arange(0,n_irr)-.25/2,(out.x[:n_irr]/0.3048)*12, label='SW', width=0.25)
-plt.bar(np.arange(0,n_irr)+.25/2,(out.x[n_irr:]/0.3048)*12, label='GW', width=0.25)
-plt.legend()
-plt.ylabel('Irrigation (in)')
-plt.xlabel('Irrigation Event')
-# out
+
+
+# %%
+def summarize_out(irr_out):
+    sw_irr_in= (irr_out[:n_irr]/0.3048).sum()*12
+    gw_irr_in = (irr_out[n_irr:]/0.3048).sum()*12
+    print('Irr (in) GW %.2f'%gw_irr_in, 'SW %.2f'%sw_irr_in)
+    # print('Cost ($/acre) GW %.2f' %(c_gwtot.sum()),'SW %.2f'%(c_swtot.sum()))
+    
+    plt.bar(np.arange(0,n_irr)-.25/2,(irr_out[:n_irr]/0.3048)*12, label='SW', width=0.25)
+    plt.bar(np.arange(0,n_irr)+.25/2,(irr_out[n_irr:]/0.3048)*12, label='GW', width=0.25)
+    plt.legend()
+    plt.ylabel('Irrigation (in)')
+    plt.xlabel('Irrigation Event')
+    plt.show()
+
+
+# %%
+summarize_out(out.x)
+summarize_out(out_new.x)
+
 
 # %% [markdown]
 # # Solving over fields

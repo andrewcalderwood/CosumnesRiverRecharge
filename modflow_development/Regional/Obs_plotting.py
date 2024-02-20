@@ -98,6 +98,9 @@ base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
 model_nam = 'strhc1_scale'
 model_nam = 'fine_tprogs'
+# model_nam = 'fine_tprogs_more_rain'
+# model_nam = '3layer'
+# model_nam = 'params_maples_fine'
 # model_nam = 'sfr_uzf'
 
 model_ws = loadpth+model_nam
@@ -295,11 +298,14 @@ def load_hob(model_ws):
     # if only one obs exists correct naming convention
     one_obs = ~hobout.obs_nam.str.contains('.0')
     hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+'.'+str(1).zfill(5)
+
     return(hobout)
     
-hobout = load_hob(model_ws)
+
 
 # %%
+hobout = load_hob(model_ws)
+
 fig, ax = plt.subplots(1,1,figsize=(5,5))
 
 # get boundary values for plotting a 1:1
@@ -329,7 +335,7 @@ def mak_hob_gpd(hobout):
     all_obs.index = all_obs.index.rename('date')
     all_obs = all_obs.reset_index()
     # join more indepth obs data to output simulated heads
-    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='right')
+    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='inner')
     obs_data = obs_data.dropna(subset=['node'])
 #     obs_data.loc[:,['row','column','node']] = obs_data.loc[:,['row','column','node']].astype(int)
     obs_data[['row','column','node']] = obs_data[['row','column','node']].astype(int)
@@ -343,6 +349,12 @@ def mak_hob_gpd(hobout):
                               crs = grid_p.crs)
     hob_gpd['error'] = hob_gpd.obs_val - hob_gpd.sim_val
     hob_gpd['abs_error'] = hob_gpd.error.abs()
+    # add error statistics
+    hob_gpd['Statistic'] = 0.01
+    hob_gpd['StatFlag'] = 'SD'
+    # locations with significant difference between RPE GSE and the DEM should have additional uncertainty included
+    hob_gpd['Statistic'] += np.round(np.abs(hob_gpd.dem_wlm_gse),4)
+    hob_gpd['Weight'] = 1/(hob_gpd.Statistic**2)
     
     if 'date' in hob_gpd.columns:
         hob_gpd = hob_gpd.set_index('date')
@@ -350,14 +362,19 @@ def mak_hob_gpd(hobout):
         #     groupby values by season
         hob_gpd.loc[(hob_gpd.index.month > 2)&(hob_gpd.index.month < 6),'season'] = 'spring'
         hob_gpd.loc[(hob_gpd.index.month > 8)&(hob_gpd.index.month < 12),'season'] = 'fall'
+
+    # simplify to stations for reference
+    stns = hob_gpd.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
+    stns['botm_elev'] = m.dis.botm[stns.layer-1, stns.row-1, stns.column-1]
+    stns.crs = hob_gpd.crs
     
-    return(hob_gpd)
+    return(hob_gpd, stns)
     # set date
     
 
 
 # %%
-hob_gpd = mak_hob_gpd(hobout)
+hob_gpd, stns = mak_hob_gpd(hobout)
 
 hob_seasonal = hob_gpd.groupby(['node','season']).mean(numeric_only=True)
 hob_seasonal = gpd.GeoDataFrame(hob_seasonal, geometry = gpd.points_from_xy(hob_seasonal.easting, hob_seasonal.northing))
@@ -366,16 +383,7 @@ hob_seasonal = hob_seasonal.reset_index()
 
 
 # %%
-stns = hob_gpd.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
-stns['botm_elev'] = m.dis.botm[stns.layer-1, stns.row-1, stns.column-1]
-stns.crs = hob_gpd.crs
 
-# %%
-hob_gpd['Statistic'] = 0.01
-hob_gpd['StatFlag'] = 'SD'
-# locations with significant difference between RPE GSE and the DEM should have additional uncertainty included
-hob_gpd['Statistic'] += np.round(np.abs(hob_gpd.dem_wlm_gse),4)
-hob_gpd['Weight'] = 1/(hob_gpd.Statistic**2)
 
 soswr = (np.sum(np.abs(hob_gpd.sim_val-hob_gpd.obs_val)*hob_gpd.Weight))
 print('Sum of absolute difference of OBS and SIM: %.2e' %soswr)
@@ -455,7 +463,7 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=F
 # %%
 hobout = load_hob(model_ws)
 
-hob_gpd = mak_hob_gpd(hobout)
+hob_gpd, stns = mak_hob_gpd(hobout)
 # find sites with long time series of OBS
 hobs_long = (hob_gpd.groupby('site_code').count()>=int(m.dis.nper/365)*2)
 hobs_long = hobs_long.index[hobs_long.obs_val].values
@@ -482,6 +490,23 @@ sns.relplot(hob_long.dropna(subset='value'), x='date',y='value',
            )
 
 
+# %%
+# plt.imshow(rech.mean(axis=0))
+
+# %%
+for n in [10161, 10383, 11078, 11084]:
+    site = stns[stns.node==10161].iloc[0]
+    # always inactive hob
+    # plt.plot(hdobj.get_ts((site.layer-1, site.row-1, site.column-1)))
+    k = site.layer-1
+    n_ib = m.bas6.ibound.array[k, site.row-1, site.column-1]
+    print('ibound', n_ib, 'layer', k+1)
+
+# %%
+# all NA values for the Oneto-Denier monitoring wells after increasing floodplain recharge
+
+# hob_gpd[hob_gpd.node==10161]
+
 # %% [markdown]
 # ### review observation details
 
@@ -506,10 +531,6 @@ hd_strt = np.loadtxt(filename)*0.3048
 # extent = (minx,maxx,miny,maxy)
 
 # %%
-# minx, miny, maxx, maxy = m_domain.geometry.unary_union.bounds
-# extent = (minx, maxx, miny, maxy)
-
-# %%
 fig,ax=plt.subplots(figsize=(8, 8))
 m_domain.plot(ax=ax,color='None')
 mapview = flopy.plot.PlotMapView(model=m,ax=ax)
@@ -523,9 +544,6 @@ cs = mapview.contour_array(hd_strt, levels=levels)
 # need to do this after calling zoom to avoid negative impacts
 ax.clabel(cs, cs.levels, inline=True, fmt="%2.0f", fontsize=10) #fmt
 plt_cln(ax=ax)
-
-# %%
-m.dis.top.array
 
 # %%
 y=2019
@@ -570,34 +588,30 @@ hd_strt = np.loadtxt(filename)*0.3048
 
 # %%
 ibound = m.bas6.ibound.array
-hk = gel.hk.array
+hk = m.upw.hk.array
 hk_ma = np.ma.masked_where( ~ibound.astype(bool), hk)
 
 # %%
 hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
 fig, ax = plt.subplots(figsize=(6.5, 3.5), dpi=300) 
-
 plt.aspect=10
 
-head = hdobj.get_data(kstpkper = spd_stp[0])
-head_new = hdobj.get_data(kstpkper = spd_stp[1400])
-
 rownum = 50
-# rownum = 0
 
 mcs = flopy.plot.PlotCrossSection(model=m, line={'Row' : rownum})
-# colnum = 150
-# mcs = flopy.plot.PlotCrossSection(model=m, line={'Column' : colnum})
 
 linecollection = mcs.plot_grid(linewidth = 0.3)
 ax.add_collection(linecollection)
 
 # need to mask to show land surface
-# mcs.plot_array(a=gel.hk.array, norm = mpl.colors.LogNorm())
 mcs.plot_array(a=hk_ma, norm = mpl.colors.LogNorm())
 
 wt = mcs.plot_surface(a=hd_strt[:,:], color='black')
+
+head = hdobj.get_data(kstpkper = spd_stp[100])
 wt = mcs.plot_surface(a=head[:,:,:], color='blue')
+
+head_new = hdobj.get_data(kstpkper = spd_stp[1400])
 wt = mcs.plot_surface(a=head_new[:,:,:],color='red')
 
 plt.xlabel('Distance from southwestern edge (m)')
@@ -752,7 +766,21 @@ zon_cells = gpd.sjoin(grid_p,zon_poly,how='right',predicate='within')
 # filter zone budget for Blodgett Dam to just within 5 cells or so of the Dam
 zon_arr = np.zeros((grid_p.row.max(),grid_p.column.max()),dtype=int)
 zon_arr[zon_cells.row-1,zon_cells.column-1]=1
+plt.imshow(zon_arr)
 
 
 # %%
-all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)
+# could start by just extracting the recharge/pumping inputs and sfr from sfr output
+# the cell by cell flows can be check after
+zon_rech = rech[:, zon_arr.astype(bool)].sum(axis=1)
+zon_wel = pump_rate[:, zon_arr.astype(bool)].sum(axis=1)
+# zon_wel = 
+
+# %%
+plt.plot(zon_rech, label='Rech')
+plt.plot(zon_wel, label='Well')
+plt.legend()
+
+# %%
+# runs too slowly to properly load all time steps
+# all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)

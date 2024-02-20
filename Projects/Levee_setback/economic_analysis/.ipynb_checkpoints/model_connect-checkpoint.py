@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -97,6 +97,7 @@ from f_gw_dtw_extract import get_dtw
 # %%
 # loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
 dtw_model_ws = loadpth+'historical_simple_geology_reconnection'
+dtw_model_ws = loadpth+'strhc1_scale'
 # year = 2020
 dtw_df_in = get_dtw(year, dtw_model_ws)
 dtw_df_in.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.csv'))
@@ -111,10 +112,17 @@ if os.path.isfile(fp):
     dtw_df_previous = pd.read_csv(fp,
                                  index_col=0, parse_dates=['dt'])
     dtw_df_previous.columns = dtw_df_previous.columns.astype(int)
-dtw_df = pd.concat((dtw_df_previous.loc[str(year-1)+'-11-1':], dtw_df_in), axis=0)
+    dtw_df = pd.concat((dtw_df_previous.loc[str(year-1)+'-11-1':], dtw_df_in), axis=0)
+
+# %%
+import matplotlib.pyplot as plt
+
+# %%
+# plt.plot((dtw_df_previous.loc[str(year-1)+'-11-1':].values - dtw_df_in.loc[str(year)+'-11-1':].values));
 
 # %%
 # the plot makes it seem like there is a sharp discontinuity here
+# maybe its the same values as 2020 on accident, maybe issue with hdobj read in
 # dtw_df.iloc[:,0].plot()
 
 # %% [markdown]
@@ -138,6 +146,7 @@ crop_in = crop_in.rename(columns={'Crop_Choice':'name'})
 crop_in.to_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
 # crop_in[crop_in.name==crop]
 pred_crops = crop_in.name.unique()
+print(pred_crops)
 
 # %%
 # subset for parcels for the current crop
@@ -154,12 +163,12 @@ from f_swb_profit_opt import load_run_swb
 # %% [markdown]
 # Alfalfa ran as expected <1 min each. Misc grain and hay is running very slow, some taking up to 20 min with the norm being 3-5 minutes it seems (negative profits confuse function?)
 #
-# - the insane run time makes it seem much more reasonable now to simply create a linear relationship between irrigation rate and DTW for each field and water year.
+# - the insane run time makes it seem more reasonable now to simply create a linear relationship between irrigation rate and DTW for each field and water year.
 #     - lets do DTW with 5 ft steps from 0 to 300 ft for 60 iterations
-#     - irrigation dates range from 20-80 per season and within that we need accuracy to the 1 cm and if we have a max irrigation of 150 cm (almonds take ~40 in/yr and 60 inches is about 150 cm) thats 150 steps which would create 150^80 permutations (not accounting for duplicates) or 150!/70! which is equally large
+#     - irrigation dates range from 20-80 per season and within that we need accuracy to the 1 cm and if we have a max irrigation of 150 cm (almonds take ~40 in/yr and 60 inches is about 150 cm) thats 150 steps which would create 150^80 permutations (not accounting for duplicates) or 150!/70! which is equally large and that's before accounting for hydrology so this wouldn't be feasible.
 
 # %%
-for crop in crop_list:
+for crop in crop_list[:1]:
     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
     # need to account for when crops aren't predicted and skip them
     if pred_dict[crop] in pred_crops: 

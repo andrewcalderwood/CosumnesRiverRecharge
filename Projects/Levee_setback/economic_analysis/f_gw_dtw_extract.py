@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -64,11 +64,11 @@ from mf_utility import get_layer_from_elev, param_load
 # resampled ground surface elevation
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
-# %%
-year = int(2015)
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-model_ws = loadpth+'historical_simple_geology_reconnection'
 
+# %%
+# year = int(2015)
+# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
+# model_ws = loadpth+'historical_simple_geology_reconnection'
 
 # %%
 # year = int(2015)
