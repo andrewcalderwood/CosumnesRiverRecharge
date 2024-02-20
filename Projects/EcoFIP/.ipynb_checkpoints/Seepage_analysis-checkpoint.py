@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -79,6 +79,9 @@ from mf_utility import get_dates, clean_hob
 plt.rcParams.update({"figure.dpi": 300})
 
 
+# %% [markdown]
+# # load modflow
+
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
 # run_dir = 'F://WRDAPP/GWFlowModel'
@@ -88,7 +91,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
-model_nam = 'strhc1_scale'
+# model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
 # model_nam = 'parallel_realizations/realization005'
 
@@ -100,7 +103,7 @@ print(model_nam)
 load_only = ['DIS','BAS6','UPW','OC','SFR','LAK',
             'RCH', 'WEL'
             ]
-m = flopy.modflow.Modflow.load('MF.nam', model_ws= model_ws, 
+m = flopy.modflow.Modflow.load('MF.nam', model_ws= base_model_ws, 
                                 exe_name='mf-owhm', version='mfnwt',
                               load_only = load_only
                               )
@@ -116,6 +119,9 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 # round of the steady state period
 dt_ref['dt'] = dt_ref.dt.dt.round('D')
 dt_ref = dt_ref[~dt_ref.steady]
+
+# %% [markdown]
+# # load data
 
 # %%
 # realizations to present the results for
@@ -310,10 +316,23 @@ sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, colo
 plt.legend(title='Realization')
 
 
+# %% [markdown]
+# It turns out that the confidence intervals are calculated with [bootstrapping](https://stackoverflow.com/questions/46125182/is-seaborn-confidence-interval-computed-correctly) of the original sample which may not work as well with a small sample size. 
+#
+# - sb.utils.ci(sb.algorithms.bootstrap(np.arange(100))) is essentially what it does  
+#
+# "The seaborn terminology is somewhat specific, because a confidence interval in statistics can be parametric or nonparametric. To draw a parametric confidence interval, you scale the standard error, using a formula similar to the one mentioned above. For example, an approximate 95% confidence interval can be constructed by taking the mean +/- two standard errors"  
+# > plot_errorbars(("se", 2))
+#
+
 # %%
-g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+# it turns out that
+
+# g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('se',2))
+
 g.set(yscale='log', ylim=(1E-2, 1E2), title = '10 Realizations')
-g.set( ylabel='Qaquifer (m/day)')
+g.set( ylabel='Stream loss rate (m/day)')
 
 
 # %% [markdown]
