@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -83,6 +83,10 @@ add_path(py_dir)
 from map_cln import gdf_bnds, plt_cln, xy_lab
 from report_cln import base_round
 
+# %%
+# method to set default plot parameters, no longer need to specify 300 dpi each time, may not need to specify dimensions either
+plt.rcParams.update({"figure.dpi": 300})
+
 # %% [markdown]
 # # Load data
 #
@@ -97,8 +101,11 @@ from report_cln import base_round
 gdf_sfr = gpd.read_file(join(gis_dir, 'sfr_reach_reference.shp'))
 
 # %%
-gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
-# gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
+grid_id = 'parcel'
+if grid_id=='parcel':
+    gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
+elif grid_id == 'sq':
+    gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
 
 # simpler geodataframe to bring dataframe to geodataframe
 gdf_id = gdf_elev[['Region','geometry']].copy()
@@ -115,7 +122,26 @@ gdf_gw_long.year = gdf_gw_long.year.astype(int)
 # nearest spatial join to identify the sfr grid cells to reference for output in each
 # shouldn't extrapolate too far away from the stream considering the mean lengths in the transverse are at 
 # most 400 m
-sfr_ref = gpd.sjoin_nearest(gdf_id, gdf_sfr, max_distance=500)
+# the issue with joining by parcel is that is selects only one reach for a long parcel
+# sfr_ref = gpd.sjoin_nearest(gdf_id, gdf_sfr, max_distance=500)
+# find the nearest polygon to each stream reach (want to map each stream reach to a parcel)
+# to make sure parcels aren't overly weighted by one stream reach
+sfr_ref = gpd.sjoin_nearest(gdf_sfr, gdf_id, max_distance=500)
+# but use the grid shapefile for the output 
+sfr_ref = gdf_id.merge(sfr_ref.drop(columns=['geometry','index_right']))
+
+for n in np.arange(0,4):
+    # need to repeat the process to reach the polygons that weren't identified with stream reaches
+    # identify grid polygons that weren't joined to a stream reach
+    gdf_id_missing = gdf_id[~gdf_id.Region.isin(sfr_ref.Region.unique())].copy()
+    sfr_ref2 = gpd.sjoin_nearest(gdf_sfr, gdf_id_missing, max_distance=500)
+    # # but use the grid shapefile for the output 
+    sfr_ref2 = gdf_id_missing.merge(sfr_ref2.drop(columns=['geometry','index_right']))
+    sfr_ref = pd.concat((sfr_ref, sfr_ref2))
+
+# %%
+# plot shows that the grid polyogn aligns with the stream reach
+# sfr_ref.plot('rch_order', legend=True)
 
 # %%
 gdf_sfr_plt = gdf_sfr.copy()
@@ -158,6 +184,10 @@ make_multi_scale(ax_n, 0.65, 0.1, dist = 2E3, scales = [4,2,1], units='km')
 # ## time series
 
 # %%
+id_cols = ['Total distance (m)','segment','reach','rch_order']
+val_cols = ['Qin','Qaquifer', 'Qout', 'Qaquifer_rate','width','depth']
+
+# %%
 # monthly means
 sfrdf_mon = pd.read_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'))
 
@@ -172,6 +202,40 @@ sfr_r_avg = sfr_r.groupby(['Total distance (m)']).mean(numeric_only=True)
 
 #
 
+# %% [markdown]
+# Reviewing the mean and std deviation across realizations shows that there is more variability than originally thought. It's also important to note that the arithmetic mean overly weights the high seepage rates so the median is more appropriate. This also brings into question how to do the averaging across time, but perhaps the arithmetic mean is appropriate since the rates across time typically remained in a smaller range it appeared.
+# - review standard error across time for characteristic reaches (grave/sand, sandy mud, mud)
+
+# %%
+# calculate average rates across all time for each reach
+sfr_rch_avg = sfrdf_mon.groupby(['Total distance (m)', 'realization']).mean(numeric_only=True).reset_index('realization')
+# across the 10 realizations summarize the results
+# the mean should be representative if normally distributed with low std deviation
+# using the mean across realizations leads to an overestimate of the peak values
+sfr_mean = sfr_rch_avg.groupby(['Total distance (m)']).mean(numeric_only=True)
+sfr_std = sfr_rch_avg.groupby(['Total distance (m)']).std(numeric_only=True)
+# quantiles are an alternative to the 95% CI for identifying reasonable limits
+sfr_q = sfr_rch_avg.groupby(['Total distance (m)']).quantile([0.1, 0.25,0.5,  0.75, 0.9], numeric_only=True)
+sfr_q = sfr_q.reset_index().rename(columns={'level_1':'quant'})
+
+
+# %%
+sfr_q[sfr_q.quant==0.75].Qaquifer_rate.describe()
+
+# %%
+# calculate coefficient of variation
+cv = (sfr_std/sfr_mean)
+# cv.plot(y='Qaquifer_rate')
+
+# %%
+# # calculate the 95% confidence intervals
+# shows pretty extreme values
+# sfr_CI_up = sfr_mean.copy()
+# sfr_CI_up[val_cols] = sfr_mean[val_cols] + 2*sfr_std[val_cols]
+# sfr_CI_dn = sfr_mean.copy()
+# sfr_CI_dn[val_cols] = sfr_mean[val_cols] - 2*sfr_std[val_cols]
+
+
 # %%
 # join averaged data to geodataframe to map
 # sfr grid cells only
@@ -179,14 +243,21 @@ sfr_r_avg = sfr_r.groupby(['Total distance (m)']).mean(numeric_only=True)
 # extrapolate to EcoFIP analysis units
 # gdf_sfr_r_avg = sfr_ref.merge(sfr_r_avg[['rch_order','Qaquifer_rate']])
 
-def map_sfr_leak(gdf_sfr_r_avg):
+def map_sfr_leak(sfr_ref, sfr_r_avg, ax_n, vscale=None):
+    # extrapolate to EcoFIP analysis units
+    gdf_sfr_r_avg = sfr_ref.merge(sfr_r_avg[['rch_order','Qaquifer_rate']])
+    # need to solve rates for when a sfr cell was equally close to an analysis unit
+    gdf_sfr_r_avg = gdf_sfr_r_avg.dissolve(np.mean)
+    
     # plot just the loss_rate to avoid negative values with log-scale
     gdf_sfr_r_avg['loss_rate'] = gdf_sfr_r_avg.Qaquifer_rate.copy()
     gdf_sfr_r_avg.loc[gdf_sfr_r_avg.Qaquifer_rate<=0, 'loss_rate'] = 0
-    vmin = gdf_sfr_r_avg.loc[gdf_sfr_r_avg.loss_rate>0, 'loss_rate'].min()
-    vmax = gdf_sfr_r_avg.loss_rate.max()
+    if vscale is None:
+        vmin = gdf_sfr_r_avg.loc[gdf_sfr_r_avg.loss_rate>0, 'loss_rate'].min()
+        vmax = gdf_sfr_r_avg.loss_rate.max()
+    elif vscale is not None:
+        vmin, vmax = vscale
     
-    fig,ax_n = plt.subplots(figsize=(6.5,5.5),dpi=300)
     gdf_sfr_r_avg.plot('loss_rate', ax=ax_n, legend=True,
                       norm = mpl.colors.LogNorm(vmin=vmin, vmax = vmax),
                       legend_kwds={"shrink":0.6, 'label':'Simulation Average\nLoss Rate (m/day)'})
@@ -198,21 +269,68 @@ def map_sfr_leak(gdf_sfr_r_avg):
     
     ctx.add_basemap(source= ctx.providers.OpenStreetMap.Mapnik, ax=ax_n, alpha = 0.6,
                     crs='epsg:26910', attribution=False)
-    return None
+    return gdf_sfr_r_avg
 
 
 # %%
 # # sfr grid cells only
 # gdf_sfr_r_avg = gdf_sfr.merge(sfr_r_avg[['rch_order','Qaquifer_rate']])
-# map_sfr_leak(gdf_sfr_r_avg)
+# map_sfr_leak(gdf_sfr, sfr_r_avg)
 
 # %%
-# extrapolate to EcoFIP analysis units
-gdf_sfr_r_avg = sfr_ref.merge(sfr_r_avg[['rch_order','Qaquifer_rate']])
-# need to solve rates for when a sfr cell was equally close to an analysis unit
-gdf_sfr_r_avg = gdf_sfr_r_avg.dissolve(np.mean)
+# it turns out that
+
+# g = sns.lineplot(sfr_rch_avg, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+# g = sns.lineplot(sfr_rch_avg, x='Total distance (m)', y='Qaquifer_rate', errorbar=('se',2))
+g = sns.lineplot(sfr_rch_avg, x='Total distance (m)', y='Qaquifer_rate', errorbar=('pi',95))
+g.set(yscale='log', ylim=(1E-2, 1E2), title = '10 Realizations')
+g.set( ylabel='Stream loss rate (m/day)')
+
+# %%
+# plt_val = 'Qaquifer_rate'
+# fig,ax_n = plt.subplots()
+# sfr_mean.plot(y=plt_val, ax=ax_n, legend=False)
+# sfr_CI_up.plot(y=plt_val, ax=ax_n,legend=False)
+# sfr_CI_dn.plot(y=plt_val,ax=ax_n, legend=False)
+# ax_n.set_yscale('log')
+
+# %%
+# columns to save for reference
+out_cols = ['Region','rch_order','dist_m','Qaquifer_rate','geometry']
+# gdf_sfr_r_avg[gdf_sfr_r_avg.Qaquifer_rate !=gdf_sfr_r_avg.loss_rate]
+
+# %%
+
 # 1538
-map_sfr_leak(gdf_sfr_r_avg)
+# map_sfr_leak(gdf_sfr_r_avg)
+vscale = (1E-2, 1E1) # better for mean which has high values
+vscale = (1E-2, 1E0)
+# map_sfr_leak(gdf_sfr_r_avg, vscale=vscale)
+# map_sfr_leak(sfr_ref, sfr_r_avg, vscale=vscale)
+# map_sfr_leak(sfr_ref, sfr_mean, vscale=vscale)
+# fig, ax = plt.subplots(3,1,figsize=(6.5,10))
+for n, q in enumerate([25, 50, 75]):
+    # ax_n = ax[n]
+    fig,ax_n = plt.subplots(figsize=(6.5,5.5))
+    gdf_sfr_r_avg = map_sfr_leak(sfr_ref, sfr_q[sfr_q.quant==q/100],ax_n, vscale=vscale)
+    # save quantiles to shapefile
+    sfr_out_file = gdf_sfr_r_avg[out_cols].rename(columns={'Qaquifer_rate':'Qaq_rate'})
+    sfr_out_file.to_file(join(out_dir, 'stream_loss_'+grid_id, 'stream_loss_p'+str(q)+'.shp'))
+    plt.savefig(join(out_dir, 'stream_loss_'+grid_id, 'stream_loss_p'+str(q)+'.png'))
+    plt.close()
+# fig.tight_layout()
+# gdf_sfr_r_avg = map_sfr_leak(sfr_ref, sfr_q[sfr_q.quant==0.5], vscale=vscale)
+# gdf_sfr_r_avg = map_sfr_leak(sfr_ref, sfr_q[sfr_q.quant==0.75], vscale=vscale)
+
+
+# %%
+# sfr_out_file
+
+# %% [markdown]
+# The stream loss map shows even less contrast without log scale, and it helps to limit the log scale value extent to avoid the middle values looking the same.  
+# The quantiles 0.25 and 0.75 show a much lower peak value than the mean which indicates high rates are overwhelming the lower values. 
+# - This means the median or a geometric mean should be used.
+# - the quantile values of 0.25, 0.5, 0.75 are still helpful as they show hot spots with more conservative values
 
 # %%
 # temporary code to fix the saved file format
