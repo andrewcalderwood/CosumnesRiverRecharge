@@ -9,19 +9,35 @@ import sys
 import numpy as np
 from numpy import ma
 
-def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info, **kwargs):
+def tprogs_cut_elev(tprogs_line, dem_data, tprogs_info):
     """
+    Original function for cutting elevation, updated to use function for pre-processed array
+    to save time by having pre-loaded array
     Parameters
     ----------
     tprogs_line : output from TPROGs of line data formatted to be converted by setting z then x then y
+    dem_data : 2D array of elevation data of ground surface above which TPROGs should not be real
+
+    """
+    tprogs_elev = np.copy(np.reshape(tprogs_line,
+                             (tprogs_info[-1], dem_data.shape[0], dem_data.shape[1])))
+    masked_tprogs = tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info)
+    return(masked_tprogs)
+
+def tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info, **kwargs):
+    """
+    Convert tprogs array into modflow array format (flip z and x)
+    tprogs has model bottom as layer 1 and bottom row as row 1
+    modflow has model top as layer 1 and top row as row 1
+    Parameters
+    ----------
+    tprogs_elev : TPROGs array data (original tprogs xyz direction)
     dem_data : 2D array of elevation data of ground surface above which TPROGs should not be real
     rows : number of rows in the TPROGs model
     cols : number of columns in the TPROGs model
     """
     rows = kwargs.get('rows', np.where(np.ones(dem_data.shape)==1)[0])
     cols = kwargs.get('cols', np.where(np.ones(dem_data.shape)==1)[1])
-    tprogs_elev = np.copy(np.reshape(tprogs_line,
-                             (tprogs_info[-1], dem_data.shape[0], dem_data.shape[1])))
     # flip tprogs model along z axis to match modflow definition of 0 as top (TPROGS says 0 is bottom)
     tprogs_elev = np.flip(tprogs_elev,axis=0)
     # flip along x-axis as tprogs has bottom row as 0 and modflow has top row as 0

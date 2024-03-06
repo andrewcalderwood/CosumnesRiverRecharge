@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -55,7 +55,8 @@ doc_dir = join(usr_dir, 'Documents')
 
 # dir of all gwfm data
 gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
-gwfm_dir
+print(gwfm_dir)
+sfr_dir = gwfm_dir+'/SFR_data/'
 
 
 # %%
@@ -175,7 +176,7 @@ tprog_strt = -2
 tprog_total = 64 # 16, 64 3+ hrs #12 
 
 # alternate version has tprogs with full layers to surface and no flow above land
-fine_tprogs = False
+fine_tprogs = True
 if fine_tprogs:
     tprog_strt = 40
     # only need tprogs data nearer surface river-aquifer interaction
@@ -529,7 +530,9 @@ ibound = np.ones((nlay,nrow,ncol))
 # find wherever layer less than min thickness to set as inactive, with thin layer version
 # ibound[thickness < 0.5] = 0
 # where bottom is above land surface set as inactive 
-ibound[botm>dem_data] = 0
+# round elevations up to include more geology than less
+ibound[botm > dem_data] = 0
+
 
 
 # %%
@@ -656,6 +659,12 @@ params = params.set_index('Zone')
 params['K_m_d'] = params.K_m_s * 86400    
 
 # %%
+# load data from Steven
+params = param_load(model_ws, gel_dir, 'ZonePropertiesInitial_Maples.csv')  
+params = params.set_index('Zone')
+
+
+# %%
 # bc_params = pd.read_csv(join(model_ws,'BC_scaling.csv'))
 bc_params = param_load(model_ws, join(gwfm_dir, 'UCODE'), 'BC_scaling.csv')  
 bc_params = bc_params.set_index('ParamName')
@@ -670,7 +679,7 @@ if tprogs_fxn_dir not in sys.path:
 # sys.path
 import tprogs_cleaning as tc
 
-# reload(tc)
+reload(tc)
 
 # %% [markdown]
 # Realization 89 was used for model development because tprogs analysis at one point found realization 89 had the mean conductivity in the area of Blodgett Dam.  
@@ -678,14 +687,20 @@ import tprogs_cleaning as tc
 # Most recent run of all 100 found r5 to have the best NSE/RMSE
 
 # %%
-
-# t=43
-t=5
+import h5py
+tprogs_name = 'tprogs_final'
+tprogs_fn = join(gel_dir, tprogs_name+'.hdf5')
+# r=43
+r=5
 tprogs_info = [80, -80, 320]
 
-tprogs_line = np.loadtxt(tprogs_files[t])
-# using m.dis.top to account for cases when top is above dem
+tprogs_line = np.loadtxt(tprogs_files[r])
+# # # using m.dis.top to account for cases when top is above dem
 masked_tprogs= tc.tprogs_cut_elev(tprogs_line, m.dis.top.array, tprogs_info)
+
+# with h5py.File(tprogs_fn, mode='r') as f:
+#     tprogs_arr = f['tprogs']['r'+str(r).zfill(3)][:].astype(float)
+# masked_tprogs= tprogs_arr_cut_elev(tprogs_arr, m_top, tprogs_info)
 K, Sy, Ss, porosity = tc.int_to_param(masked_tprogs, params, porosity=True)
 
 # save tprogs facies array as input data for use during calibration
@@ -826,6 +841,10 @@ im = ax[1].imshow(vka[:,row,:],aspect=1, norm=mpl.colors.LogNorm())
 plt.colorbar(im, ax=ax[1], shrink=0.8)
 # plt.show()
 
+# %% [markdown]
+# ## Surface vka adjustments
+# Need to adjust the surface rates to be more representative and to avoid excess leakage. 
+
 # %%
 # this may not be needed
 # reduce sand/gravel vka for seepage in LAK/SFR assuming some fining
@@ -835,19 +854,35 @@ coarse_cutoff = vka_quants.loc[2,['vka_min','vka_max']].mean() #vka_quants.loc[2
 seep_vka[seep_vka > coarse_cutoff] /= bc_params.loc['coarse_scale', 'StartValue']
 print('coarse cutoff %.1f' %coarse_cutoff)
 print('coarse fraction adjusted is %.2f %%' %((vka>coarse_cutoff).sum()*100/(vka>0).sum()))
+# coarse scale was to 1 so this doesn't really do anything now
 
-
+# uniformly scale by one seep_vka value
+seep_vka[~adj_lowK_arr.astype(bool)] /= bc_params.loc['seep_vka','StartValue']
 # apply additional scaling factors by breaking columns into 5 groups
-stp = int(ncol/5)
-for n in np.arange(0, 5):
-    seep_vka[:, :, n*stp:(n+1)*stp] /= bc_params.loc['seep_vka'+str(n+1), 'StartValue']
+# stp = int(ncol/5)
+# for n in np.arange(0, 5):
+#     seep_vka[:, :, n*stp:(n+1)*stp] /= bc_params.loc['seep_vka'+str(n+1), 'StartValue']
 
 # keep laguna/mehrten input constant
 seep_vka[-2:] = np.copy(vka[-2:])
 
+# %% [markdown]
+# The substrate profile from Constantine seems to agree with the assessment by Meirovitz and the AEM data that the central region has more coarse facies.
+
 # %%
-# substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
-# substrate.
+
+substrate = pd.read_csv(join(sfr_dir, 'substrate_river_profile.csv'), comment='#')
+# assign numeric value to help plottin
+substrate['pc'] = 0
+substrate.loc[substrate.substrate=='alternating','pc'] =0.5
+substrate.loc[substrate.substrate=='alluvial','pc'] =1
+# backward fill the information on substrate
+new_river_km = np.arange(0,substrate.end_river_km.max(),0.5)
+substrate = substrate.set_index('end_river_km').reindex(new_river_km).bfill().reset_index()
+
+# %%
+# substrate.plot(x='end_river_km',y='pc')
+
 
 # %%
 plt.imshow(seep_vka[0], norm=mpl.colors.LogNorm())
@@ -947,7 +982,6 @@ lak_grid = gpd.read_file(join(lak_shp, 'lak_grid_cln.shp'))
 # # SFR
 
 # %%
-sfr_dir = gwfm_dir+'/SFR_data/'
 
 # %% [markdown]
 # ## Adjust Blodgett Dam scenario here
@@ -1196,6 +1230,37 @@ sfr_lay = get_layer_from_elev(sfr_bot-0.1, botm[:, sfr_rows, sfr_cols], m.dis.nl
 
 
 # %%
+# calculate the mean water surface for the simulation period
+mean_wse_arr = np.mean(kriged_arr, axis=0)
+# sample unsaturated zone conductivity for uhc
+unsat_K_all  = tc.get_tprogs_for_elev(K, dem_data, mean_wse_arr, tprogs_info)
+# calculate geometric mean for the unsat zone routing
+unsat_K = gmean(unsat_K_all, axis=0)
+# reset values in foothills where tprogs is not used in the geologic model
+unsat_K[adj_lowK_arr.astype(bool)[0]] = vka[adj_lowK_arr.astype(bool)][0]
+
+# %%
+
+# %%
+# simple strhc1 scaled by one value for all
+strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]
+plt.plot(strhc1, label='strhc1 simple')
+
+# the streambed conductivity should be the raw value of the geology and scaled
+# to assume clogging from silty mud for higher K cells
+str_vka = vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]
+strhc_scaled = (str_vka*params.loc[3,'K_m_d'])**(1/2)
+strhc1 = np.where(strhc_scaled< str_vka, strhc_scaled, str_vka)
+plt.plot(strhc1, label='strhc1 scaled')
+
+uhc = unsat_K[sfr.reach_data.i,sfr.reach_data.j]
+plt.plot(uhc, label='uhc')
+plt.legend()
+plt.yscale('log')
+# plotting simple scaling vs the clogging scaling shows a more realistic representation
+# because it doesn't reduce the vka of mud and further reduces the peak values
+
+# %%
 # KRCH, IRCH, JRCH, ISEG, IREACH, RCHLEN, STRTOP, SLOPE, STRTHICK, STRHC1, THTS, THTI, EPS, UHC
 
 columns = ['KRCH', 'IRCH', 'JRCH', 'ISEG', 'IREACH', 'RCHLEN', 'STRTOP', 
@@ -1216,16 +1281,18 @@ sfr.reach_data.strthick = soildepth_array[sfr.reach_data.i, sfr.reach_data.j]
 strhc_scale = bc_params.loc['strhc_scale', 'StartValue']
 
 sfr.reach_data.strhc1 = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
+sfr.reach_data.strhc1 = strhc1/strhc_scale
 
 # UZF parameters
 sfr.reach_data.thts = soiln_array[sfr.reach_data.i, sfr.reach_data.j]/100
 sfr.reach_data.thti = sfr.reach_data.thts
 sfr.reach_data.eps = soileps_array[sfr.reach_data.i, sfr.reach_data.j]
 sfr.reach_data.uhc = seep_vka[sfr.reach_data.k, sfr.reach_data.i, sfr.reach_data.j]/strhc_scale
+sfr.reach_data.uhc = uhc/strhc_scale
 
 
 # %%
-# sfr.write_file()
+# sfr.write_file() # -> need to keep going to overwrite reaches for transfers only with 0
 
 # %%
 mb4rl = pd.read_csv(sfr_dir+'michigan_bar_icalc4_data.csv', skiprows = 0, sep = ',')
@@ -1377,6 +1444,9 @@ if scenario != 'no_reconnection':
     sfr.reach_data.strhc1[sfr.reach_data.iseg== ret_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== out_seg] = 0
     sfr.reach_data.strhc1[sfr.reach_data.iseg== lak_seg] = 0
+
+# %%
+# sfr.write_file() # need to re-write zero strhc1 overlays before writing out
 
 # %%
 if scenario != 'no_reconnection':
@@ -1535,7 +1605,8 @@ for n in np.arange(0,len(lak_row)):
     
 # set Ksat same as vertical conductivity, 
 lkbd_thick = 2
-lkbd_K = np.copy(seep_vka)
+lkbd_K = np.copy(vka) # keep separate from sfr scaling now
+# lkbd_K = np.copy(seep_vka)
 lkbd_K[lakarr==0] = 0 # where lake cells don't exist set K as 0
 # leakance is K/lakebed thickness, reduce by 1/10 for cloggin
 # bdlknc = (lkbd_K/lkbd_thick)
@@ -1705,7 +1776,7 @@ ghb_ss = ghb_ss[ibound[ghb_ss.layer, ghb_ss.row,ghb_ss.column].astype(bool)]
 
 # %%
 
-def prep_ghb_df(ghb_df):
+def prep_ghb_df(ghb_df, hk):
     """ Given rows and columns create GHB based on interpolated head levels"""
     # pull out head for rows and columns
     rows = ghb_df.row.values
@@ -1731,7 +1802,6 @@ def prep_ghb_df(ghb_df):
 
     df[['k','i','j']] = df[['k','i','j']].astype(int)
 #     hk = hk[df.k, df.i, df.j] # old hk with cell by cell values
-    hk = eff_K.loc[eff_K.name=='HK_Y', 'permeameter'].values[0] # permeameter effective K
     distance = ghb_hd.loc[list(zip(df.i, df.j))].ghb_dist.values
     cond = hk*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*delr/distance
     df.cond = cond
@@ -1803,11 +1873,13 @@ ghbdelta_spd.to_csv(m.model_ws+'/input_data/ghbdelta_spd.csv',index=False)
 
 # %%
 ghb_dict = {}
+ghb_hk = eff_K.loc[eff_K.name=='HK_Y', 'permeameter'].values[0] # permeameter effective K
+ghb_hk = np.nanmean(hk) # temporary fill in to account for new parameters
 
 if ss_bool == True:
     # set steady state period
 #     ghb_all_ss = ghb_df(ghb_ss.row, ghb_ss.column, ghb_ss.set_index(['row','column']), distance = 1)
-    ghb_all_ss = prep_ghb_df(ghb_ss)
+    ghb_all_ss = prep_ghb_df(ghb_ss, ghb_hk)
     ghb_dict[0] = pd.concat((ghb_all_ss, ghbdelta_spd)).values
 
 
@@ -1815,7 +1887,7 @@ for n in np.arange(0, len(months)):
     df_spd = df_mon.loc[months[n]]
     spd = month_intervals[n]
 #     ghb_gen = ghb_df(df_spd.row, df_spd.column, df_spd.set_index(['row','column']), distance = 1)
-    ghb_gen = prep_ghb_df(df_spd)
+    ghb_gen = prep_ghb_df(df_spd, ghb_hk)
     ghb_dict[spd] = pd.concat((ghb_gen, ghbdelta_spd)).values
     
 
@@ -1839,6 +1911,7 @@ ghb.check()
 
 # %%
 # ghb.write_file()
+
 
 # %% [markdown]
 # ## CHD Package Time variant head
@@ -2130,30 +2203,61 @@ AW = load_swb_data(strt_date, end_date, 'field_applied_water', uzf_dir)
 AW_ss = load_swb_data(ss_strt, strt_date-pd.DateOffset(days=1), 'field_applied_water', uzf_dir)
 
 
+# %% [markdown]
+# The recharge from field percolation needs to be adjusted to account for where groundwater et may steal from the percolation (no double counting) and in spots where it is expected that water will sit for longer (no runoff losses).
+# - clipping to days above the 23 cms threshold brings it down considerably (17,500 to 12,500) and increasing to 75 cms brings it down further (10,000)
+# - the spatial distribution makes sense as well because locations along the river with riparian plants see precip all the time and other places see higher than average rates ( should assume 75 cms rate to align with inundation with levees from Whipple)
+
+# %%
+# for larger floodplain area, only use rainfall when flow is above threshold
+fp_days = (inflow.flow_cmd>75*86400).values
+# evt_active array for each stress period
+evt_active_all = np.repeat(np.reshape(evt_active, (1, nrow,ncol)), len(fp_days),axis=0)
+evt_active_all[~fp_days] = False
+
+
+# %%
+# where GDEs are active the rain should be directly applied instead of SWB percolation
+# as we don't want to double count ET
+adj_perc = perc.copy()
+# initially rain was applied only where there was a deep rooting depth
+et_rain_bool = (evt_active)&(ext_dp>2)
+adj_perc[:, et_rain_bool] = rain_arr[:, et_rain_bool]
+adj_perc_min = adj_perc.copy()
+# model results show under prediction of levels in the floodplain
+# so it may make sense to use rain everywhere there is ET
+# only do it for days with floodplain inundation
+adj_perc[evt_active_all] = rain_arr[evt_active_all]
+adj_perc_fp = adj_perc.copy()
+# do it for all time
+adj_perc[:, evt_active] = rain_arr[:, evt_active]
+adj_perc_max = adj_perc.copy()
+
+adj_perc_ss = ss_perc.copy().mean(axis=0)
+adj_perc_ss[et_rain_bool] = rain_arr_ss[et_rain_bool]
+# might be too much water for steady state for whole floodplain
+# adj_perc_ss[evt_active] = rain_arr_ss[evt_active]
+
+adj_perc = adj_perc_fp.copy()
+
 # %%
 # plt.plot(agETc.sum(axis=(1,2)).cumsum(),label='ag ET')
 plt.plot(AW.sum(axis=(1)).cumsum(),label='ag AW')
 # plt.plot(natETc.sum(axis=(1,2)).cumsum(),label='native ET')
 
 plt.plot(perc.sum(axis=(1,2)).cumsum(), label='Percolation rain')
+plt.plot(adj_perc_min.sum(axis=(1,2)).cumsum(), label='Percolation rain adjusted for deep ET')
+plt.plot(adj_perc_fp.sum(axis=(1,2)).cumsum(), label='Percolation rain adjusted for all ET and flood days')
+plt.plot(adj_perc_max.sum(axis=(1,2)).cumsum(), label='Percolation rain adjusted for all ET')
 
 plt.legend()
 plt.show()
 # 
 
 # %%
-# where GDEs are active the rain should be directly applied instead of SWB percolation
-# as we don't want to double count ET
-adj_perc = perc.copy()
-et_rain_bool = (evt_active)&(ext_dp>2)
-adj_perc[:, et_rain_bool] = rain_arr[:, et_rain_bool]
-
-adj_perc_ss = ss_perc.copy().mean(axis=0)
-adj_perc_ss[et_rain_bool] = rain_arr_ss[et_rain_bool]
-
-# %%
 # review percolation
-# plt.imshow(adj_perc.mean(axis=0))
+plt.imshow(adj_perc.mean(axis=0))
+# plt.imshow(adj_perc_fp.mean(axis=0))
 # plt.imshow(rch.rech.array[:,0,:].mean(axis=0))
 # adj_perc.max()
 

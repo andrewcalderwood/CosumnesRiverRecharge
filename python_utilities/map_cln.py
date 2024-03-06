@@ -54,6 +54,7 @@ def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsi
     else:
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
             bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
+    return None
 
 def xy_lab(xy, text, ax, offset = (0,0), lw=1, fontsize=10, bbox=True, fc='white', ec='black'):
     if bbox:
@@ -74,23 +75,30 @@ def dir_arrow(ax, x, y, dx, dy, arrow_length, text, fontsize=10):
                 arrowprops=dict(facecolor='black', width=1.5, alpha=1, headwidth=5),
                 ha='center', va='center', fontsize=10,xycoords=ax.transAxes, 
                )
+    return None
 
-def plt_cln(ax):
+def plt_cln(ax, nbins=5, label=True):
     """ Set basic xy axis labels, reduce axis clutter"""
     ax.ticklabel_format(style='plain')
-    plt.xlabel('Easting (m)')
-    plt.ylabel('Northing (m)')
+
+    if label:
+        ax.set_xlabel('Easting (m)')
+        ax.set_ylabel('Northing (m)')
     # adjust major locators
-    plt.locator_params(axis='x', nbins=5)
-    plt.locator_params(axis='y', nbins=5)
-    plt.yticks(rotation=90, verticalalignment = "center")
+    ax.set_yticklabels(labels=ax.get_yticklabels(), 
+                       rotation=90, verticalalignment = "center");
+    ax.locator_params(axis='x', nbins=nbins);
+    ax.locator_params(axis='y', nbins=nbins);
+
+    return None
 
 def plt_arrow(ax, xoff = 0.7, yoff=0.15):
     x, y, arrow_length = xoff, yoff, 0.1
     ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
                 arrowprops=dict(facecolor='black', width=5, headwidth=15),
-                ha='center', va='center', fontsize=20, 
+                ha='center', va='top', fontsize=20, 
                 xycoords=ax.transAxes)
+    return None
 
 def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
     """ Plot legend with multi distances (3) at fractional axes offset
@@ -122,14 +130,8 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
         dist_lab = str(np.round(dist*adj/km, 1)).replace('.0','')
         if n ==0:
             dist_lab += ''+units
-        # if len(dist_lab)>1:
-        #     dec_xoff = 3
-        # else:
-        #     dec_xoff = 1
-            # dec_xoff = int(np.log10(1E3)) # way to scale offset
-        dec_xoff = len(dist_lab)
-        # add slight offset to location of rectangle
-        # ax.annotate(dist_lab, (lx + dist*adj - dist*0.2*dec_xoff, ly-2*height), xycoords='data')
-        ax.annotate(dist_lab, (lx + dist*adj , ly-2*height), xycoords='data', ha='center')
-    # adj = scales[0]
-    # ax.annotate(units, (lx + dist*adj + dist*0.4, ly-2*height), xycoords='data', ha='center')
+
+        # use ha = 'center' to center under lines
+        # ax.annotate(dist_lab, (lx + dist*adj , ly-2*height), xycoords='data', ha='center', va='top')
+        ax.annotate(dist_lab, (lx + dist*adj , ly-0.25*height), xycoords='data', ha='center', va='top')
+    return None

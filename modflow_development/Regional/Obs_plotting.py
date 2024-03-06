@@ -19,19 +19,33 @@ from os.path import basename, dirname, join, exists
 import sys
 from importlib import reload
 import glob
-import time
-
 import pandas as pd
 import numpy as np
-import geopandas as gpd
-import rasterio
-
-from sklearn.metrics import r2_score, mean_squared_error
+import calendar
+import time
 
 # standard python plotting utilities
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# standard geospatial python utilities
+# import pyproj # for converting proj4string
+# import shapely
+import geopandas as gpd
+import rasterio
+
+# mapping utilities
+import contextily as ctx
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+import matplotlib.font_manager as fm
+from matplotlib.ticker import MaxNLocator
+
+# import flopy
+# import flopy.utils.binaryfile as bf
+from importlib import reload
 
 
 # %%
@@ -75,7 +89,7 @@ from mf_utility import get_dates, clean_hob
 
 # %%
 run_dir = 'C://WRDAPP/GWFlowModel'
-run_dir = 'F://WRDAPP/GWFlowModel'
+# run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
@@ -83,13 +97,13 @@ model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
 model_nam = 'strhc1_scale'
-model_nam = 'parallel_realizations/realization005'
-# model_nam = 'foothill_vani10'
-# model_nam = 'strhc1_scale'
+model_nam = 'fine_tprogs'
+# model_nam = 'fine_tprogs_more_rain'
+# model_nam = '3layer'
+# model_nam = 'params_maples_fine'
 # model_nam = 'sfr_uzf'
 
 model_ws = loadpth+model_nam
-print(model_nam)
 
 
 # %%
@@ -109,6 +123,7 @@ gel = m.__getattr__(gel_nam)
 
 # %%
 # gel = flopy.modflow.ModflowUpw.load(join(model_ws, 'MF.upw'), model=m)
+# sfr = flopy.modflow.ModflowSfr2.load(join(model_ws, 'MF.sfr'), model=m)
 
 # %%
 sfr_dir = gwfm_dir+'/SFR_data/'
@@ -123,6 +138,10 @@ lak_grid_clip = gpd.read_file(gwfm_dir+'/Levee_setback/lak_grid_clip/lak_grid_cl
 
 
 # %%
+dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+
+
+# %%
 sfr = m.sfr
 vka = gel.vka.array
 # load sfr data 
@@ -130,8 +149,8 @@ grid_sfr = reach_data_gdf(sfr, grid_p)
 grid_sfr[['row','column']] = grid_sfr[['i','j']] +1 # convert to 1 based to match with SFR output
 drop_iseg = grid_sfr[grid_sfr.strhc1==0].iseg.values
 grid_sfr['vka'] = vka[grid_sfr.k, grid_sfr.i, grid_sfr.j]
-vka_quants = pd.read_csv(join(base_model_ws, 'vka_quants.csv'))
-grid_sfr['facies'] = ''
+vka_quants = pd.read_csv(join(model_ws, 'vka_quants.csv'))
+
 for p in vka_quants.index:
     facies = vka_quants.loc[p]
     grid_sfr.loc[(grid_sfr.vka< facies.vka_max)&(grid_sfr.vka>= facies.vka_min),'facies'] = facies.facies
@@ -184,8 +203,10 @@ pump_rate = pump/(m.dis.delr[0]*m.dis.delc[0])
 
 # %%
 # plt.imshow(rech.mean(axis=0), vmax=0.001)
-# plt.imshow(pump_rate.mean(axis=0), vmax=0.005)
+# # plt.imshow(pump_rate.mean(axis=0), vmax=0.005)
+
 # plt.colorbar(shrink=0.6)
+# rech.mean(axis=0).sum()
 
 # %% [markdown]
 # ## Water Budget check
@@ -277,11 +298,14 @@ def load_hob(model_ws):
     # if only one obs exists correct naming convention
     one_obs = ~hobout.obs_nam.str.contains('.0')
     hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+'.'+str(1).zfill(5)
+
     return(hobout)
     
-hobout = load_hob(model_ws)
+
 
 # %%
+hobout = load_hob(model_ws)
+
 fig, ax = plt.subplots(1,1,figsize=(5,5))
 
 # get boundary values for plotting a 1:1
@@ -306,13 +330,12 @@ fig_nam = plt_dir+'GSP_WaterBudget/sim_vs_obs_heads'
 # plt.savefig(fig_nam+'.svg',dpi=600,bbox_inches='tight')
 
 # %%
-def mak_hob_gpd(hobout, model_ws):
-
+def mak_hob_gpd(hobout):
     all_obs = pd.read_csv(model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
     all_obs.index = all_obs.index.rename('date')
     all_obs = all_obs.reset_index()
     # join more indepth obs data to output simulated heads
-    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='right')
+    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='inner')
     obs_data = obs_data.dropna(subset=['node'])
 #     obs_data.loc[:,['row','column','node']] = obs_data.loc[:,['row','column','node']].astype(int)
     obs_data[['row','column','node']] = obs_data[['row','column','node']].astype(int)
@@ -326,6 +349,12 @@ def mak_hob_gpd(hobout, model_ws):
                               crs = grid_p.crs)
     hob_gpd['error'] = hob_gpd.obs_val - hob_gpd.sim_val
     hob_gpd['abs_error'] = hob_gpd.error.abs()
+    # add error statistics
+    hob_gpd['Statistic'] = 0.01
+    hob_gpd['StatFlag'] = 'SD'
+    # locations with significant difference between RPE GSE and the DEM should have additional uncertainty included
+    hob_gpd['Statistic'] += np.round(np.abs(hob_gpd.dem_wlm_gse),4)
+    hob_gpd['Weight'] = 1/(hob_gpd.Statistic**2)
     
     if 'date' in hob_gpd.columns:
         hob_gpd = hob_gpd.set_index('date')
@@ -333,15 +362,19 @@ def mak_hob_gpd(hobout, model_ws):
         #     groupby values by season
         hob_gpd.loc[(hob_gpd.index.month > 2)&(hob_gpd.index.month < 6),'season'] = 'spring'
         hob_gpd.loc[(hob_gpd.index.month > 8)&(hob_gpd.index.month < 12),'season'] = 'fall'
+
+    # simplify to stations for reference
+    stns = hob_gpd.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
+    stns['botm_elev'] = m.dis.botm[stns.layer-1, stns.row-1, stns.column-1]
+    stns.crs = hob_gpd.crs
     
-    return(hob_gpd)
+    return(hob_gpd, stns)
     # set date
     
 
 
 # %%
-hob_gpd = mak_hob_gpd(hobout, base_model_ws)
-
+hob_gpd, stns = mak_hob_gpd(hobout)
 
 hob_seasonal = hob_gpd.groupby(['node','season']).mean(numeric_only=True)
 hob_seasonal = gpd.GeoDataFrame(hob_seasonal, geometry = gpd.points_from_xy(hob_seasonal.easting, hob_seasonal.northing))
@@ -350,20 +383,10 @@ hob_seasonal = hob_seasonal.reset_index()
 
 
 # %%
-stns = hob_gpd.drop_duplicates('site_code', keep='last').reset_index().drop(columns=['date','gwe'])
-stns['botm_elev'] = m.dis.botm[stns.layer-1, stns.row-1, stns.column-1]
-stns.crs = hob_gpd.crs
 
-# %%
-hob_gpd['Statistic'] = 0.01
-hob_gpd['StatFlag'] = 'SD'
-# locations with significant difference between RPE GSE and the DEM should have additional uncertainty included
-hob_gpd['Statistic'] += np.round(np.abs(hob_gpd.dem_wlm_gse),4)
-hob_gpd['Weight'] = 1/(hob_gpd.Statistic**2)
 
 soswr = (np.sum(np.abs(hob_gpd.sim_val-hob_gpd.obs_val)*hob_gpd.Weight))
 print('Sum of absolute difference of OBS and SIM: %.2e' %soswr)
-
 
 # %%
 from report_cln import base_round
@@ -402,7 +425,6 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
         hcb.set_label('Head (m)')
         ax.clabel(contour_set, contour_set.levels[0::], inline=True, fontsize=8)
 #     foothills.plot(ax=ax, alpha=0.5, edgecolor='black', color='grey')
-
     if nd_chk != None:
         hob_gpd_plt = hob_gpd_plt[hob_gpd_plt.node.isin(nd_chk)]
     if hob:
@@ -422,7 +444,7 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 # %%
 # plot plain contours for reference
 # hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=False, step=5)
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -441,7 +463,7 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=Fa
 # %%
 hobout = load_hob(model_ws)
 
-hob_gpd = mak_hob_gpd(hobout, base_model_ws)
+hob_gpd, stns = mak_hob_gpd(hobout)
 # find sites with long time series of OBS
 hobs_long = (hob_gpd.groupby('site_code').count()>=int(m.dis.nper/365)*2)
 hobs_long = hobs_long.index[hobs_long.obs_val].values
@@ -468,8 +490,24 @@ sns.relplot(hob_long.dropna(subset='value'), x='date',y='value',
            )
 
 
+# %%
+# plt.imshow(rech.mean(axis=0))
+
+# %%
+for n in [10161, 10383, 11078, 11084]:
+    site = stns[stns.node==10161].iloc[0]
+    # always inactive hob
+    # plt.plot(hdobj.get_ts((site.layer-1, site.row-1, site.column-1)))
+    k = site.layer-1
+    n_ib = m.bas6.ibound.array[k, site.row-1, site.column-1]
+    print('ibound', n_ib, 'layer', k+1)
+
+# %%
+# all NA values for the Oneto-Denier monitoring wells after increasing floodplain recharge
+
+# hob_gpd[hob_gpd.node==10161]
+
 # %% [markdown]
-#
 # ### review observation details
 
 # %%
@@ -482,7 +520,6 @@ stn_chk[cols]
 # # stn_chk.columns
 
 # %% [markdown]
-#
 # # general contour check
 
 # %%
@@ -491,14 +528,10 @@ year = 2019 # 2016
 filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
 # convert from ft to meters
 hd_strt = np.loadtxt(filename)*0.3048
-
-
-# %%
-# minx, miny, maxx, maxy = m_domain.geometry.unary_union.bounds
-# extent = (minx, maxx, miny, maxy)
+# extent = (minx,maxx,miny,maxy)
 
 # %%
-fig,ax=plt.subplots(figsize=(6.5, 6.5))
+fig,ax=plt.subplots(figsize=(8, 8))
 m_domain.plot(ax=ax,color='None')
 mapview = flopy.plot.PlotMapView(model=m,ax=ax)
 
@@ -521,13 +554,20 @@ head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
 head_ma = np.ma.masked_where(head==-999.99, head)  
 hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
 levels = np.arange(hmin, hmax, step)
-plt.plot(head_ma[0][row,:],label='Simulation')
+# calculate heads in the water table
+head_wt = np.max(head_ma[:-3], axis=0)
+
+plt.plot(head_wt[row,:],label='Simulation - WT')
 # plt.plot(head_ma[-2][row,:],label='Simulation Laguna')
 # plt.plot(head_ma[-1][row,:],label='Simulation Mehrten')
 plt.plot(hd_strt[row,:], label='Contour')
+plt.plot(dem_data[row,:],label='Ground surface',color='black',linestyle='--')
+
 plt.legend()
 print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
 
+
+# %%
 
 # %% [markdown]
 # ## cross-section
@@ -547,33 +587,39 @@ hd_strt = np.loadtxt(filename)*0.3048
 
 
 # %%
-hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
-fig, ax = plt.subplots(figsize=(6.5, 3.5), dpi=300) # was 40, 20 before
+ibound = m.bas6.ibound.array
+hk = m.upw.hk.array
+hk_ma = np.ma.masked_where( ~ibound.astype(bool), hk)
 
+# %%
+hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
+fig, ax = plt.subplots(figsize=(6.5, 3.5), dpi=300) 
 plt.aspect=10
 
-head = hdobj.get_data(kstpkper = spd_stp[0])
-head_new = hdobj.get_data(kstpkper = spd_stp[1400])
-
 rownum = 50
-# rownum = 0
 
 mcs = flopy.plot.PlotCrossSection(model=m, line={'Row' : rownum})
-# colnum = 150
-# mcs = flopy.plot.PlotCrossSection(model=m, line={'Column' : colnum})
 
 linecollection = mcs.plot_grid(linewidth = 0.3)
 ax.add_collection(linecollection)
 
-mcs.plot_array(a=gel.hk.array, norm = mpl.colors.LogNorm())
+# need to mask to show land surface
+mcs.plot_array(a=hk_ma, norm = mpl.colors.LogNorm())
 
 wt = mcs.plot_surface(a=hd_strt[:,:], color='black')
+
+head = hdobj.get_data(kstpkper = spd_stp[100])
 wt = mcs.plot_surface(a=head[:,:,:], color='blue')
+
+head_new = hdobj.get_data(kstpkper = spd_stp[1400])
 wt = mcs.plot_surface(a=head_new[:,:,:],color='red')
 
 plt.xlabel('Distance from southwestern edge (m)')
 plt.ylabel('Elevation (m)')
 
+# %%
+30000/200
+163*200, 134*200
 
 # %%
 head_new[-1,50,173], head_new[-1,50,200], head_new[-1,50,229]
@@ -588,7 +634,6 @@ hob_gpd_chk[hob_gpd_chk.node==16733].column
 # # Plot stream water budget
 
 # %%
-
 from mf_utility import clean_sfr_df
 from flopy_utilities import sfr_load_hds
 
@@ -598,16 +643,19 @@ sfrdf = clean_sfr_df(model_ws, dt_ref, pd_sfr)
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
 
 # %%
+drop_iseg
+
+# %%
 # plt_dates = ['2016-1-1']
 plt_dates = pd.date_range('2017-1-1','2017-4-1')
 sfr_heads, avg_heads = sfr_load_hds(hdobj, grid_sfr[~grid_sfr.iseg.isin(drop_iseg)], plt_dates, dt_ref)
 
 # %%
-
 var = ['Qrech','Qbase', 'Qout','stage']
 label=['Stream\nLosses ($m^3/d$)', 'Stream\nBaseflow ($m^3/d$)','Streamflow\n($m^3/d$)', 'Elevation (m)']
+
 var = ['Qaquifer', 'Qout','stage']
-label=['Stream\nSeepage ($m^3/d$)', 'Streamflow\n($m^3/d$)', 'Elevation (m)']
+label=['Stream\nSeepage ($m^3/d$)','Streamflow\n($m^3/d$)', 'Elevation (m)']
 fig, ax = plt.subplots(len(var)+1, 1, sharex=True, figsize=(6.5,8),dpi=300)
 pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0], legend=False)
 ax[0].set_ylabel('Stream \n$K_{vert}$ (m/d)')
@@ -630,8 +678,6 @@ sfrdf_sum = sfrdf.resample('D').mean(numeric_only=True)
 
 # plt_date = ['2017-1-1']
 var = ['Qout', 'Qrech', 'Qbase']
-var = ['Qout', 'Qaquifer']
-label=[ 'Streamflow\n($m^3/d$)', 'Stream\nSeepage ($m^3/d$)']
 fig, ax = plt.subplots(len(var), 1, sharex=True, figsize=(6.5,3),dpi=300)
 # pd_sfr.plot(x='Total distance (m)', y='strhc1', ax=ax[0])
 # pd_sfr.plot(x='Total distance (m)', y='vka', ax=ax[0])
@@ -640,11 +686,7 @@ fig, ax = plt.subplots(len(var), 1, sharex=True, figsize=(6.5,3),dpi=300)
 for n, v in enumerate(var):
     # sfrdf.loc[plt_date].plot(x='Total distance (m)', y=v, ax=ax[n+1], legend=False)
     sfrdf_sum.plot( y=v, ax=ax[n], legend=False)
-    ax[n].set_ylabel(label[n])
-
-
-# %% [markdown]
-#
+    ax[n].set_ylabel(v)
 
 # %%
 # flow is based on old rating curve
@@ -666,11 +708,11 @@ grid_MCC = grid_MCC[['iseg','ireach','strtop','slope','k','i','j','Elev_m_MSL']]
 # grid_MCC.columns
 
 # %%
+sfrdf_MCC = sfrdf[(sfrdf.segment==grid_MCC.iseg)&(sfrdf.reach==grid_MCC.ireach)]
+
 mcc_flow_plt = mcc_flow[mcc_flow.index.isin(sfrdf_MCC.index)]
 mcc_flow_plt = mcc_flow_plt.reindex(sfrdf_MCC.index)
 
-# %%
-sfrdf_MCC = sfrdf[(sfrdf.segment==grid_MCC.iseg)&(sfrdf.reach==grid_MCC.ireach)]
 fig,ax = plt.subplots()
 sfrdf_MCC.Qout.plot(ax=ax, label='Simulated')
 mcc_flow_plt.plot(y='flow_cmd', ax=ax, label='Observed')
@@ -724,8 +766,21 @@ zon_cells = gpd.sjoin(grid_p,zon_poly,how='right',predicate='within')
 # filter zone budget for Blodgett Dam to just within 5 cells or so of the Dam
 zon_arr = np.zeros((grid_p.row.max(),grid_p.column.max()),dtype=int)
 zon_arr[zon_cells.row-1,zon_cells.column-1]=1
+plt.imshow(zon_arr)
 
 
 # %%
-all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)
+# could start by just extracting the recharge/pumping inputs and sfr from sfr output
+# the cell by cell flows can be check after
+zon_rech = rech[:, zon_arr.astype(bool)].sum(axis=1)
+zon_wel = pump_rate[:, zon_arr.astype(bool)].sum(axis=1)
+# zon_wel = 
 
+# %%
+plt.plot(zon_rech, label='Rech')
+plt.plot(zon_wel, label='Well')
+plt.legend()
+
+# %%
+# runs too slowly to properly load all time steps
+# all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)

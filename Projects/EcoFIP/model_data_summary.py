@@ -113,6 +113,55 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 dt_ref['dt'] = dt_ref.dt.dt.round('D')
 dt_ref = dt_ref[~dt_ref.steady]
 
+# %% [markdown]
+# ## review geology
+
+# %%
+# quick check on horizontal to vertical conductivity
+vka = gel.vka.array
+ibound = m.bas6.ibound.array
+hk = gel.hk.array
+hk_ma = np.ma.masked_where( ~ibound.astype(bool), hk)
+
+# %%
+# quick check of the vertical anisotropy introduced by upscaling
+vani = hk/vka
+def plt_gel_arr(vani, hk, k):
+    fig,ax= plt.subplots(2,1, sharex=True)
+    ax[0].set_title('Horizontal Conductivity (m/day)')
+    im = ax[0].imshow(hk[k])
+    plt.colorbar(im, shrink=0.5)
+    ax[1].set_title('Vertical Ansiotropy')
+    im = ax[1].imshow(vani[k])
+    plt.colorbar(im, shrink=0.5)
+    plt.savefig(join(fig_dir, 'geology','layer'+str(k+1)+'_hk_vani.png'), bbox_inches='tight')
+    plt.close()
+    return None
+# k=0
+# for k in np.arange(0, m.dis.nlay):
+#     plt_gel_arr(vani, hk, k)
+
+
+# %% [markdown]
+# The plot of vertical anisotropy demonstrates that there is a strong vertical anisotropy 100-150 times introduced in cells where there is sand/gravel such that hydraulic conductivity will be more reduced by the fine facies. This is consistent for all layers
+
+# %%
+rownum=50
+
+fig, ax = plt.subplots(figsize=(6.5, 3.5)) 
+
+mcs = flopy.plot.PlotCrossSection(model=m, line={'Row' : rownum})
+
+linecollection = mcs.plot_grid(linewidth = 0.3)
+ax.add_collection(linecollection)
+
+# need to mask to show land surface
+# mcs.plot_array(a=gel.hk.array, norm = mpl.colors.LogNorm())
+mcs.plot_array(a=hk_ma, norm = mpl.colors.LogNorm())
+
+# %% [markdown]
+# # Load data
+
 # %%
 # realizations to present the results for
 best10 = pd.read_csv(join(gwfm_dir, 'Regional','top_10_accurate_realizations.csv'))

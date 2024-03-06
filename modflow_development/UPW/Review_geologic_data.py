@@ -6,6 +6,7 @@ from os.path import basename, dirname, join, exists, expanduser
 import glob
 # import time
 
+import h5py
 import pandas as pd
 import numpy as np
 import numpy.ma as ma
@@ -51,11 +52,51 @@ reload(tc)
 tprogs_info = [80, -80, 320]
 # -
 
-mf_tprogs_dir = gwfm_dir+'/UPW_data/tprogs_final/'
-tprogs_files = glob.glob(mf_tprogs_dir+'*')
+nrow_p, ncol_p = (100, 230)
+
+# mf_tprogs_dir = gwfm_dir+'/UPW_data/tprogs_final/'
+tprogs_name = 'tprogs_final'
+mf_tprogs_dir = join(gwfm_dir,'UPW_data', tprogs_name)
+tprogs_files = glob.glob(mf_tprogs_dir+'/*')
 
 
-(nrow_p, ncol_p) = (100, 230)
+r = 0
+tprogs_line = np.loadtxt(tprogs_files[r])
+
+
+
+tprogs_arr = np.reshape(tprogs_line, (tprogs_info[-1], nrow_p, ncol_p))
+
+
+# save tprogs data to an hdf5 file for easier referencing
+fn = join(gel_dir, tprogs_name+'.hdf5')
+if not exists(fn):
+    with h5py.File(fn, mode='w') as f:
+        grp = f.require_group('tprogs')
+        grp.attrs['desc'] = 'TPROGs arrays of data for each realization including conditioning data'
+        grp.attrs['layering'] = 'layer 0 is bottom of model'
+        for r in np.arange(0,100):
+            print(r, end=' ')
+            tprogs_line = np.loadtxt(tprogs_files[r])
+            tprogs_arr = np.reshape(tprogs_line, (tprogs_info[-1], nrow_p, ncol_p))
+            dset = grp.create_dataset('r'+str(r).zfill(3), tprogs_arr.shape, dtype='i')
+            dset[:] = tprogs_arr
+
+# +
+# file ends up 2.8 GB, too large for box
+# os.remove(fn)
+# -
+
+# loads very quickly now! 
+with h5py.File(fn, mode='r') as f:
+    grp = f['tprogs']
+    dset = grp['r001']
+    arr = dset[:]
+
+# +
+# import matplotlib.pyplot as plt
+# plt.imshow(arr[-1])
+# layer 0 is bottom (can see conditioning data)
 
 # +
 
