@@ -806,7 +806,7 @@ for k in adj_lowK.index:
 # this is causing potentially high water levels in the foothills
 # the deep_geology array shows where the mehrten formation comes out of the surface
 hk[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']
-vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']*10/params.loc[7,'vani'] # quick test of if only 10 vani (fractured rock has lower vani)
+vka[adj_lowK_arr.astype(bool)] = params.loc[7,'K_m_d']/params.loc[7,'vani'] # quick test of if only 10 vani (fractured rock has lower vani)
 sy[adj_lowK_arr.astype(bool)] = params.loc[7,'Sy']
 ss[adj_lowK_arr.astype(bool)] = params.loc[7,'Ss']
 

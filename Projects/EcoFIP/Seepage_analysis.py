@@ -247,8 +247,9 @@ if rewrite:
     # calculate the effective rate of seepage
     sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
     # about 220 MB
+    # need to specify format as table to keep as table and avoid segmenting in weird ways
     sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
-                                  key='all', complevel=4, data_columns = grp_cols, mode='w')
+                                  key='all', complevel=4, data_columns = grp_cols, format = 'table', mode='w')
 
 # %%
 sfrdf_all = pd.read_hdf(join(out_dir, 'sfrdf_all.hdf5'),  key='all', complevel=4)
