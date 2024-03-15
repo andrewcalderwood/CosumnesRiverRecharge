@@ -71,10 +71,12 @@ pdata_zone = pd.concat((pdata_zone, pdata_bc))
 ucode_input.write_pdata(pdata_zone, model_ws, 'MF_ucode_zone.pdata')
 ucode_input.write_pdata(pdata_std, model_ws, 'MF_ucode.pdata')
 
+
 # # JTF
 
 # +
 # Write out jtf file
+def mf_zone_prop_jtf(params):
 p_out = params.drop(columns=['K_m_d'])
 p_out.K_m_s = '@'+('Kx_'+p_out.index.astype(str)).str.ljust(20)+'@'
 # p_out.vani = '@'+('vani_'+p_out.index.astype(str)).str.ljust(20)+'@'

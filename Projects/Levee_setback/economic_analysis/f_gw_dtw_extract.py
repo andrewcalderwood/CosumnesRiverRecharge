@@ -32,6 +32,8 @@ import numpy as np
 import shapely
 import geopandas as gpd
 
+import matplotlib.pyplot as plt
+
 # %%
 usr_dir = expanduser('~')
 doc_dir = join(usr_dir,'Documents')
@@ -64,11 +66,12 @@ from mf_utility import get_layer_from_elev, param_load
 # resampled ground surface elevation
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
-
 # %%
-# year = int(2015)
-# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-# model_ws = loadpth+'historical_simple_geology_reconnection'
+year = int(2015)
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
+model_ws = loadpth+'historical_simple_geology_reconnection'
+model_ws = loadpth+'strhc1_scale'
+
 
 # %%
 # year = int(2015)
@@ -138,7 +141,9 @@ def get_dtw(year, model_ws):
     # some wells have relatively static dtw and some show a decline
     # import matplotlib.pyplot as plt
     # plt.plot(dtw[:,2080]);
-    # plt.plot(dtw[:,::100]);
+    plt.plot(dtw[:,::100]);
+    plt.ylim(0,200)
+    # dtw.shape
 
     # %%
     # save output dtw for the year

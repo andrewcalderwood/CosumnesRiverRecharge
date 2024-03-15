@@ -1,6 +1,8 @@
+# %%
 """
 02_class_irrigation_optimizer module
   This module contains the irrigation model class within which it is optimized
+  -Hasn't been implemented yet and was copied from the module 02_Iterative_irrigation_optimizer.py
 
 """
 # %%
@@ -34,8 +36,8 @@ class irrigation_optimizer():
 #
 # The first step is running all crops for each year
 # Then stepping to the next year
-
-
+#
+#
 
 # %%
 usr_dir = expanduser('~')

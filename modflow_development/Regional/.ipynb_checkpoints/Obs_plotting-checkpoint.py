@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -88,6 +88,18 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
+sfr_dir = gwfm_dir+'/SFR_data/'
+# grid_sfr = gpd.read_file(sfr_dir+'/final_grid_sfr/grid_sfr.shp')
+m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
+grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
+grid_p['easting'] = grid_p.geometry.centroid.x
+grid_p['northing'] = grid_p.geometry.centroid.y
+
+dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+lak_grid_clip = gpd.read_file(gwfm_dir+'/Levee_setback/lak_grid_clip/lak_grid_clip.shp')
+
+
+# %%
 run_dir = 'C://WRDAPP/GWFlowModel'
 # run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
@@ -96,19 +108,20 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
 # model_nam = 'foothill_vani10'
-model_nam = 'strhc1_scale'
-model_nam = 'fine_tprogs'
-model_nam = 'fine_tprogs_more_rain'
+# model_nam = 'strhc1_scale'
+# model_nam = 'fine_tprogs'
+# # model_nam = 'fine_tprogs_more_rain'
 # model_nam = '3layer'
 # model_nam = 'params_maples_fine'
-# model_nam = 'sfr_uzf'
+model_nam = 'mid_res_tprogs'
 
 model_ws = loadpth+model_nam
 
 
 # %%
 load_only = ['DIS','BAS6','UPW','OC','SFR','LAK',
-            'RCH', 'WEL'
+            'RCH',
+             'WEL'
             ]
 m = flopy.modflow.Modflow.load('MF.nam', model_ws= model_ws, 
                                 exe_name='mf-owhm', version='mfnwt',
@@ -126,19 +139,6 @@ gel = m.__getattr__(gel_nam)
 # sfr = flopy.modflow.ModflowSfr2.load(join(model_ws, 'MF.sfr'), model=m)
 
 # %%
-sfr_dir = gwfm_dir+'/SFR_data/'
-# grid_sfr = gpd.read_file(sfr_dir+'/final_grid_sfr/grid_sfr.shp')
-# grid_sfr['Kz'] = m.sfr.reach_data.strhc1
-m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
-grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
-grid_p['easting'] = grid_p.geometry.centroid.x
-grid_p['northing'] = grid_p.geometry.centroid.y
-
-lak_grid_clip = gpd.read_file(gwfm_dir+'/Levee_setback/lak_grid_clip/lak_grid_clip.shp')
-
-
-# %%
-dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
@@ -163,7 +163,7 @@ pd_sfr['Total distance (m)'] = pd_sfr['rchlen'].cumsum()
 
 
 # %%
-all_obs = pd.read_csv(base_model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
+all_obs = pd.read_csv(model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0, parse_dates=['date'])
 all_obs.index = all_obs.index.rename('date')
 all_obs = all_obs.reset_index()
 
@@ -199,6 +199,14 @@ for n in np.arange(0,m.dis.nper):
     wel_n = m.wel.stress_period_data[n]
     pump[n, wel_n.i, wel_n.j] += wel_n.flux*-1
 pump_rate = pump/(m.dis.delr[0]*m.dis.delc[0])
+
+# %%
+rch_total = rech.sum(axis=(1,2))
+pump_total = pump_rate.sum(axis=(1,2))
+
+plt.plot(rch_total.cumsum(), label='rch')
+plt.plot(pump_total.cumsum(), label='pump')
+plt.legend()
 
 
 # %%
@@ -244,9 +252,12 @@ wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
 wb_ann = wb.resample('AS-Oct').sum(numeric_only=True)
 fig,ax = plt.subplots( sharex=True)
 plt.axhline(0, color='black')
-wb_ann[out_cols].multiply(-1).plot( kind='bar', ax=ax, stacked=True)
-wb_ann[in_cols].plot( kind='bar', ax=ax, stacked=True)
+af_scale = 1/(0.3048**3)/43560/1000
+
+wb_ann[out_cols].multiply(-1).multiply(af_scale).plot( kind='bar', ax=ax, stacked=True)
+wb_ann[in_cols].multiply(af_scale).plot( kind='bar', ax=ax, stacked=True)
 plt.legend(loc=(1.05,0.3))
+plt.ylabel('TAF/year')
 
 # %%
 fig,ax = plt.subplots(3,1, figsize=(6.5,4), sharex=True)
@@ -298,6 +309,7 @@ def load_hob(model_ws):
     # if only one obs exists correct naming convention
     one_obs = ~hobout.obs_nam.str.contains('.0')
     hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+'.'+str(1).zfill(5)
+    hobout['obs_site'] = hobout.obs_nam.str.extract(r'(N\d+)')
 
     return(hobout)
     
@@ -305,6 +317,8 @@ def load_hob(model_ws):
 
 # %%
 hobout = load_hob(model_ws)
+# temporary add on to drop bad msmts here
+hobout = hobout[hobout.obs_nam.isin(all_obs.obs_nam)]
 
 fig, ax = plt.subplots(1,1,figsize=(5,5))
 
@@ -330,12 +344,9 @@ fig_nam = plt_dir+'GSP_WaterBudget/sim_vs_obs_heads'
 # plt.savefig(fig_nam+'.svg',dpi=600,bbox_inches='tight')
 
 # %%
-def mak_hob_gpd(hobout):
-    all_obs = pd.read_csv(model_ws+'/input_data/all_obs_grid_prepared.csv',index_col=0)
-    all_obs.index = all_obs.index.rename('date')
-    all_obs = all_obs.reset_index()
+def mak_hob_gpd(hobout, all_obs):
     # join more indepth obs data to output simulated heads
-    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='right')
+    obs_data = hobout.join(all_obs.set_index('obs_nam'),on=['obs_nam'], how='inner')
     obs_data = obs_data.dropna(subset=['node'])
 #     obs_data.loc[:,['row','column','node']] = obs_data.loc[:,['row','column','node']].astype(int)
     obs_data[['row','column','node']] = obs_data[['row','column','node']].astype(int)
@@ -347,7 +358,7 @@ def mak_hob_gpd(hobout):
     # # convert back to geospatial
     hob_gpd = gpd.GeoDataFrame(obs_grid, geometry = gpd.points_from_xy(obs_grid.easting, obs_grid.northing),
                               crs = grid_p.crs)
-    hob_gpd['error'] = hob_gpd.obs_val - hob_gpd.sim_val
+    hob_gpd['error'] = hob_gpd.sim_val - hob_gpd.obs_val 
     hob_gpd['abs_error'] = hob_gpd.error.abs()
     # add error statistics
     hob_gpd['Statistic'] = 0.01
@@ -374,7 +385,7 @@ def mak_hob_gpd(hobout):
 
 
 # %%
-hob_gpd, stns = mak_hob_gpd(hobout)
+hob_gpd, stns = mak_hob_gpd(hobout, all_obs)
 
 hob_seasonal = hob_gpd.groupby(['node','season']).mean(numeric_only=True)
 hob_seasonal = gpd.GeoDataFrame(hob_seasonal, geometry = gpd.points_from_xy(hob_seasonal.easting, hob_seasonal.northing))
@@ -388,9 +399,33 @@ hob_seasonal = hob_seasonal.reset_index()
 soswr = (np.sum(np.abs(hob_gpd.sim_val-hob_gpd.obs_val)*hob_gpd.Weight))
 print('Sum of absolute difference of OBS and SIM: %.2e' %soswr)
 
+from sklearn.metrics import mean_squared_error
+from report_cln import nse
+
+rmse = mean_squared_error(hob_gpd.obs_val, hob_gpd.sim_val, squared=False)
+print('Root mean square error is %.2f m' %rmse)
+nse_out = nse(hob_gpd.obs_val, hob_gpd.sim_val)
+print('NSE is %.2f' %nse_out)
+
 # %%
 from report_cln import base_round
 from map_cln import plt_cln
+
+
+# %%
+def get_top_active_layer(head_ma):
+    """ Sample the top active value for a 3d array for each row,column"""
+    if head_ma.mask:
+        head_loc = pd.DataFrame(np.transpose(np.where(~head_ma.mask)), columns=['k','i','j'])
+        head_loc = head_loc.groupby(['i','j']).min().reset_index()
+        # top active value for each row,column
+        head_top = np.full((head_ma.shape[1], head_ma.shape[2]), np.nan)
+        head_top[head_loc.i, head_loc.j] = head_ma[head_loc.k, head_loc.i, head_loc.j]
+        head_top = np.ma.masked_invalid(head_top)
+    else:
+        # if nothing is masked then the first layer is the maximum
+        head_top = head_ma[0,:,:]
+    return head_top
 
 
 # %%
@@ -411,12 +446,13 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 
     hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
 
-
     # stns[stns.botm_elev > stns.screen_elev].plot(color='red',marker='x',ax=ax)
     grid_sfr.plot(ax=ax,color='black')
     if contour:
         head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
         head_ma = np.ma.masked_where(head==-999.99, head)  
+        # pull water table and layer below
+        head_ma = get_top_active_layer(head_ma)
         hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
         levels = np.arange(hmin, hmax, step)
         contour_set = mapview.contour_array(head_ma,
@@ -430,7 +466,7 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
     if hob:
         # hob_gpd.plot('error',scheme='EqualInterval', k= 6, ax=ax,legend=True,cmap='magma')
         hob_gpd_plt.plot('error',markersize='abs_error',scheme='Quantiles', k = 6, ax=ax,
-                          legend=True,cmap='bwr',legend_kwds={'loc':(1.1,0.9),'title':'Error (Obs - Sim)'})
+                          legend=True,cmap='bwr_r',legend_kwds={'loc':(1.1,0.9),'title':'Error (Sim - Obs)'})
         hob_gpd_plt.apply(lambda x: ax.annotate(str(x.node), xy=(x.geometry.x, x.geometry.y), ha='right'),axis=1);
     
         gdf_bnds(hob_gpd_plt, ax=ax, buf=2E3)
@@ -444,7 +480,7 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 # %%
 # plot plain contours for reference
 # hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -452,7 +488,9 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=F
 # nd_chk = [15314, 15343, 13407, 12944, 14626]
 # nd_chk = [6458, 8437, 9580, 11448, 15314, 20055]
 # # nd_chk = [6458, 8437, 9580, 10884, 11448]
-# hob_gpd_chk = plt_hob_map(2019, 'fall', nd_chk=nd_chk, rch=True, contour=False)
+nd_chk = [20055, 16614, 22825] # southeast boundary
+# nd_chk = [10161, 10165, 10383, 11078, 11084] # Oneto-Denier
+hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=True, contour=True)
 
 
 # %%
@@ -463,25 +501,33 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=False, hk=F
 # %%
 hobout = load_hob(model_ws)
 
-hob_gpd, stns = mak_hob_gpd(hobout)
-# find sites with long time series of OBS
-hobs_long = (hob_gpd.groupby('site_code').count()>=int(m.dis.nper/365)*2)
-hobs_long = hobs_long.index[hobs_long.obs_val].values
-
-# hob_gpd.site_code.unique().shape, voi.shape
-# hob_long = hob_gpd[hob_gpd.site_code.isin(hobs_long)]
-# hob_long = hob_ts_chk.melt(value_vars=['sim_val','obs_val', 'sim_new'], id_vars=['node'], ignore_index=False)
+hob_gpd, stns = mak_hob_gpd(hobout, all_obs)
+# simplify dataset to time series 
 hob_long = hob_gpd.melt(value_vars=['sim_val','obs_val'], id_vars=['node'], ignore_index=False)
 
 # # a few wells have duplicates in a node (same with site_code), temp fix
 # issue was actually the NA values
-hob_long = hob_long.reset_index().drop_duplicates(['date','node','variable']).set_index('date')
-# # hob_long
+# hob_long = hob_long.reset_index().drop_duplicates(['date','node','variable']).set_index('date')
+
+
+# %%
+# # ## load simulated output from one alternate scenario for comparison
+# alt_ws = join(loadpth, 'historical_simple_geology_reconnection')
+# hobout_alt = load_hob(alt_ws)
+# hobout_alt = hobout_alt.rename(columns={'sim_val':'sim_alt'}).drop(columns=['obs_val'])
+# hob_gpd_alt = hob_gpd[['sim_val','obs_val', 'obs_nam','node']].reset_index().merge(hobout_alt).set_index('date')
+# hob_long_alt = hob_gpd_alt.melt(value_vars=['sim_val','obs_val', 'sim_alt'], id_vars=['node'], ignore_index=False)
+
+
+# %% [markdown]
+# When presenting data for clients we should use large axis scale to represent what we are interested in which is regional dynamics
 
 # %%
 # chk_lng = hob_long.groupby('node').count().variable
 # chk_lng = chk_lng[chk_lng>50].index
 # sns.relplot(hob_long[hob_long.node.isin(chk_lng)], x='date',y='value', 
+
+# sns.relplot(hob_long_alt.dropna(subset='value'), x='date',y='value', 
 sns.relplot(hob_long.dropna(subset='value'), x='date',y='value', 
             hue='variable',  col='node',
 #             col_wrap=10, # for powerpoint
@@ -489,6 +535,28 @@ sns.relplot(hob_long.dropna(subset='value'), x='date',y='value',
            facet_kws={'sharex':True, 'sharey':False}
            )
 
+
+# %%
+# nd_chk = 21451
+# val = -30
+# hob_gpd[hob_gpd.node==nd_chk][hob_gpd[hob_gpd.node==nd_chk].obs_val<val]
+
+# %%
+# plt.imshow(rech.mean(axis=0))
+
+# %%
+# for n in [10161, 10383, 11078, 11084]:
+#     site = stns[stns.node==10161].iloc[0]
+#     # always inactive hob
+#     # plt.plot(hdobj.get_ts((site.layer-1, site.row-1, site.column-1)))
+#     k = site.layer-1
+#     n_ib = m.bas6.ibound.array[k, site.row-1, site.column-1]
+#     print('ibound', n_ib, 'layer', k+1)
+
+# %%
+# all NA values for the Oneto-Denier monitoring wells after increasing floodplain recharge
+
+# hob_gpd[hob_gpd.node==10161]
 
 # %% [markdown]
 # ### review observation details
@@ -529,8 +597,12 @@ ax.clabel(cs, cs.levels, inline=True, fmt="%2.0f", fontsize=10) #fmt
 plt_cln(ax=ax)
 
 # %%
-y=2019
+y=2016
 s='fall'
+filename = glob.glob(ghb_dir+'/final_WSEL_arrays/'+s+str(y)+'_kriged_WSEL.tsv')[0]
+# convert from ft to meters
+hd_strt = np.loadtxt(filename)*0.3048
+
 row = 50
 hob_gpd_plt = hob_gpd[(hob_gpd.index.year==y)&(hob_gpd.season==s)]
 head = hdobj.get_data((0,int(hob_gpd_plt.spd.mean())))
@@ -538,7 +610,8 @@ head_ma = np.ma.masked_where(head==-999.99, head)
 hmin, hmax = base_round(head_ma.min(), step), base_round(head_ma.max(), step)
 levels = np.arange(hmin, hmax, step)
 # calculate heads in the water table
-head_wt = np.max(head_ma[:-3], axis=0)
+# head_wt = np.max(head_ma[:-3], axis=0)
+head_wt = np.max(head_ma[0:-2], axis=0)
 
 plt.plot(head_wt[row,:],label='Simulation - WT')
 # plt.plot(head_ma[-2][row,:],label='Simulation Laguna')
@@ -549,8 +622,6 @@ plt.plot(dem_data[row,:],label='Ground surface',color='black',linestyle='--')
 plt.legend()
 print('simulated min %.2f' %head_ma[0][row,:].min(),'and observed %.2f' %hd_strt[row,:].min())
 
-
-# %%
 
 # %% [markdown]
 # ## cross-section
@@ -575,13 +646,54 @@ hk = m.upw.hk.array
 hk_ma = np.ma.masked_where( ~ibound.astype(bool), hk)
 
 # %%
+lakarr = m.lak.lakarr.array[0]
+lakarr = np.where(lakarr==0, np.nan, lakarr)
+
+# %%
+reach_data = pd.DataFrame(m.sfr.reach_data)
+# reach_data.set_index(['k','i','j']).loc[chk]
+# neither cell with convergence issues had a stream directly in it
+# reach_data[(reach_data.j>40)&(reach_data.j<55)]
+# reach_data[(reach_data.j>0)&(reach_data.j<20)]
+
+# %%
+# sfr array for plotting
+sfr_arr = np.full(hk[0].shape,np.nan)
+sfr_arr[reach_data.i, reach_data.j] = reach_data.strhc1
+
+# %%
+# # chk = (10,43, 41)
+# chk_all = [(10,41, 43), (10,44, 46),(16,47,14)]
+# # chk = (10,46, 44)
+# # chk = (16,14,47)
+# chk = chk_all[2]
+# lakarr[chk], hk[chk]
+# fig,ax = plt.subplots(dpi=600)
+# # plt.plot(chk_all)
+# # plt.imshow(hk[10])
+# plt.imshow(lakarr[7])
+# ax.imshow(sfr_arr, norm = mpl.colors.LogNorm())
+# for n in chk_all:
+#     ax.scatter(n[2], n[1], marker='x')
+
+# %%
+# plt.imshow(hk[10])
+model_ws
+
+# %%
 hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
 fig, ax = plt.subplots(figsize=(6.5, 3.5), dpi=300) 
-plt.aspect=10
+# plt.aspect=10
+plt.aspect=5 # better when zooming in to -100 to 100
 
 rownum = 50
+sp1 = 100
+sp2 = 1400
+# sp1 = 58
+# sp2 = 100
 
 mcs = flopy.plot.PlotCrossSection(model=m, line={'Row' : rownum})
+# mcs = flopy.plot.PlotCrossSection(model=m, line={'Column' : 50})
 
 linecollection = mcs.plot_grid(linewidth = 0.3)
 ax.add_collection(linecollection)
@@ -591,30 +703,26 @@ mcs.plot_array(a=hk_ma, norm = mpl.colors.LogNorm())
 
 wt = mcs.plot_surface(a=hd_strt[:,:], color='black')
 
-head = hdobj.get_data(kstpkper = spd_stp[100])
+head = hdobj.get_data(kstpkper = spd_stp[sp1])
 wt = mcs.plot_surface(a=head[:,:,:], color='blue')
 
-head_new = hdobj.get_data(kstpkper = spd_stp[1400])
+head_new = hdobj.get_data(kstpkper = spd_stp[sp2])
 wt = mcs.plot_surface(a=head_new[:,:,:],color='red')
+plt.ylim(-100, 100)
 
 plt.xlabel('Distance from southwestern edge (m)')
 plt.ylabel('Elevation (m)')
 
-# %%
-30000/200
-163*200, 134*200
-
-# %%
-head_new[-1,50,173], head_new[-1,50,200], head_new[-1,50,229]
-
-# %%
-head_new[-1,50,175::5]
-
-# %%
-hob_gpd_chk[hob_gpd_chk.node==16733].column
+# %% [markdown]
+# A simple 3 layer model runs in 25 minutes while a refined 30ish layer model with 4m layers from 40 to -60 takes 4.5 hours. But most of the water table fluctuations is between 0 m and -20 m. 
+# - for calibration runs we could do refined geology from 10 m to -30 m which cut out 30 m of complex saturated flow.
+# - I should just try the calibration with the 4.5 hour model first and see if it converges within a couple of days.
 
 # %% [markdown]
 # # Plot stream water budget
+
+# %%
+model_ws
 
 # %%
 from mf_utility import clean_sfr_df
@@ -622,11 +730,13 @@ from flopy_utilities import sfr_load_hds
 
 # %%
 sfrdf = clean_sfr_df(model_ws, dt_ref, pd_sfr)
+hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
+# alt_ws = join(loadpth, 'fine_tprogs')
+# sfrdf = clean_sfr_df(alt_ws, dt_ref, pd_sfr)
+# hdobj = flopy.utils.HeadFile(alt_ws+'/MF.hds')
+
 # drop routing segments
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
-
-# %%
-drop_iseg
 
 # %%
 # plt_dates = ['2016-1-1']
@@ -746,10 +856,18 @@ zon_poly = gpd.read_file(join(gwfm_dir, 'Mapping','zonebudget', 'hob_waterbudget
 # %%
 zon_cells = gpd.sjoin(grid_p,zon_poly,how='right',predicate='within')
 
-# filter zone budget for Blodgett Dam to just within 5 cells or so of the Dam
+# filter zone budget 
+# could also specify layers
 zon_arr = np.zeros((grid_p.row.max(),grid_p.column.max()),dtype=int)
+# troubleshooting by assigning different zones to look which drives the most inflow
+zon_arr[60:, :] = 3
+zon_arr[:60:, :] = 4
+zon_arr[:, 175:] = 2
+zon_arr[:, :130] = 0
+
 zon_arr[zon_cells.row-1,zon_cells.column-1]=1
 plt.imshow(zon_arr)
+plt.colorbar(shrink=0.6)
 
 
 # %%
@@ -765,5 +883,21 @@ plt.plot(zon_wel, label='Well')
 plt.legend()
 
 # %%
+plt_strt = '2019-3-1'
+plt_end = '2019-3-31'
+
+
+# %%
 # runs too slowly to properly load all time steps
-# all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.kstpkper)
+# running one month is reasonable
+all_d, all_mon = zone_clean(cbc, zon_arr, dt_ref.set_index('dt').loc[plt_strt:plt_end].kstpkper)
+
+# %%
+zon_cols = all_d.columns[all_d.sum()!=0]
+zon_cols = zon_cols[pd.Series(zon_cols).str.contains('TO_|FROM_')]
+all_plt = all_d[zon_cols]#.drop(columns = ['IN-OUT','PERCENT_DISCREPANCY','TOTAL_IN','TOTAL_OUT'])
+fig,ax = plt.subplots()
+all_plt.plot(ax=ax, kind='bar', stacked=True)
+
+ax.plot(all_d['dSTORAGE'].values, color='black')
+# all_d.sum()

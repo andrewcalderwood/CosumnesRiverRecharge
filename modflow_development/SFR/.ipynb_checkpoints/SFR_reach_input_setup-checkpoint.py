@@ -5,16 +5,18 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
 
-# %% [raw]
+# %% [markdown]
 # Cosumnes Model 
 # @author: Andrew
+#
+# Original script for SFR reach input that samples 10 m DEM elevation directly at NHD line locations sampled every 10 m. 
 
 # %%
 # standard python utilities
@@ -114,7 +116,6 @@ raster_name = gwfm_dir+"/DEM_data/USGS_ten_meter_dem/modeldomain_10m_transformed
 # %%
 
 # Based on Maribeth's grid aligned with Alisha's TPROGS model
-# dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_nearest.tsv', delimiter = '\t')
 dem_data = np.loadtxt(gwfm_dir+'\DIS_data\dem_52_9_200m_mean.tsv')
 
 # import seaborn as sns
@@ -146,7 +147,7 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 # %%
 
 # Rivers and creeks in the larger area encompassing Cosumnes River in both South American and Cosumnes Subbasins
-rivers = gpd.read_file(join(sfr_dir, "Sac_valley_rivers/Sac_valley_rivers.shp")
+rivers = gpd.read_file(join(sfr_dir, "Sac_valley_rivers/Sac_valley_rivers.shp"))
 
 rivers = rivers.to_crs('EPSG:32610')
 rivers_clip = gpd.clip(rivers, m_domain)
@@ -240,18 +241,20 @@ from scipy.stats import gmean
 # the hope was to use this for deer creek.
 dline=10
 delr = 200
-def clean_profile(pnts, dline=10, delr=200, min_slope=1E-6, window=10):
+def clean_profile(pnts, dline=10, delr=200, min_slope=1E-6, max_slope = 1E-3, window=10):
     # find minimum value in XS related to thalweg
     pnts['z_m_min'] = pnts.z
 
-    #roling mean of 6 window centered removes any negative slope
+    #rolling mean of 6 window centered removes any negative slope
     pnts['z_m_min_cln'] = pnts.z_m_min.rolling(6,center=False).mean()
+    pnts['z_m_min_mean'] = pnts.z_m_min_cln.copy()
     
     # calculate slope and fill NAs, fill slope with nearby
     z_cln_diff = pnts.z_m_min_cln.diff().bfill()
     pnts['slope'] = z_cln_diff.abs()/dline
     # correct slope less than 1E-4
-    pnts.loc[pnts.slope<min_slope,'slope'] = min_slope
+    # pnts.loc[pnts.slope<min_slope,'slope'] = min_slope
+    pnts.loc[pnts.slope>max_slope,'slope'] = max_slope
     # rolling mean of slope to clean up slope for manning's
     pnts['slope_raw'] = pnts.slope.copy()
     # issue with the rolling fill is it overweights the high slope values
@@ -262,11 +265,11 @@ def clean_profile(pnts, dline=10, delr=200, min_slope=1E-6, window=10):
     for i in pnts.index[-2::-1]:
     # fill NAs due to rolling mean, with backward filling
         if np.isnan(pnts.loc[i,'z_m_min_cln']):
-            pnts.loc[i,'z_m_min_cln'] = pnts.loc[i+1,'z_m_min_cln'] + pnts.loc[i,'slope']*delr
+            pnts.loc[i,'z_m_min_cln'] = pnts.loc[i+1,'z_m_min_cln'] + pnts.loc[i,'slope']*dline
     
     for i in pnts.index[:-1]:
         if pnts.loc[i+1,'z_m_min_cln'] >= pnts.loc[i,'z_m_min_cln']:
-            pnts.loc[i+1,'z_m_min_cln'] = pnts.loc[i,'z_m_min_cln'] - pnts.loc[i,'slope']*delr
+            pnts.loc[i+1,'z_m_min_cln'] = pnts.loc[i,'z_m_min_cln'] - pnts.loc[i,'slope']*dline
     
     # calculate the elevation if we use slope only
     pnts['z_m_slope'] = pnts.z.max() - (dline*pnts.slope).cumsum()
@@ -282,11 +285,16 @@ pnts_cln = clean_profile(pnts_in.copy(), window=500)
 # pnts_cln.slope.plot()
 
 # %%
+pnts_in.z.min(), pnts.z.min()
+
+# %%
 fig,ax = plt.subplots(figsize = (6.5,3), dpi=300)
 
 pnts_in.z.plot(ax=ax, label='Original')
 pnts.z.plot(ax=ax, label='Manual')
-pnts_cln.z_m_final.plot(ax=ax, label='Auto')
+# pnts_cln.z_m_final.plot(ax=ax, label='Auto slope')
+pnts_cln.z_m_min_mean.plot(ax=ax, label='Roll')
+pnts_cln.z_m_min_cln.plot(ax=ax, label='Auto adj')
 plt.legend()
 
 # %%
@@ -322,6 +330,9 @@ grid_sfr['dist_m'] = grid_sfr.length_m.cumsum()
 # only keep cells with segments greater than 100m long to reduce computation time
 # and as short segments should contribute less seepage and it creates a more continuous line
 grid_sfr_final = grid_sfr[grid_sfr.length_m>100]
+
+# %%
+grid_sfr_final.shape
 
 # %%
 fig,ax=plt.subplots(figsize=(6,4))

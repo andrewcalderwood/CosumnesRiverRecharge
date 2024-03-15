@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -228,7 +228,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df):
     gap_irr = var_crops['gap_irr'] # Number of days between irrigations
     n_irr = np.floor(len(dates)/gap_irr).astype(int) + 1 # Calculate number of irrigations
     irr_days = np.arange(0, (n_irr*gap_irr-1), gap_irr).astype(int) # Calculate days on which irrigation takes place
-    irr_days
+
 
 
     # %%
@@ -264,7 +264,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df):
 
 
     # %%
-    # crop_dtw = 
     # crop_wells = soil_crop[['UniqueID']].merge(parcel_wells)
     # select parcels in the simulation
     crop_dtw = dtw_df.loc[:,soil_crop['UniqueID'].values]

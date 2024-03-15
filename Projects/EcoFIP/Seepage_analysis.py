@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -90,9 +90,10 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
-# model_nam = 'foothill_vani10'
+model_nam = 'foothill_vani10'
 # model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
+model_name = '3layer'
 # model_nam = 'parallel_realizations/realization005'
 
 model_ws = loadpth+model_nam
@@ -160,6 +161,9 @@ gdf_sfr['Total distance (m)'] = gdf_sfr['rchlen'].cumsum()
 gdf_sfr['rch_order'] = np.arange(1,len(gdf_sfr)+1) # reach order for easier referencing
 pd_sfr = pd.DataFrame(gdf_sfr.drop(columns=['geometry']))
 
+
+# %%
+pd_sfr.vka.min()
 
 # %%
 # cleaned version of sfr reach data to save for EcoFIP reference
