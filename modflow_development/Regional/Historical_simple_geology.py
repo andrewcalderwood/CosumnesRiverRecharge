@@ -901,6 +901,7 @@ if drain_layer==1:
     hk[0,adj_lowK_arr[0]] = params.loc[5,'K_m_d']
     vka[0,adj_lowK_arr[0]] = params.loc[5,'K_m_d']/params.loc[5,'vani']
 
+
 # %%
 # fig,ax =plt.subplots(3,1)
 # ax[0].imshow(adj_lowK_arr[:,0], aspect=10)

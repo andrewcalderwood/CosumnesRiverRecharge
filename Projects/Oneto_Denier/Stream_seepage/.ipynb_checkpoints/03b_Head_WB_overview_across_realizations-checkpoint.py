@@ -120,6 +120,11 @@ drop_iseg = XSg[~XSg['Logger Location'].isna()].iseg.values
 # XS_params = sensor_dict.join(params.set_index('Sensor'), on='Sensor')
 
 # %%
+lak_shp = join(gwfm_dir,'LAK_data/floodplain_delineation')
+lak_extent = gpd.read_file(join(lak_shp,'LCRFR_ModelDom_2017/LCRFR_2DArea_2015.shp' )).to_crs('epsg:32610')
+
+
+# %%
 grid_sfr_all = pd.DataFrame()
 for r in np.arange(0,100): #100
     folder = 'realization'+ str(r).zfill(3)
@@ -204,7 +209,7 @@ def get_lak_head(hdobj, lak_idx):
 
 
 # %%
-rewrite=True
+rewrite=False
 # extract lake heads for the time series
 if rewrite:
     lak_head_all = pd.DataFrame()
@@ -217,8 +222,6 @@ if rewrite:
         lak_head_all.to_csv(join(out_dir, 'lak_head_timeseries.csv'))
 else:
     lak_head_all = pd.read_csv(join(out_dir, 'lak_head_timeseries.csv'))
-
-# %%
 
 # %% [markdown]
 # # Obs checking
@@ -278,7 +281,7 @@ for t in np.arange(0,100):
 stats_done = sum_stats[sum_stats.NSE!=sum_stats.NSE.min()].copy()
 
 # %%
-stats_done.to_csv(join(out_dir, 'hob_fit_stats.csv'))
+# stats_done.to_csv(join(out_dir, 'hob_fit_stats.csv'))
 
 
 # %%
@@ -298,7 +301,7 @@ stats_done.score += (stats_done.r2 >= stats_done.r2.quantile([0.9]).values[0]).a
 # pull 10 best realizations 
 best_realizations = stats_done[stats_done.score >= stats_done.score.quantile([0.9]).values[0]]
 print('best realizations', best_realizations.index)
-best_realizations.to_csv(join(proj_dir,upscale_txt+'top_10_accurate_realizations.csv'))
+# best_realizations.to_csv(join(proj_dir,upscale_txt+'top_10_accurate_realizations.csv'))
 
 
 # %%
@@ -348,21 +351,52 @@ hob_comp = pd.concat((
 
 
 # %%
+plt_r = pd.DataFrame(['Minimum','Median','Maximum'], columns=['var'])
+# plt_r
+
+
+# %%
+from matplotlib.lines import Line2D
+
+from matplotlib import cm
+#normalize item number values to colormap
+norm = mpl.colors.Normalize(vmin=0, vmax=len(plt_r))
+
+
+# %%
+med_color = cm.plasma(norm(1))
+min_color = cm.plasma(norm(0))
+max_color = cm.plasma(norm(2))
+r_lgd = [
+    # Patch(facecolor='tab:blue', alpha=0.5, label='Floodplain'),
+    Line2D([0], [0],color=med_color, label='Median'),
+    Line2D([0], [0], color=max_color,  linestyle='-', label='Maximum'),
+    Line2D([0], [0], color=min_color,  linestyle='-', label='Minimum'),
+    Line2D([0], [0], color='gray',  linestyle='-', label='Homogeneous'),
+    Line2D([0], [0], color='black', marker='x', linestyle='', label='Observed'),
+
+]
+
+# %%
 nx=4
+lw = 1 # line width
 wells = hob_med.Sensor.unique()
 ny = int(np.round(len(wells)/nx))
 fig,ax = plt.subplots(4,4, sharex=True, sharey=True, figsize=(6.5, 8), dpi=300)
 for n, w in enumerate(wells):
     ax_n = ax[int(n/ny), n%ny]
-    hob_med[hob_med.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_max[hob_max.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_min[hob_min.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_h[hob_h.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False)
-    hob_h[hob_h.Sensor==w].plot(x='dt',y='obs_val', ax=ax_n, legend=False, marker='x', linestyle='', color='black',markersize=0.5)
+    ax_n.annotate(w.split('_')[1], (0.05, 0.9),xycoords='axes fraction')
+    hob_med[hob_med.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False, linewidth=lw, color=med_color)
+    hob_max[hob_max.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False, linewidth=lw,color=max_color)
+    hob_min[hob_min.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False, linewidth=lw,color=min_color)
+    hob_h[hob_h.Sensor==w].plot(x='dt',y='sim_val', ax=ax_n, legend=False,linewidth=lw, color='gray')
+    hob_h[hob_h.Sensor==w].plot(x='dt',y='obs_val', ax=ax_n, legend=False, 
+                                marker='x', linestyle='', color='black',markersize=0.5)
 fig.supylabel('Groundwater Elevation (m)')
 fig.supxlabel('Date')
 
 fig.tight_layout(h_pad=0.1, w_pad=-0.5)
+fig.legend(handles=r_lgd, loc='outside upper center',  bbox_to_anchor=[0.5, 1.06], ncol=3) #bbox_to_anchor=[0.3, 0.99],
 
 for n in np.arange(0,nx):
     ax_n = ax[-1,n]
@@ -370,6 +404,34 @@ for n in np.arange(0,nx):
     ax_n.set_xticks(pd.date_range(strt_date, end_date, freq='AS'), 
                          pd.date_range(strt_date, end_date, freq='AS').year.astype(str).values, rotation=45)
     ax_n.set_xticks(pd.date_range(strt_date, end_date, freq='3MS'), minor=True)
+
+# %%
+wcr_path = join(dirname(gwfm_dir), 'Large_TPROGS_run')
+wcr_loc_file = join(wcr_path, 'All_locations_Large_Cosumnes_run.csv') # has all locations
+# wcr_file = join(wcr_path, 'TPROGS_update_full_run_12_2020_minus_NaN_and_duplicates.csv') # has all locations and depths
+
+id_col = 'WCR Number'
+# wcr_df_in = pd.read_csv(wcr_file)
+wcr_gdf = pd.read_csv(wcr_loc_file)
+wcr_gdf_full = gpd.GeoDataFrame(wcr_gdf, 
+                                geometry=gpd.points_from_xy(wcr_gdf.Easting, wcr_gdf.Northing), crs='epsg:3310')
+
+# %%
+
+# %%
+# check which wells were included
+lak_extent_buf = lak_extent.copy()[['HydroID','geometry']]
+lak_extent_buf.geometry = lak_extent_buf.buffer(1E3)
+
+wcr_lak = gpd.overlay(wcr_gdf_full.to_crs(lak_extent.crs), lak_extent_buf)
+# identify wells used in the tprogs model
+# make MW into geodataframe
+rm_gdf = gpd.GeoDataFrame(rm_grid, geometry = gpd.points_from_xy(rm_grid.Longitude, rm_grid.Latitude), crs='epsg:4326')
+# spatial join to match WCRs
+wcr_rm = gpd.sjoin_nearest(wcr_lak[['WCR Number', 'geometry']], 
+    rm_gdf[['Sensor','MPE (meters)','geometry']].to_crs(wcr_lak.crs))
+print('MW used in tprogs:', ', '.join(wcr_rm.Sensor.str.replace('MW_','').values))
+
 
 # %%
 # in the wrost case the dynamics match but the magnitude is off (levels start much too low)

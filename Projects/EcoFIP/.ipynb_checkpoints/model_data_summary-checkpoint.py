@@ -16,7 +16,7 @@
 # %%
 # standard python utilities
 import os
-from os.path import basename, dirname, join, exists
+from os.path import basename, dirname, join, exists, expanduser
 import sys
 from importlib import reload
 import glob
@@ -38,9 +38,8 @@ import rasterio
 
 
 # %%
-doc_dir = os.getcwd()
-while basename(doc_dir) != 'Documents':
-    doc_dir = dirname(doc_dir)
+usr_dir = expanduser('~')
+doc_dir = join(usr_dir, 'Documents')
 
 git_dir = join(doc_dir, 'GitHub')
 ## Set up directory referencing
@@ -74,8 +73,11 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
-run_dir = 'C://WRDAPP/GWFlowModel'
-# run_dir = 'F://WRDAPP/GWFlowModel'
+# can't really automate base directory since one can have models on both
+# base_dir = 'C://'
+base_dir = 'F://'
+run_dir = join(base_dir,'WRDAPP/GWFlowModel')
+
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
@@ -115,6 +117,88 @@ dt_ref = dt_ref[~dt_ref.steady]
 # realizations to present the results for
 best10 = pd.read_csv(join(gwfm_dir, 'Regional','top_10_accurate_realizations.csv'))
 
+
+# %%
+sfr_dir = gwfm_dir+'/SFR_data/'
+m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
+grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
+# grid_p['easting'] = grid_p.geometry.centroid.x
+# grid_p['northing'] = grid_p.geometry.centroid.y
+
+
+
+# %% [markdown]
+# # iterate over realizations to pull out VKA, HK
+# "Could you output the raster or shapefile of the vertical Ksat, horizontal Ksat, and layer thickness for the upper model layer for your domain.  " from Michael
+
+# %%
+botm = m.dis.botm.array
+top = m.dis.top.array
+rows = grid_p.row.values-1
+cols = grid_p.column.values-1
+# save shapefile of grid top and bottom elevations to share
+grid_botm = grid_p.copy()
+grid_botm['top'] = top[rows, cols]
+for n in np.arange(0, botm.shape[0]):
+    grid_botm['botm'+str(n+1)] = botm[n, rows,cols]
+
+
+# %%
+# slow to write out (3 MB for shp, 12 mb for dbf)
+# grid_botm.to_file(join(proj_dir, 'GIS', 'grid_layer_elevations_m.shp'))
+
+# %%
+# save top layer thickness as example
+top_thick = top - botm[0]
+np.savetxt(join(proj_dir, 'GIS', 'top_layer_thickness.csv'), top_thick, delimiter=',')
+
+# %%
+parallel_dir = join(loadpth, 'parallel_realizations')
+r = best10.realization.iloc[0]
+r_dir = join(parallel_dir, 'realization'+str(r).zfill(3), 'MF.upw')
+gel = flopy.modflow.ModflowUpw.load(r_dir, m)
+vka = gel.vka.array
+hk = gel.hk.array
+
+# %%
+# gel
+
+# %%
+import h5py
+
+# %%
+# m.dis.botm.array
+
+# %%
+grid_k  = grid_p.copy()
+for r in best10.realization.values:
+    # load geology
+    r_dir = join(parallel_dir, 'realization'+str(r).zfill(3), 'MF.upw')
+    gel = flopy.modflow.ModflowUpw.load(r_dir, m)
+    vka = gel.vka.array
+    hk = gel.hk.array
+    grid_k['kv'+str(r)] = vka[0, rows, cols]
+    grid_k['kh'+str(r)] = hk[0, rows, cols]
+    with h5py.File(join(out_dir, 'model_dis.hdf5'), mode='w') as f:
+        # save geology as hdf5 file
+        grp = f.require_group('Kv') # makes sure group exists
+        grp.attrs['units'] = 'Vertical conductivity meters/day'
+        grp.attrs['description'] = 'Dimensions of nlay, nrow,ncol. Layer = model layers where 0 is top.'
+        dset = grp.require_dataset(str(r), vka.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = vka
+        grp = f.require_group('Kh') # makes sure group exists
+        grp.attrs['units'] = 'Horizontal conductivity meters/day'
+        grp.attrs['description'] = 'Dimensions of nlay, nrow,ncol. Layer = model layers where 0 is top.'
+        grp.attrs['dataset_naming'] = 'Each dataset is named for the geologic realization'
+        dset = grp.require_dataset(str(r), hk.shape, dtype='f', compression="gzip", compression_opts=4)
+        dset[:] = hk
+
+# %%
+var = 'kv'+str(r)
+grid_k.plot(var, legend=True, norm = mpl.colors.LogNorm(grid_k[var].min(), grid_k[var].max()))
+
+# %%
+grid_k.to_file(join(proj_dir, 'GIS', 'grid_conductivity_m_day_by_realization.shp'))
 
 # %%
 sfr_dir = gwfm_dir+'/SFR_data/'
