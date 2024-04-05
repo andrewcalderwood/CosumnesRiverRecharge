@@ -362,7 +362,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df):
     for ns in np.arange(0,nfield_crop):
     # for ns in np.arange(0,10):
         # p_true[ns] = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr)
-        p_true[ns], pc, K_S  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
+        p_true[ns], pc, K_S, Y_A  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
 
     # %%

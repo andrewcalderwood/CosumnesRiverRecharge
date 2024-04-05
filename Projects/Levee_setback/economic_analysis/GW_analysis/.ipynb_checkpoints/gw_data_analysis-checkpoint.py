@@ -90,9 +90,8 @@ wlm_qa_err = ['Nearby pump operating',
        'Recharge or surface water effects near well']
 gwe = gwe[~gwe.wlm_qa_detail.isin(wlm_qa_err)]
 
-# %%
 # there is at least one well with measurements marked as questionable that show a drop from -20 to -200 ft
-gwe[~gwe.wlm_qa_desc.isin(['Missing','Questionable'])]
+gwe = gwe[~gwe.wlm_qa_desc.isin(['Missing','Questionable'])]
 
 # %%
 strt_date= '2000-10-1'
@@ -116,7 +115,7 @@ stns = gwe_cln.drop_duplicates('site_code')
 stns_gdf = gpd.GeoDataFrame(stns, geometry = gpd.points_from_xy(stns.longitude, stns.latitude), crs='epsg:4326')
 stns_gdf = stns_gdf.to_crs(mb_regional.crs)
 # group wells by gse elevations
-gse_quant = stns_gdf.wlm_gse.quantile([0, 0.25, 0.5, 0.75 ,1]).values
+gse_quant = stns_gdf.wlm_gse.quantile([0.05, 0.25, 0.5, 0.75 ,.95]).values
 stns_gdf['gwe_group'] = np.nan
 for n, gse in enumerate(gse_quant):
     stns_gdf.loc[stns_gdf.wlm_gse>gse, 'gwe_group'] = n+1
@@ -130,7 +129,7 @@ gwe_cln = gwe_cln.merge(stns_gdf[['site_code','gwe_group']])
 
 
 # %%
-# stns_gdf.plot('gwe_group', legend=True)
+stns_gdf.plot('gwe_group', legend=True)
 
 # %%
 # pattern is consistent between fall and spring
@@ -184,10 +183,9 @@ def plt_dry(wyt_sac, ax, alpha=0.5):
     ax.set_xlim(xlim[0],xlim[1])
     # plt.legend(handles=dry_lgd, loc='lower right')
 
-
 # %%
-# use long-term datasets to identify trends
-sns.relplot(gwe_cln, x='msmt_date', y='gwe', hue='site_code',row = 'gwe_group')
+# # use long-term datasets to identify trends
+# sns.relplot(gwe_cln, x='msmt_date', y='gwe', hue='site_code',row = 'gwe_group')
 
 
 # %% [markdown]
@@ -198,19 +196,27 @@ wyt_join = wyt_sac[['WY','dry','Yr-type']].rename(columns={'WY':'year'})
 
 
 # %%
-chk_site = gwe_cln[gwe_cln.gwe<-200].site_code.unique()[0]
+# chk_site = gwe_cln[gwe_cln.gwe<-200].site_code.unique()[0]
 # chk_site = '385707N1211868W001'
-gwe_cln[gwe_cln.site_code==chk_site].plot(x='msmt_date',y='gwe')
-gwe_cln[gwe_cln.site_code==chk_site]
+# gwe_cln[gwe_cln.site_code==chk_site].plot(x='msmt_date',y='gwe')
+# gwe_cln[gwe_cln.site_code==chk_site]
+
+# %%
+# df.co
 
 # %%
 gwe_yr_plt = gwe_cln[gwe_cln.year==2020]
-sns.relplot(gwe_yr_plt,x='msmt_date',y='gwe', hue='site_code',col = 'gwe_group', col_wrap= 2, kind='line')
+# sns.relplot(gwe_yr_plt,x='msmt_date',y='gwe', hue='site_code',col = 'gwe_group',
+#             col_wrap= 2, kind='line', facet_kws={'sharey': False, 'sharex': True})
+df = gwe_yr_plt[gwe_yr_plt.gwe_group.isin([1,3,4])]
+sns.relplot(df, x='msmt_date',y='gse_gwe',hue='site_code', kind='line')
+# for s in df.site_code.unique():
+#     plt.plot(df[df.site_code==s]
 
 # %%
 # need to look at average decline for each year from spring to fall
 # filtering to more recent years to avoid bad measurements in 2000-2010
-gwe_plt = gwe_cln[gwe_cln.year>=2010].copy()
+gwe_plt = gwe_cln[gwe_cln.year>=2000].copy()
 gwe_plt = gwe_plt.groupby(['site_code','year','season']).mean(numeric_only=True).reset_index()
 gwe_plt = gwe_plt.merge(wyt_join)
 # pivot to look at difference in fall and spring between each year
