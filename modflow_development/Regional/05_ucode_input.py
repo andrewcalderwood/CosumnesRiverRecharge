@@ -149,6 +149,7 @@ run = glob.glob(model_ws+'/*py*')
 files = mf_files+jtfs+run
 # files = glob.glob(model_ws+'/*.jtf')
 # files = glob.glob(model_ws+'/*.sfr')
+# files = glob.glob(model_ws+'/*.csv')
 
 # files
 

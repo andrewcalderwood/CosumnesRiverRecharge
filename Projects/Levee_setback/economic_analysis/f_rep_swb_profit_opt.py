@@ -71,12 +71,13 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 import Basic_soil_budget_monthly as swb
+reload(swb)
 
 
 
 # %%
-# import swb_functions
-# reload(swb_functions)
+import swb_functions
+reload(swb_functions)
 from swb_functions import prep_soil_dict, calc_S, calc_pc, calc_yield, calc_profit, run_swb, mak_irr_con
 
 
@@ -85,15 +86,15 @@ def init_h5(h5_fn):
         """ Initiate hdf5 files for the given year before appending data for each crop"""
         with h5py.File(h5_fn, "w") as f:
             grp = f.require_group('array') # makes sure group exists
-            grp.attrs['units'] = 'meters/day'
+            # grp.attrs['units'] = 'meters/day'
             grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
 
 # these hdf5 files are written at the start so they can be appended to for each year and crop
-def crop_arr_to_h5(arr, crop, h5_fn):
+def crop_arr_to_h5(arr, crop, h5_fn, units='meters/day'):
     # convert arrays of annual rates to hdf5 files individually
     with h5py.File(h5_fn, "a") as f:
         grp = f.require_group('array') # makes sure group exists
-        # grp.attrs['units'] = 'meters/day'
+        grp.attrs['units'] = units
         # grp.attrs['description'] = 'Each layer of the array is a day in the water year'
         dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
         dset[:] = arr
@@ -111,23 +112,39 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-# testing
-year = int(2020)
-crop='Grape'
-# crop='Corn'
-crop='Alfalfa'
-# crop='Pasture' # will require extra work due to AUM vs hay
-# crop = 'Misc Grain and Hay'
+# # testing
+# year = int(2020)
+# crop='Grape'
+# # crop='Corn'
+# crop='Alfalfa'
+# # crop='Pasture' # will require extra work due to AUM vs hay
+# # crop = 'Misc Grain and Hay'
 
 # %%
-# # testing
-loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Regional/'
-base_model_ws = loadpth + 'crop_soilbudget'
-crop_in = pd.read_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
-dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.csv'), 
-                     index_col=0, parse_dates=['dt'])
-dtw_df.columns = dtw_df.columns.astype(int)
-soil_rep = True
+# # # testing
+# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Regional/'
+# base_model_ws = loadpth + 'crop_soilbudget'
+# crop_in = pd.read_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+# dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.csv'), 
+#                      index_col=0, parse_dates=['dt'])
+# dtw_df.columns = dtw_df.columns.astype(int)
+# soil_rep = False # True is for the complex dtw_df case
+
+# %%
+# ## simple representative DTW for linear steps 10 ft to 200 ft
+# ## with a 5 ft decline from June to December based on observed data
+# dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
+# dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
+# # dates where a decline date is specified
+# decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
+# decline_total = 5
+# decline = np.cumsum(np.full(len(decline_dates), decline_total/len(decline_dates)))
+# dtw_avg.loc[decline_dates, 'decline'] = decline
+# dtw_simple = np.repeat(np.reshape(np.arange(10, 200, 10), (1,-1)), len(dtw_avg), axis=0)
+# dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
+# dtw_df =  pd.DataFrame(dtw_simple, dtw_avg.index)
+
+# # plt.plot(dtw_simple[:,0])
 
 # %%
 
@@ -162,7 +179,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     # model_ws = join(base_model_ws, crop+'_'+str(strt_date.date()))
 
     # %%
-    for var in ['percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(base_model_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
 
@@ -195,11 +212,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     gen_dict = {**var_gen.to_dict(), **var_crops_dict}
     
     gen_dict['y_max'] = var_crops[['y_max']].values # y_max may be multiple so keep array structure
-    gen_dict['nper'] = (end_date-strt_date).days +1
+    gen_dict['nper'] = (end_date-strt_date).days + 1
     
     # days to index for calculating yield impacts, add 1 to include end day
     yield_ind = np.append([0], (yield_end-strt_date).dt.days.values +1)
-    gen_dict['yield_ind'] = np.append([0], (yield_end-strt_date).dt.days.values +1)
+    gen_dict['yield_ind'] = np.append([0], (yield_end-strt_date).dt.days.values + 1)
 
     # %%
     # create time series of daily yield response factors
@@ -259,8 +276,14 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
         crop_dtw = dtw_df.copy()
     else:
         crop_dtw = dtw_df.loc[:,soil_crop['UniqueID'].values]
+
     # select dates being simulated
     crop_dtw = crop_dtw.loc[dates].values
+
+# %%
+# import matplotlib.pyplot as plt
+# plt.plot(crop_dtw);
+
 
 # %% [markdown]
 #     # ## Iterate over each unique soil condition
@@ -272,6 +295,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     
     bounds = Bounds(lb = 0)
 
+
+# %%
 
     # %%
     t0 = time.time()
@@ -309,7 +334,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
             irr_lvl[n_irr:] *= 2 # put double the irrigation to the GW
     
         linear_constraint = mak_irr_con(soil_ag, n_irr) # will change for POD
-        tol = 0.01
+        # for the linear dtw the start tol (0.01) was too coarse
+        tol = 0.01  
         # continue optimizing until profit is positive
         while p_all[ns] >0 :
             # the minimization with 'trust-constr' and no constraints doesn't solve and has increasing WB error
@@ -334,6 +360,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     print('Total time was %.2f min' %((t1-t0)/60), 'for', ns,'parcels')
 
 
+# %%
+# p_all
+
 # %% [markdown]
 #     # It wasn't until running grapes which have 3 times the number of irrigations that I realized that each solver takes about 2 min instead of 0.2 min (Corn). Alfalfa had run times of 0.3 min. Misc. grain and hay never found positive profit  (-250 to -300), and took multiple minutes as well.
 
@@ -350,11 +379,15 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     # irr_true[0]
     p_true = np.copy(p_all)
+    Y_A_true = np.copy(p_all)
     pc_all = np.zeros((nfield_crop, gen.nper))
     for ns in np.arange(0,nfield_crop):
     # for ns in np.arange(0,10):
         # p_true[ns] = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr)
-        p_true[ns], pc, K_S  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
+        dtw_arr = crop_dtw[:,ns]
+        p_true[ns], pc, K_S, Y_A  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
+        Y_A_true[ns] = Y_A.sum() # yield comes as an array
+        # double check this works for the multiple simple dtw version
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
 
     # %%
@@ -366,12 +399,18 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False):
     irr_gw_out[:, irr_days] = irr_true[:, n_irr:] # GW out
 
 
-# %%
-    
+    # %%
     # need separte hdf5 for each year because total is 300MB, group by crop in array
     fn = join(base_model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
     crop_arr_to_h5(pc_all, crop, fn)
-    
+
+    # save profit and yield values
+    fn = join(base_model_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
+    crop_arr_to_h5(p_true, crop, fn)
+
+    fn = join(base_model_ws, 'field_SWB', "yield_WY"+str(year)+".hdf5")
+    crop_arr_to_h5(Y_A_true, crop, fn)
+
     # applied water (GW and SW are separate)
     fn = join(base_model_ws, 'field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
     crop_arr_to_h5(irr_gw_out, crop, fn)

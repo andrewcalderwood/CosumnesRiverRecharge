@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -34,13 +34,17 @@ def prep_soil_dict(soil_ag, etc_arr, var_crops):
     soil['por'] = soil_ag.Porosity.values/100
     soil['eps'] = soil_ag.EPS.values
     soil['CN'] = soil_ag.CN.values
-    soil['depth'] = soil_ag.SoilDepth.values
     soil['psdi'] =  soil_ag.PSDI.values
     # parameter for Mualem, van Genuchten
     soil['m'] = soil['psdi']/(soil['psdi']+1)
     soil['wc_f'] =  soil_ag.w3rdbar.values/100 #field capacity
     soil['wc_wp'] =  soil_ag.w15bar.values/100 #wilting point 
 
+    # calculate the minimum of soil/crop rooting depth
+    zr = (var_crops.zr/12)*0.3048
+    soil['depth'] = np.min([soil_ag.SoilDepth.values, np.repeat(zr,len(soil_ag))], axis=0)
+    # soil['depth'] = soil_ag.SoilDepth.values
+    
     # Calculate total available water in the root zone
     soil['taw'] = (soil['wc_f'] - soil['wc_wp'])*soil['depth']
 
@@ -232,7 +236,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, arrays = False):
 
     if arrays:
         # for secondary output need to also save deep percolation
-        return(pi, pc, K_S)
+        return(pi, pc, K_S, Y_A)
     return(pi)
 
 
@@ -267,3 +271,31 @@ def mak_irr_con(soil_ag, n_irr, sw_con = 100, gw_con = 100):
     linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
     return linear_constraint
 
+
+# %%
+# want to make a version of constraints that adapt the number of parameters based on hard constraints
+
+def mak_irr_con_adj(soil_ag, n_irr, sw_con = 100, gw_con = 100):
+    """ 
+    Make simple constraints on SW and GW with seasonal limits (inches)
+    The unconstrained version has very high limits (unreachable)
+    """
+    ## for no POD case the SW limit would be 0
+    sw_scale = 1
+    gw_scale = 1
+    if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel'|sw_con==0:
+        sw_scale = 0
+        gw_scale = 2 # give groundwater twice as much availability
+
+    # Total surface water and groundwater available during the season (in)
+    irr_tot = np.array([sw_con*sw_scale, gw_con*gw_scale]) 
+    irr_tot = (irr_tot/12)*0.3048 # convert to meters
+    # Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
+    ACON = np.zeros((2,2*n_irr))
+    ACON[0,:n_irr] = np.ones(n_irr)
+    ACON[1,(n_irr):(2*n_irr)] = np.ones(n_irr)
+    con_min = np.zeros(len(ACON)) 
+
+    # make constraint
+    linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
+    return linear_constraint

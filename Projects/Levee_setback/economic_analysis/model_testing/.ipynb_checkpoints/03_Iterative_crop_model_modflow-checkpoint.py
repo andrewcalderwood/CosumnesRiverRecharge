@@ -12,6 +12,9 @@
 #     name: python3
 # ---
 
+# %% [markdown]
+# Proof of concept to show that the existing modflow model could be broken up into chunks and run piece by piece (monthly) as the soil water budget will need to be run each year/season.
+
 # %%
 # standard python utilities
 import os

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -70,13 +70,50 @@ def ymd2dt(year, month, day, year_adj):
 # Could be shared globally
 
 # %%
-def load_var(crop):
+# pd.read_excel(fn, sheet_name=None, comment='#').keys()
+
+
+# %%
+# var_crops = var_crops_all[var_crops_all.crop==crop].copy()
+# year=2017
+def get_var_year(df, year):
+    """
+    Given a crop variable with different values by year
+    select the closest year or use an average, in a tie it uses the lower year
+    """
+    # df = var_crops_all[var_crops_all.crop==crop].copy()
+
+    # find variables that change by year
+    df_year = df[~df.year.isna()]
+    if year is not None:
+        # find the year closest to the simulated year
+        df_year = df_year.loc[[(df_year.year-year).abs().idxmin()]]
+    else:
+        # if no year is supplied then use the average of the data
+        df_year = df_year.dropna(axis=1, how='all') # can't group by columns of all NAs
+        grp_cols = df_year.columns[~df_year.columns.isin(['year','value'])].tolist()
+        df_year = df_year.groupby(grp_cols).mean(numeric_only=True).reset_index()
+    # add year data back to the static data
+    df = pd.concat((df[df.year.isna()], df_year))
+    # since the season exists for Alfalfa/Pasture sort to make sure the variables are applied correctly
+    df = df.sort_values(['variable', 'season'])
+    return df
+
+# year = None
+# get_var_year(var_crops, year)
+
+
+# %%
+def load_var(crop, year=None):
+    # crop = 'Alfalfa'
     fn = join(data_dir,'static_model_inputs.xlsx')
     var_gen = pd.read_excel(fn, sheet_name='General', comment='#')
     var_gen = var_gen.set_index('variable')['value'] # adjust for quick pulling of variables
-    
-    var_crops_all = pd.read_excel(fn, sheet_name='Crops', comment='#')
-    var_yields_all = pd.read_excel(fn, sheet_name='Yield', comment='#')
+
+    # new version has prices by year
+    # var_crops_all = pd.read_excel(fn, sheet_name='Crops', comment='#').dropna(axis=1, how='all')
+    var_crops_all = pd.read_excel(fn, sheet_name='Crops_byyear', comment='#').dropna(axis=1, how='all')
+    var_yields_all = pd.read_excel(fn, sheet_name='Yield', comment='#').dropna(axis=1, how='all')
     
     # cross-reference between simple and DWR full crop name
     crop_dict = pd.read_excel(fn, sheet_name='Name_dict', comment='#')
@@ -88,11 +125,15 @@ def load_var(crop):
     
     # subset to crop for current simulation if looping, could also do ID
     var_crops = var_crops_all[var_crops_all.crop==crop]
+    var_crops = get_var_year(var_crops, year)
     var_crops = var_crops.set_index('variable')['value'] # adjust for quick pulling of variables
     var_yield = var_yields_all[var_yields_all.crop==crop]
     
-    season = season_all[season_all.crop==crop]
-    return(var_gen, var_crops, var_yield,season, pred_dict, crop_dict)
+    season = season_all[season_all.crop==crop].sort_values(['crop','season'])
+    return(var_gen, var_crops, var_yield, season, pred_dict, crop_dict)
+
+# %%
+# get_var_year(var_crops, 2020)
 
 
 # %%

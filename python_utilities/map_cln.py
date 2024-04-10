@@ -15,7 +15,7 @@ import numpy as np
 
 def gdf_bnds(gdf, ax=None, buf=None):
     """ Use the x-y bounds of a geodataframe to set the axes limits on a plot"""
-    gdf_bnd = gpd.GeoDataFrame([0], geometry=[box(*gdf.total_bounds)], crs = gdf.crs)
+    gdf_bnd = gpd.GeoDataFrame(pd.DataFrame([0], columns=['id']), geometry=[box(*gdf.total_bounds)], crs = gdf.crs)
     if buf != None:
         gdf_bnd.geometry = gdf_bnd.buffer(buf)
     if ax !=None:

@@ -1320,7 +1320,7 @@ tabfiles_dict={1: {'numval': nper, 'inuit': 56}}
 if mb_seg ==2:
     tabfiles_dict={1: {'numval':nper,'inuit': 156},
         mb_seg: {'numval': nper, 'inuit': 56}}
-    
+
 
 # %%
 # There is one reach for each cell that a river crosses

@@ -139,9 +139,6 @@ gel = m.__getattr__(gel_nam)
 # sfr = flopy.modflow.ModflowSfr2.load(join(model_ws, 'MF.sfr'), model=m)
 
 # %%
-
-
-# %%
 sfr = m.sfr
 vka = gel.vka.array
 # load sfr data 
