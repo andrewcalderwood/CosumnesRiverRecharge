@@ -8,6 +8,73 @@ Author: Andrew Calderwood
 import sys
 import numpy as np
 from numpy import ma
+import pandas as pd
+from os.path import join
+
+def get_magnitude(x):
+    return(10.0**(np.log10(x).astype(int)))
+
+def make_gel_p_long(params):
+    """ melt parameter data and rename columns to fit UCODE format for .pdata """
+    pdata = params.copy().rename(columns={'K_m_s':'Kx'})[['Kx','vani','Ss','Sy']]
+    pdata = pdata.melt(ignore_index=False)
+    pdata['ParamName'] = pdata.variable + '_' + pdata.index.astype(str)
+    pdata = pdata.rename(columns={'variable':'GroupName','value':'StartValue'}).reset_index(drop=True)
+    return(pdata)
+
+def prep_gel_pdata(pdata):
+    """ Take the geology parameter data and prepare it as pdata"""
+    # default values for pdata input
+    pdata['LowerValue'] = 1E-38
+    pdata['UpperValue'] = 1E38
+    
+    # local adjustment based on typical parameter scaling (start value scaled by a range)
+    # need to find a better rounding function
+    grps = pdata.GroupName.isin(['Kx','Ss','vani','GHB'])
+    pdata.loc[grps,'LowerValue'] = get_magnitude(pdata.loc[grps,'StartValue']) *1E-3
+    pdata.loc[grps,'UpperValue'] = get_magnitude(pdata.loc[grps,'StartValue']) *1E3
+    grps = pdata.GroupName.isin(['Sy'])
+    pdata.loc[grps,'LowerValue'] = get_magnitude(pdata.loc[grps,'StartValue']) *1E-2
+    pdata.loc[grps,'UpperValue'] = 1
+    grps = pdata.ParamName.str.contains('rch_')
+    pdata.loc[grps,'LowerValue'] = get_magnitude(pdata.loc[grps,'StartValue']) *1E-3
+    pdata.loc[grps,'UpperValue'] = 2
+    
+    # assume constraints align with expected range
+    pdata['Constrain'] = 'No'
+    pdata['LowerConstraint'] = pdata.LowerValue
+    pdata['UpperConstraint'] = pdata.UpperValue
+    return(pdata)
+
+def pdata_by_facies(pdata, params):
+    """ Translate cleaned pdata dataframe to be grouped by the geologic facies """
+    pdata_zone = pdata[pdata.GroupName.isin(['Kx','vani','Ss','Sy'])].copy()
+    # alternate pdata where group is the lithology
+    pdata_zone['Zone'] = pdata_zone.ParamName.str.extract(r'(\d)')
+    pdata_zone.Zone = pd.to_numeric(pdata_zone.Zone)
+    pdata_zone = pdata_zone.join(params[['Lithology']], on='Zone')
+    pdata_zone['GroupName'] = pdata_zone.Lithology
+    pdata_zone.loc[pdata_zone.Lithology.isin(['Gravel','Sand','Sandy Mud','Mud']),'GroupName'] = 'tprogs'
+    pdata_zone = pdata_zone.drop(columns=['Zone','Lithology'])
+    pdata_zone = pdata_zone.dropna(subset='GroupName')
+    return(pdata_zone)
+
+def write_pdata(pdata, model_ws, name):
+    """ Write out pdata file """
+    with open(join(model_ws, name), 'w',newline='') as f:
+
+        # 27 before rch_1 to rch_12, 6 more for vani
+        f.write('BEGIN Parameter_Data Table\n')
+        f.write('NROW='+str(pdata.shape[0])+' NCOL='+str(pdata.shape[1])+' COLUMNLABELS\n')
+        f.write(pdata.columns.str.ljust(12).str.cat(sep = ' '))
+        f.write('\n')
+        for n in np.arange(0, len(pdata)):
+    #         f.write(pdata_zone.iloc[n].str.cat())
+            f.write(pdata.iloc[n].astype(str).str.ljust(12).str.cat(sep=' '))
+            f.write('\n')
+        f.write('END Parameter_Data Table')
+    print('Wrote pdata file')
+
 
 def get_n_nodes(n_params):
     ''' Returns number of cpu nodes that should be used for parallel processing'''
