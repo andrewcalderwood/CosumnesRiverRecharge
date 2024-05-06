@@ -22,6 +22,8 @@ import pandas as pd
 # %%
 
 # %%
+# what if this code was moved to the pre-processing
+# then the cleaned soil data could be avialable up front and for post-processing
 def prep_soil_dict(soil_ag, etc_arr, var_crops):
     """Given a dataframe of soil properties create a dictionary for reference
     """
@@ -147,12 +149,51 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
     #     pi = irr_lvl[irr_lvl<0].sum()*-p_o*10
     return(pi)
 
+
 # %%
+def choose_water_source(dtw_arr, gen, mix_fraction = 1):
+    """
+    Determine if GW or SW is more efficient
+    dtw_arr : depth to water (ft)
+    gen : dictionary with cost variables
+    """
+    # set up local variables
+    p_e = gen.p_e # energy price, $/kWh
+    p_sw = gen.p_sw # surface water cost, $/acre-in
+    phi = gen.phi # energy req to raise unit of water per unit length, kWh/acre-in/ft
+
+    # use 1 inch of irrigation for the cost
+    p_gw = p_e*phi*dtw_arr.mean() # Calculate total groundwater pumping costs for the season ($/acre)
+    # return string that specifies water source
+    # apply a mix fraction to require a minimum offset
+    if p_gw <= p_sw*mix_fraction:
+        water_source = 'gw'
+    elif p_sw < p_gw*mix_fraction:
+        water_source = 'sw'
+    else:
+        water_source = 'mixed'
+    
+    return(water_source)
 
 # %%
 
     
-def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, arrays = False):
+def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False):
+    """
+    irr_lvl: depth of irrigation to apply
+    soil: class object with soil parameter for the given field
+    gen: class object with the general parameters for the irrigation cost model
+    rain: 1D array of the rainfall depth for each step
+    ETc: 1D array of the crop evapotranspiration depth for each step
+    dtw_arr: 1D array of the depth to groundwater for each step
+    irr_src: string variable to identify the expected shape of irr_lvl
+        'both': array of 2*n_irr with depths for GW and SW
+        'sw': array of n_irr with depths for SW 
+        'gw: array of n_irr with depths for GW
+    arrays: boolean to identify whether output arrays should be returned
+        True: water budget arrays are the output
+        False: the output is the net profit (used for optimization)
+    """
     global wc, pc, rp, ETa, D, K_S
 #     global c_gwtot, c_swtot
     nper = gen.nper
@@ -164,9 +205,17 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, arrays = False):
 
     irr_sw = np.zeros((nper,nfield))
     irr_gw = np.zeros((nper,nfield))
-    for i in np.arange(0,n_irr):
-        irr_sw[irr_days[i]] = irr_lvl[i]
-        irr_gw[irr_days[i]] = irr_lvl[i+n_irr]
+    # updated code to correct if irr_lvl is only for one irrigation type
+    if irr_src=='both':
+        for i in np.arange(0,n_irr):
+            irr_sw[irr_days[i]] = irr_lvl[i]
+            irr_gw[irr_days[i]] = irr_lvl[i+n_irr]
+    elif irr_src=='sw':
+        for i in np.arange(0,n_irr):
+            irr_sw[irr_days[i]] = irr_lvl[i]
+    elif irr_src=='gw':
+        for i in np.arange(0,n_irr):
+            irr_gw[irr_days[i]] = irr_lvl[i]
         
     wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
     pc = np.zeros((nper, nfield)) # percolation
@@ -246,20 +295,14 @@ from scipy.optimize import Bounds, LinearConstraint
 
 # %%
 
-def mak_irr_con(soil_ag, n_irr, sw_con = 100, gw_con = 100):
+def mak_irr_con(n_irr, sw_con = 100, gw_con = 100):
     """ 
     Make simple constraints on SW and GW with seasonal limits (inches)
     The unconstrained version has very high limits (unreachable)
     """
-    ## for no POD case the SW limit would be 0
-    sw_scale = 1
-    gw_scale = 1
-    if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel':
-        sw_scale = 0
-        gw_scale = 2 # give groundwater twice as much availability
 
     # Total surface water and groundwater available during the season (in)
-    irr_tot = np.array([sw_con*sw_scale, gw_con*gw_scale]) 
+    irr_tot = np.array([sw_con, gw_con]) 
     irr_tot = (irr_tot/12)*0.3048 # convert to meters
     # Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
     ACON = np.zeros((2,2*n_irr))
@@ -275,7 +318,37 @@ def mak_irr_con(soil_ag, n_irr, sw_con = 100, gw_con = 100):
 # %%
 # want to make a version of constraints that adapt the number of parameters based on hard constraints
 
-def mak_irr_con_adj(soil_ag, n_irr, sw_con = 100, gw_con = 100):
+def mak_irr_con_adj(n_irr, sw_con = 100, gw_con = 100):
+    """ 
+    Make simple constraints on SW and GW with seasonal limits (inches)
+    The unconstrained version has very high limits (unreachable)
+    """
+
+    # Total surface water and groundwater available during the season (in)
+    irr_tot = np.array([sw_con, gw_con]) 
+    # if one constraint is zero then remove from calculation
+    if sw_con==0:
+        irr_tot = np.array([gw_con])
+    elif gw_con==0:
+        irr_tot = np.array([sw_con])
+    irr_tot = (irr_tot/12)*0.3048 # convert to meters
+    # Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
+    n_wt = len(irr_tot)
+    ACON = np.zeros((n_wt,n_wt*n_irr))
+    ACON[0,:n_irr] = np.ones(n_irr)
+    if n_wt==2:
+        ACON[1,(n_irr):(n_wt*n_irr)] = np.ones(n_irr)
+
+    con_min = np.zeros(len(ACON)) 
+
+    # make constraint
+    linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
+    return linear_constraint
+
+
+# %%
+
+def mak_irr_con_old(soil_ag, n_irr, sw_con = 100, gw_con = 100):
     """ 
     Make simple constraints on SW and GW with seasonal limits (inches)
     The unconstrained version has very high limits (unreachable)

@@ -1,4 +1,3 @@
-# %%
 """
 mf_utility module. 
 Different functions for modflow set up with general python functions
@@ -13,7 +12,7 @@ import pandas as pd
 import os
 from os.path import join, exists
 import flopy
-# %% Model development
+#%% Model development
 
 
 def get_layer_from_elev(elev, botm_slice, nlay):
@@ -43,7 +42,7 @@ def param_load(model_ws, file_dir, file_name):
     return(params)
 
 
-# %% Post-processing
+#%% Post-processing
 
 def clean_hob(model_ws, dt_ref, split_c = 'p'):
     hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],

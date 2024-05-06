@@ -48,7 +48,8 @@ loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
 model_ws = loadpth+'historical_simple_geology_reconnection'
 model_ws = loadpth+'crop_soilbudget'
 
-# model_ws = loadpth+'rep_crop_soilbudget'
+model_ws = loadpth+'rep_crop_soilbudget'
+
 
 # %%
 
@@ -74,6 +75,7 @@ def read_crop_arr_h5(crop, h5_fn):
 crop='Alfalfa'
 # crop='Pasture'
 # crop='Corn'
+crop='Grape'
 year=2020
 # need separte hdf5 for each year because total is 300MB, group by crop in array
 fn = join(model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
@@ -118,17 +120,28 @@ pi = -read_crop_arr_h5(crop, fn)
 # - I had not finished updating the cost/profit table which might be why the profit was so high
 
 # %%
-fig,ax = plt.subplots(1,2, figsize=(6,3))
-ax[0].plot(Y_A)
-ax[1].plot(pi)
-fig.tight_layout()
+# fig,ax = plt.subplots(1,2, figsize=(6,3))
+# ax[0].plot(Y_A)
+# ax[1].plot(pi)
+# fig.tight_layout()
 
 # %% [markdown]
 # # Save output to table format
 
 # %%
+crop_in = pd.read_csv(join(model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+crop_in = crop_in[crop_in.name=='Vineyards']
+
+# %%
 dtw_df = pd.read_csv(join(model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'), index_col=0)
+# temporary for code testing
+# dtw_df = dtw_df.loc[:, crop_in.parcel_id.values.astype(str)]
+
 dtw_df_mean = dtw_df.mean().values
+# temporary adjustment to account for representative testing
+# dtw_df_mean = np.hstack([dtw_df_mean[::2]]*2)
+dtw_df_mean = np.hstack([dtw_df_mean]*2)
+# dtw_df
 
 # %%
 # summary output from hdf5 into csv
@@ -138,15 +151,28 @@ out_summary[['irr_gw_in','irr_sw_in']] = out_summary[['irr_gw_m','irr_sw_m']]*12
 out_summary.to_csv(join(model_ws,'output_summary_'+crop+'.csv'))
 
 # %%
+# temporary fix
+out_summary.loc[out_summary.irr_gw_in>50,:] = np.nan
+# out_summary
+
+# %%
+
+# %%
+# temporary fix
+# out_summary = out_summary.iloc[:19,:]
+
+
 plt_cols = ['irr_gw_in','irr_sw_in', 'Y_A', 'pi', 'dtw_mean_ft']
 fig, ax  = plt.subplots(len(plt_cols), 1,dpi=300, sharex=True, figsize=(8,6.5))
 for n, v in enumerate(plt_cols):
     ax_n = ax[n]
     out_summary[v].plot(ax=ax_n)
     ax_n.set_ylabel(v)
+    ax_n.ticklabel_format(style='plain', useOffset=False)
     
 fig.suptitle(crop)
-
+ax[-1].set_xticks(out_summary.index.values[::2], out_summary.dtw_mean_ft[::2].round(0), rotation=90)
+ax[-1].set_xlabel('Season Mean DTW (ft)')
 fig.tight_layout()
 
 # %% [markdown]
@@ -156,9 +182,26 @@ fig.tight_layout()
 summary_lin = pd.read_csv(join(loadpth+'rep_crop_soilbudget','output_summary_'+crop+'.csv'), index_col=0)
 summary_lin['dtw_id'] = np.arange(0, len(summary_lin))
 
+# simplifying to just data without POD
+summary_lin = summary_lin.iloc[:19]
+# temporary drop extremes
+summary_lin = summary_lin[summary_lin.irr_gw_in<50] 
+
+# %%
+# summary_lin
+
 # %%
 out_summary = pd.read_csv(join(loadpth+'crop_soilbudget','output_summary_'+crop+'.csv'), index_col=0)
+# pre sort by dtw so values are easier to view when plotting
+out_summary = out_summary.sort_values('dtw_mean_ft')
+
 out_summary['id'] = np.arange(0, len(out_summary))
+
+
+
+# %%
+# crop_in
+# currently no POD
 
 # %%
 out_summary_dtw = out_summary[['id','dtw_mean_ft']].sort_values('dtw_mean_ft')
@@ -169,15 +212,19 @@ out_lin = out_lin.sort_values('id').reset_index(drop=True)
 
 
 # %%
-out_lin
+# out_lin.loc[out_lin.irr_gw_in >50] = np.nan
+
+# %%
+# out_summary.plot(x='dtw_mean_ft',y='dtw_mean_ft')
 
 # %%
 plt_cols = ['irr_gw_in','irr_sw_in', 'Y_A', 'pi', 'dtw_mean_ft']
 fig, ax  = plt.subplots(len(plt_cols), 1,dpi=300, sharex=True, figsize=(8,6.5))
+x_col = 'id'
 for n, v in enumerate(plt_cols):
     ax_n = ax[n]
-    out_summary.plot(x='id', y=v, ax=ax_n, label='Field by field')
-    out_lin.plot(x='id', y=v, ax=ax_n, label = 'Nearest linear DTW value')
+    out_summary.plot(x=x_col, y=v, ax=ax_n, label='Field by field')
+    out_lin.plot(x=x_col, y=v, ax=ax_n, label = 'Nearest linear DTW value')
     ax_n.set_ylabel(v)
     
 fig.suptitle(crop)

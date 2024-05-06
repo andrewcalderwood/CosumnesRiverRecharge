@@ -211,7 +211,6 @@ bnd_dist.plot('wse_ft', legend=True)
 # %% [markdown]
 # # Correct for elevations about the boundary land surface
 # Heads in the foothills are more uncertain in the contouring both in the domain and beyond.
-# - go to next scripts
 
 # %%
 

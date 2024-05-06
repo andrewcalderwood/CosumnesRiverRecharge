@@ -1,3 +1,4 @@
+# %%
 """
 flopy_utility module. 
 Different functions for working with flopy objects/classes set up with general python functions
@@ -12,7 +13,7 @@ import pandas as pd
 # import os
 # from os.path import join, exists
 import flopy
-#%% Model development
+# %% Model development
 
 
 def spd_2_arr(sp_data, sp_col, dis):

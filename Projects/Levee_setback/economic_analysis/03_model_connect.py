@@ -107,7 +107,7 @@ dtw_df_in.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.
 
 # %%
 # dtw_df
-fp = join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year-1)+'.csv')
+fp = join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year-1)+'.csv')
 if os.path.isfile(fp):
     dtw_df_previous = pd.read_csv(fp,
                                  index_col=0, parse_dates=['dt'])
@@ -194,30 +194,24 @@ from f_rep_swb_profit_opt import load_run_swb
 # - we can validate this by running several example fields then translating back to each field with lookup table (use alfala which has only 7 selected)
 
 # %%
-dtw_crop_mean = dtw_df[data_out[data_out.Crop_Choice==pred_dict[crop]].parcel_id].loc['2020-4-1':].mean().values
-fig,ax=plt.subplots(figsize=(4,1))
-ax.plot(dtw_crop_mean)
-dtw_df.shape
-
-# %%
-crop_in[crop_in.name==pred_dict[crop]]
+# for crop in ['Alfalfa']:
+for crop in ['Grape']:
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    # need to account for when crops aren't predicted and skip them
+    if pred_dict[crop] in pred_crops: 
+        # load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
+        # reduce number for testing
+        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
 
 # %%
 dtw_df_crop_out = dtw_df[crop_in[crop_in.name==pred_dict[crop]].parcel_id.values]
 dtw_df_crop_out.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
 
 # %%
-for crop in ['Alfalfa']:
-# for crop in ['Grape']:
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-    # need to account for when crops aren't predicted and skip them
-    if pred_dict[crop] in pred_crops: 
-        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
-
-# %%
-dtw_df.loc[:, crop_in[crop_in.name==pred_dict[crop]].parcel_id].mean()
-
-# %%
+# dtw_crop_mean = dtw_df[data_out[data_out.Crop_Choice==pred_dict[crop]].parcel_id].loc['2020-4-1':].mean().values
+# fig,ax=plt.subplots(figsize=(4,1))
+# ax.plot(dtw_crop_mean)
+# dtw_df.shape
 
 # %% [markdown]
 # Simplified representation of DTW
@@ -243,23 +237,27 @@ dtw_simple_df.to_csv(join(loadpth, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY
 # %%
 # pd.DataFrame(dtw_simple[:,0], dtw_avg.index).loc['2020-02-12':'2020-10-04'].plot()
 # plt.plot(dtw_simple.mean(axis=0))
-# dtw_simple.shape
+# pd.concat([dtw_simple_df]*2, axis=1)
+# dtw_simple_df.iloc[:, ::2]
 
 # %%
 # to equalize the situation we might use a simple DTW profile
 load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
-             dtw_simple_df, soil_rep=True)
+             # dtw_simple_df.iloc[:,:2], 
+             dtw_simple_df, 
+             # dtw_simple_df,
+             soil_rep=True) 
 
 # %% [markdown]
 # Testing by crop
 
 # %%
-# for crop in crop_list[:2]:
-for crop in ['Misc Grain and Hay']:
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-    # need to account for when crops aren't predicted and skip them
-    if pred_dict[crop] in pred_crops: 
-        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
+# # for crop in crop_list[:2]:
+# for crop in ['Misc Grain and Hay']:
+#     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+#     # need to account for when crops aren't predicted and skip them
+#     if pred_dict[crop] in pred_crops: 
+#         load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
 
 # %%
 # # it takes a while to load the matlab engine but onces it's loaded then it can call functions

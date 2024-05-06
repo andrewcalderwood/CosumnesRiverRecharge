@@ -107,13 +107,11 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
-# model_nam = 'foothill_vani10'
-# model_nam = 'strhc1_scale'
-# model_nam = 'fine_tprogs'
 # # model_nam = 'fine_tprogs_more_rain'
 # model_nam = '3layer'
 # model_nam = 'params_maples_fine'
 model_nam = 'mid_res_tprogs'
+model_nam = 'historical_geology_cal'
 
 model_ws = loadpth+model_nam
 
@@ -735,6 +733,9 @@ hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
 # drop routing segments
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
 
+# shouldn't put in function directly as this depends on local units
+sfrdf['Qout_cfs'] = sfrdf.Qout/(86400*0.3048**3)
+
 # %%
 # plt_dates = ['2016-1-1']
 plt_dates = pd.date_range('2017-1-1','2017-4-1')
@@ -798,20 +799,71 @@ grid_MCC = grid_MCC[['iseg','ireach','strtop','slope','k','i','j','Elev_m_MSL']]
 # grid_MCC.columns
 
 # %%
+# sensors
+
+# %%
 sfrdf_MCC = sfrdf[(sfrdf.segment==grid_MCC.iseg)&(sfrdf.reach==grid_MCC.ireach)]
 
 mcc_flow_plt = mcc_flow[mcc_flow.index.isin(sfrdf_MCC.index)]
 mcc_flow_plt = mcc_flow_plt.reindex(sfrdf_MCC.index)
 
 fig,ax = plt.subplots()
-sfrdf_MCC.Qout.plot(ax=ax, label='Simulated')
-mcc_flow_plt.plot(y='flow_cmd', ax=ax, label='Observed')
+sfrdf_MCC.Qout_cfs.plot(ax=ax, label='Simulated')
+mcc_flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
 plt.legend()
 ax.set_yscale('log')
 
+# %%
+local_sites = pd.read_csv(join(sfr_dir,'flow_obs', 'Stream_monitoring_reference.csv'))
+
+local_sites = gpd.GeoDataFrame(local_sites, geometry=gpd.points_from_xy(local_sites.Longitude, local_sites.Latitude),
+                           crs='epsg:4326').to_crs(grid_sfr.crs)
+grid_local_sites = gpd.sjoin_nearest(grid_sfr, local_sites, how='right')
+# # subset relevant columns to plot flows at MCC
+grid_local_sites = grid_local_sites[['iseg','ireach','strtop','slope','k','i','j','site','Site_name']]
+# local_sites
+
+# %%
+# pull out simulated flow for the stream seg/reach with obs
+sfrdf_sites = sfrdf.reset_index().merge(grid_local_sites).set_index('dt').copy()
+
+# %%
+# sim_flow.plot(y='Qout_cfs')
+# obs_flow.index
+# local_flow = local_flow.groupby('site').resample('D').mean(numeric_only=True)
+
+# local_flow
+
+# %%
+flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
+flow_plt
+obs_flow.index, sim_flow.index
+
+# %%
+local_flow = pd.read_csv(join(sfr_dir,'flow_obs', 'stream_flow_cfs_approx.csv'), 
+                         parse_dates=['dt'], index_col='dt')
+local_flow = local_flow.groupby('site').resample('D').mean(numeric_only=True).reset_index('site')
+local_flow['flow_cmd'] =  local_flow.flow_cfs*86400*0.3048**3
+
+site = 'ACR_181'
+obs_flow = local_flow[local_flow.site==site]
+sim_flow = sfrdf_sites[sfrdf_sites.site==site]
+
+flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
+flow_plt = flow_plt.reindex(sim_flow.index)
+
+fig,ax = plt.subplots()
+# sim_flow.Qout_cfs.plot(ax=ax, label='Simulated')
+flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
+plt.legend()
+ax.set_yscale('log')
+# rooney_flow.plot(x='dt',y='flow_cfs')
 
 # %% [markdown]
 # It makes sense that flows are below the observed because we don't have Deer Creek in the system.
+# - even with Deer Creek added it still under predicts
+# - 
+# We want to look at flows at Rooney and Mahon as well
 
 # %% [markdown]
 # # Zone budget check

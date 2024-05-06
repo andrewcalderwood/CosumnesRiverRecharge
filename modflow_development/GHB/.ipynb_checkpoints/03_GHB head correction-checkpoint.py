@@ -159,3 +159,5 @@ bnd_dist.loc[bnd_dist_adj.node.values, 'keep'] = False
 bnd_dist = bnd_dist.reset_index()
 bnd_out = pd.concat((bnd_dist[bnd_dist['keep']], bnd_dist_adj))
 bnd_out.to_csv(join(ghb_dir, 'boundary_distance_heads_adjusted.csv'), index=False)
+
+# %%
