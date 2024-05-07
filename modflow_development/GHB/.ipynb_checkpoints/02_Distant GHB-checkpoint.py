@@ -159,6 +159,10 @@ bnd_dist['northing'] = bnd_dist.geometry.centroid.y
 # # bnd_dist
 
 # %%
+years = pd.Series(os.listdir(tif_path)).str.extract(r'(\d{4})').dropna().astype(int).values
+strt_year, end_year = years.min(), years.max()
+
+# %%
 
 
 # dem_f = rasterio.open(raster_name)
@@ -169,7 +173,7 @@ bnd_dist_all = pd.DataFrame()
 
 point = bnd_dist.loc[:,['easting','northing']].values
 for season in ['spring', 'fall']:
-    for y in np.arange(2012,2021):
+    for y in np.arange(strt_year, end_year+1):
 #     for y in [2012]:
         raster_name = join(tif_path, season+str(y)+'_kriged.tif')
 
@@ -183,16 +187,11 @@ for season in ['spring', 'fall']:
 
 
 # %%
-
-# %%
 import seaborn as sns
 
 # %%
 sns.relplot(bnd_dist_all[bnd_dist_all.row==1], 
             x='column', y='wse_ft', hue='year', col='season')
-
-# %%
-# bnd_dist_all[bnd_dist_all.row==nrow]
 
 # %%
 sns.relplot(bnd_dist_all[bnd_dist_all.row==nrow].reset_index(), 
@@ -207,11 +206,3 @@ pd.DataFrame(bnd_dist_all.drop(columns=['geometry'])).to_csv(join(ghb_dir, 'boun
 # %%
 bnd_dist.plot('wse_ft', legend=True)
 
-
-# %% [markdown]
-# # Correct for elevations about the boundary land surface
-# Heads in the foothills are more uncertain in the contouring both in the domain and beyond.
-
-# %%
-
-# %%

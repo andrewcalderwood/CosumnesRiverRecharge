@@ -245,9 +245,6 @@ m = flopy.modflow.Modflow(modelname = 'MF', exe_name = 'mf-owhm.exe',
 os.makedirs(join(model_ws, 'input_data'), exist_ok=True)
 
 # %%
-# m.model_ws = model_ws
-
-# %%
 #lenuni = 1 is in ft, lenuni = 2 is in meters
 # itmuni is time unit 5 = years, 4=days, 3 =hours, 2=minutes, 1=seconds
 dis = flopy.modflow.ModflowDis(nrow=nrow, ncol=ncol, 
@@ -288,8 +285,6 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 np.savetxt(join(model_ws,'input_data','dem_data.txt'), dem_data)
 # import seaborn as sns
 # sns.heatmap(dem_data, cmap = 'viridis', vmin = 0,square=True)
-
-# %%
 
 # %% [markdown]
 # # Load aquifer formation bottoms
@@ -1411,13 +1406,15 @@ sfr_scale.loc[sfr_scale.rname=='Deer Creek', 'strhc1_scale'] = dc_scale
 sfr_scale.loc[sfr_scale.rname=='Cosumnes River', 'strhc1_scale'] = cr_scale
 
 # %%
+# calculate the mean water surface for the simulation period
+mean_wse_arr = np.mean(kriged_arr, axis=0)
+
 sfr_dem = np.copy(dem_data)
 sfr_dem[sfr_rows, sfr_cols] = sfr_top
 # use 10 mean below land surface or historic wse whichever is shallower
 sfr_hk_bot = np.max((sfr_dem-15, mean_wse_arr), axis=0)
 
-# calculate the mean water surface for the simulation period
-mean_wse_arr = np.mean(kriged_arr, axis=0)
+
 # sample unsaturated zone conductivity for uhc
 # unsat_K_all  = tc.get_tprogs_for_elev(K, sfr_dem, mean_wse_arr, tprogs_info)
 unsat_K_all  = tc.get_tprogs_for_elev(K, sfr_dem, sfr_hk_bot, tprogs_info)
@@ -1757,7 +1754,8 @@ sfr.check()
 # For the tab files the left column is time (in model units) and the right column is flow (model units)
 # Time is days, flow is cubic meters per day
 # USGS presents flow in cfs (cubic feet per second)
-inflow = pd.read_csv(sfr_dir+'MB_daily_flow_cfs_2010_2019.csv', index_col = 'datetime', parse_dates = True)
+inflow = pd.read_csv(join(gwfm_dir, 'SFR_data', 'MB_daily_flow_cfs.csv'), index_col = 'datetime', parse_dates = True)
+# inflow = pd.read_csv(sfr_dir+'MB_daily_flow_cfs_2010_2019.csv', index_col = 'datetime', parse_dates = True)
 # covnert flow from cubic feet per second to cubic meters per day
 cfs2cmd = (86400/(3.28**3))
 inflow['flow_cmd'] = inflow.flow_cfs * cfs2cmd
@@ -1959,9 +1957,6 @@ gag = flopy.modflow.ModflowGage(model=m, numgage= len(gag_out_files), gage_data=
                                 files = gag_out_files,
                                 # filenames =gage_file+gag_out_files
                                )
-
-# %%
-m.write_name_file()
 
 # %% [markdown]
 # ## GHB NW, SE set up
@@ -2167,13 +2162,6 @@ for n in np.arange(0, len(months)):
     ghb_dict[spd] = pd.concat((ghb_gen, ghbdelta_spd)).values
     
 
-
-# %%
-# df_long_avg
-
-# %%
-# df_spd
-# prep_ghb_df(df_long_avg, ghb_hk)
 
 # %%
 # version with only delta boundary
@@ -2818,6 +2806,9 @@ wel = flopy.modflow.ModflowWel(m, stress_period_data=wel_dict,ipakcb=55)
 # wel.check()
 
 # %%
+# m.write_name_file()
+
+# %%
 # convert pumping to array
 pump = np.zeros((m.dis.nper,m.dis.nrow,m.dis.ncol))
 for n in np.arange(0,m.dis.nper):
@@ -3096,6 +3087,9 @@ m.check()
 # %%
 # m.write_name_file()
 
+
+# %%
+# model_ws
 
 # %%
 # Writing the MODFLOW data files

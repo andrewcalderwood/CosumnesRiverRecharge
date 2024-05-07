@@ -12,7 +12,7 @@ filenames <- filenames[stringr::str_detect(filenames, "\\.R|\\.py|\\.ipynb")]
 f = filenames[1]
 
 ## Find the source R script that creates an output
-output_name <- 'CIMIS'
+output_name <- 'dataretrieval'
 # output_name <- 'sasb'
 
 for( f in filenames ){
