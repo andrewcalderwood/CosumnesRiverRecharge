@@ -42,6 +42,21 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 
 # %%
+import sys
+def add_path(fxn_dir):
+    """ Insert fxn directory into first position on path so local functions supercede the global"""
+    if fxn_dir not in sys.path:
+        sys.path.insert(0, fxn_dir)
+
+
+# %%
+git_dir = join(doc_dir,'GitHub','CosumnesRiverRecharge')
+add_path(join(git_dir,'python_utilities'))
+
+# %%
+from report_cln import base_round
+
+# %%
 from parcelchoicemodelupdate.f_predict_landuse import predict_crops
 
 # %%
@@ -129,14 +144,14 @@ import matplotlib.pyplot as plt
 # plt.ylabel('Depth to water (ft)')
 
 # %%
-# the plot makes it seem like there is a sharp discontinuity here
-# maybe its the same values as 2020 on accident, maybe issue with hdobj read in
-# dtw_df.iloc[:,0].plot()
-dtw_df_in.iloc[:,0].plot()
-dtw_df_in.iloc[:,200].plot()
-dtw_df_in.iloc[:,600].plot()
-# dtw_df_in.iloc[:,800].plot()
-dtw_df_in.iloc[:,1200].plot()
+# # the plot makes it seem like there is a sharp discontinuity here
+# # maybe its the same values as 2020 on accident, maybe issue with hdobj read in
+# # dtw_df.iloc[:,0].plot()
+# dtw_df_in.iloc[:,0].plot()
+# dtw_df_in.iloc[:,200].plot()
+# dtw_df_in.iloc[:,600].plot()
+# # dtw_df_in.iloc[:,800].plot()
+# dtw_df_in.iloc[:,1200].plot()
 
 
 # %% [markdown]
@@ -194,18 +209,18 @@ from f_rep_swb_profit_opt import load_run_swb
 # - we can validate this by running several example fields then translating back to each field with lookup table (use alfala which has only 7 selected)
 
 # %%
-# for crop in ['Alfalfa']:
-for crop in ['Grape']:
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-    # need to account for when crops aren't predicted and skip them
-    if pred_dict[crop] in pred_crops: 
-        # load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
-        # reduce number for testing
-        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
+# # for crop in ['Alfalfa']:
+# for crop in ['Grape']:
+#     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+#     # need to account for when crops aren't predicted and skip them
+#     if pred_dict[crop] in pred_crops: 
+#         # load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
+#         # reduce number for testing
+#         load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
 
 # %%
-dtw_df_crop_out = dtw_df[crop_in[crop_in.name==pred_dict[crop]].parcel_id.values]
-dtw_df_crop_out.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
+# dtw_df_crop_out = dtw_df[crop_in[crop_in.name==pred_dict[crop]].parcel_id.values]
+# dtw_df_crop_out.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
 
 # %%
 # dtw_crop_mean = dtw_df[data_out[data_out.Crop_Choice==pred_dict[crop]].parcel_id].loc['2020-4-1':].mean().values
@@ -214,11 +229,20 @@ dtw_df_crop_out.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.
 # dtw_df.shape
 
 # %% [markdown]
-# Simplified representation of DTW
+# Simplified representation of DTW range from min to max.
 
 # %%
-## simple representative DTW for linear steps 10 ft to 200 ft
+
+# %%
+## simple representative DTW for linear steps from dtw_min to dtw_max
 ## with a 5 ft decline from June to December based on observed data
+
+# get min and max dtw to reference
+dtw_step = 10
+dtw_min, dtw_max = dtw_df.mean(axis=0).quantile([0,1]).apply(lambda x: base_round(x, dtw_step))
+
+# calculate dates for DTW decline, shouldn't really go longer than a year since it 
+# will be run at least once per year
 dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
 dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
 # dates where a decline date is specified
@@ -226,7 +250,7 @@ decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
 decline_total = 5
 decline = np.cumsum(np.full(len(decline_dates), decline_total/len(decline_dates)))
 dtw_avg.loc[decline_dates, 'decline'] = decline
-dtw_simple = np.repeat(np.reshape(np.arange(10, 200, 10), (1,-1)), len(dtw_avg), axis=0)
+dtw_simple = np.repeat(np.reshape(np.arange(dtw_min, dtw_max, dtw_step), (1,-1)), len(dtw_avg), axis=0)
 dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
 dtw_simple_df = pd.DataFrame(dtw_simple, dtw_avg.index)
 # plt.plot(dtw_simple[:,0])
@@ -240,36 +264,88 @@ dtw_simple_df.to_csv(join(loadpth, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY
 # pd.concat([dtw_simple_df]*2, axis=1)
 # dtw_simple_df.iloc[:, ::2]
 
+# %% [markdown]
+# Iterate over all crops to save the representative profiles
+
 # %%
-# to equalize the situation we might use a simple DTW profile
-load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
-             # dtw_simple_df.iloc[:,:2], 
-             dtw_simple_df, 
-             # dtw_simple_df,
-             soil_rep=True) 
+for crop in crop_list:
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    # need to account for when crops aren't predicted and skip them
+    if pred_dict[crop] in pred_crops: 
+        # to equalize the situation we might use a simple DTW profile
+        load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
+                     dtw_simple_df, 
+                     soil_rep=True) 
 
 # %% [markdown]
-# Testing by crop
-
-# %%
-# # for crop in crop_list[:2]:
-# for crop in ['Misc Grain and Hay']:
-#     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-#     # need to account for when crops aren't predicted and skip them
-#     if pred_dict[crop] in pred_crops: 
-#         load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
-
-# %%
-# # it takes a while to load the matlab engine but onces it's loaded then it can call functions
-# import matlab.engine
-# eng = matlab.engine.start_matlab()
-# tf = eng.isprime(37)
-# print(tf)
-
-# %%
-
-# %% [markdown]
+# Load the representative results and sample for each field by crop type to back calculate the irrigation requirements. use the estimated irrigation as an input to the modflow model for pumping and percolation for recharge.   
 #
+# re-calculate the profit using the irrigation and actual DTW profile on a soil by soil basis (non-optimization) after running the next modflow chunk. Actually the re-run for the true profit could be done if profits aren't needed mid-simulation
+
+# %%
+from functions import data_functions
+reload(data_functions)
+from functions.data_functions import read_crop_arr_h5
+
+# %%
+model_ws = join(loadpth, 'rep_crop_soilbudget')
+
+# %%
+# for crop in crop_list:
+for crop in ['Grape']:
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+
+    # need separte hdf5 for each year because total is 300MB, group by crop in array
+    fn = join(model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+    pc_all = read_crop_arr_h5(crop, fn)
+    
+    # # applied water (GW and SW are separate)
+    fn = join(model_ws, 'field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
+    irr_gw = read_crop_arr_h5(crop, fn)
+    
+    fn = join(model_ws, 'field_SWB', "SW_applied_water_WY"+str(year)+".hdf5")
+    irr_sw = read_crop_arr_h5(crop, fn)
+
+# %%
+crop_ref = crop_in[crop_in.name==pred_dict[crop]]
+
+
+# %%
+pc_all.shape, irr_gw.shape
+
+# %%
+dtw_df_mean = dtw_simple_df.mean().values
+# if list of fields contains a field with pod then double to account alternate run
+if (crop_ref.pod_bool==1).any():
+    dtw_df_mean = np.hstack([dtw_df_mean]*2)
+# # summary output from hdf5 into csv
+out_summary = pd.DataFrame(np.transpose((irr_gw.sum(axis=1), irr_sw.sum(axis=1), pc_all.sum(axis=1), dtw_df_mean)), 
+             columns=['irr_gw_m','irr_sw_m','pc_m', 'dtw_mean_ft'])
+# # actually need to reference the array data directly rather than the sum
+# the nearest value merge should identify the index which should then be used to reference the irrigation/percolation
+# arrays
+out_summary['dtw_id'] = np.arange(0, len(out_summary))
+
+
+# %%
+# out_summary
+
+# %%
+# take the mean dtw for each field
+dtw_id_mean = dtw_df.mean()
+# sample the dtw for the field simulated for that crop
+dtw_id_mean = pd.DataFrame(dtw_id_mean.loc[crop_ref.parcel_id.values], columns=['dtw_mean_ft'])
+dtw_id_mean['id'] = np.arange(0, len(dtw_id_mean))
+
+
+# %%
+out_summary_dtw = out_summary[['id','dtw_mean_ft']].sort_values('dtw_mean_ft')
+# identifies the nearest dtw value, should correct with a linear interpolation
+# using the slope in irr/recharge at each point scaled by difference in 
+out_lin = pd.merge_asof(out_summary_dtw, dtw_id_mean, on='dtw_mean_ft', direction='nearest')
+# sort values for plotting and add back the interpoalted DTW
+# out_lin = out_lin.rename(columns={'dtw_mean_ft':'dtw_mean_ft_sim'}).merge( summary_lin[['dtw_id','dtw_mean_ft']])
+# out_lin = out_lin.sort_values('id').reset_index(drop=True)
 
 # %% [markdown]
 # # Run update modflow

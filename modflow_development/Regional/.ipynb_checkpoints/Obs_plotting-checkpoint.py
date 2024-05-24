@@ -112,6 +112,7 @@ base_model_ws = join(loadpth, model_nam)
 # model_nam = 'params_maples_fine'
 model_nam = 'mid_res_tprogs'
 model_nam = 'historical_geology_cal'
+model_nam = 'historical_extended'
 
 model_ws = loadpth+model_nam
 
@@ -297,21 +298,10 @@ plt.xlabel('Date')
 
 
 # %%
-def load_hob(model_ws):
-    hobout = pd.read_csv(model_ws+'/MF.hob.out',delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
-                         dtype = {'sim_val':float,'obs_val':float,'obs_nam':object},
-                        na_values=[-9999.])
-    # if only one obs exists correct naming convention
-    one_obs = ~hobout.obs_nam.str.contains('.0')
-    hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+'.'+str(1).zfill(5)
-    hobout['obs_site'] = hobout.obs_nam.str.extract(r'(N\d+)')
-
-    return(hobout)
-    
+hobout = clean_hob(model_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'})
 
 
 # %%
-hobout = load_hob(model_ws)
 # temporary add on to drop bad msmts here
 hobout = hobout[hobout.obs_nam.isin(all_obs.obs_nam)]
 
@@ -321,9 +311,16 @@ fig, ax = plt.subplots(1,1,figsize=(5,5))
 hobmax = hobout.loc[:,['sim_val','obs_val']].max().min()
 hobmin = hobout.loc[:,['sim_val','obs_val']].min().max()
 
+hob_lin = np.array([hobmin, hobmax])
+
 # plot observed vs simulated values
 hobout.plot.scatter(x='obs_val', y='sim_val',marker='.',ax=ax)
-ax.plot([hobmin,hobmax],[hobmin,hobmax],'red')
+ax.plot(hob_lin,hob_lin,'red')
+# plot buffer lines with 30 ft, 10 ft limit
+hob_lin_adj = 10*0.3048
+ax.plot([hobmin-hob_lin_adj/2, hobmax-hob_lin_adj/2], [hobmin+hob_lin_adj/2, hobmax+hob_lin_adj/2], 'gray')
+ax.plot([hobmin+hob_lin_adj/2, hobmax+hob_lin_adj/2], [hobmin-hob_lin_adj/2, hobmax-hob_lin_adj/2], 'gray')
+
 ax.set_xlabel('Observed Values (m)')
 ax.set_ylabel('Simulated Values (m)')
 # plt.xlabel('Observed Values (m)')
@@ -410,7 +407,7 @@ from map_cln import plt_cln
 # %%
 def get_top_active_layer(head_ma):
     """ Sample the top active value for a 3d array for each row,column"""
-    if head_ma.mask:
+    if head_ma.mask.any():
         head_loc = pd.DataFrame(np.transpose(np.where(~head_ma.mask)), columns=['k','i','j'])
         head_loc = head_loc.groupby(['i','j']).min().reset_index()
         # top active value for each row,column
@@ -474,8 +471,10 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 
 # %%
 # plot plain contours for reference
-# hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+# hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+
+# %%
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -494,7 +493,7 @@ hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=True, contour=True)
 # df_chk[['sim_val','obs_val','avg_screen_depth', 'hk', 'rech', 'layer','abs_error']]
 
 # %%
-hobout = load_hob(model_ws)
+hobout = clean_hob(model_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'}).drop(columns=['spd'])
 
 hob_gpd, stns = mak_hob_gpd(hobout, all_obs)
 # simplify dataset to time series 
@@ -508,7 +507,7 @@ hob_long = hob_gpd.melt(value_vars=['sim_val','obs_val'], id_vars=['node'], igno
 # %%
 # # ## load simulated output from one alternate scenario for comparison
 # alt_ws = join(loadpth, 'historical_simple_geology_reconnection')
-# hobout_alt = load_hob(alt_ws)
+# hobout_alt = clean_hob(alt_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'}).drop(columns=['spd'])
 # hobout_alt = hobout_alt.rename(columns={'sim_val':'sim_alt'}).drop(columns=['obs_val'])
 # hob_gpd_alt = hob_gpd[['sim_val','obs_val', 'obs_nam','node']].reset_index().merge(hobout_alt).set_index('date')
 # hob_long_alt = hob_gpd_alt.melt(value_vars=['sim_val','obs_val', 'sim_alt'], id_vars=['node'], ignore_index=False)
@@ -836,8 +835,8 @@ sfrdf_sites = sfrdf.reset_index().merge(grid_local_sites).set_index('dt').copy()
 
 # %%
 flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
-flow_plt
-obs_flow.index, sim_flow.index
+# flow_plt
+# obs_flow.index, sim_flow.index
 
 # %%
 local_flow = pd.read_csv(join(sfr_dir,'flow_obs', 'stream_flow_cfs_approx.csv'), 
@@ -845,19 +844,30 @@ local_flow = pd.read_csv(join(sfr_dir,'flow_obs', 'stream_flow_cfs_approx.csv'),
 local_flow = local_flow.groupby('site').resample('D').mean(numeric_only=True).reset_index('site')
 local_flow['flow_cmd'] =  local_flow.flow_cfs*86400*0.3048**3
 
-site = 'ACR_181'
-obs_flow = local_flow[local_flow.site==site]
-sim_flow = sfrdf_sites[sfrdf_sites.site==site]
-
-flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
-flow_plt = flow_plt.reindex(sim_flow.index)
-
-fig,ax = plt.subplots()
-# sim_flow.Qout_cfs.plot(ax=ax, label='Simulated')
-flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
-plt.legend()
-ax.set_yscale('log')
+site = 'ACR_189'
+def plt_gage_flow(ax, site, local_flow, sfrdf_sites, name=None):
+    obs_flow = local_flow[local_flow.site==site]
+    sim_flow = sfrdf_sites[sfrdf_sites.site==site]
+    
+    flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
+    flow_plt = flow_plt.reindex(sim_flow.index)
+    
+    sim_flow.plot(y='Qout_cfs', ax=ax, label='Simulated')
+    flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
+    ax.set_xlim(flow_plt.dropna().index.min(), flow_plt.dropna().index.max())
+    plt.legend()
+    if name is not None:
+        ax.set_title(name)
+    ax.set_yscale('log')
 # rooney_flow.plot(x='dt',y='flow_cfs')
+fig,ax = plt.subplots(len(local_sites),1, sharex=True, dpi=300)
+for n, s in enumerate(local_sites.site):
+    plt_gage_flow(ax[n], s, local_flow, sfrdf_sites,
+                  name=s+' - '+local_sites.Site_name.iloc[n])
+
+ax[-1].set_xlabel('Date')
+fig.supylabel('Flow (cfs)')
+
 
 # %% [markdown]
 # It makes sense that flows are below the observed because we don't have Deer Creek in the system.

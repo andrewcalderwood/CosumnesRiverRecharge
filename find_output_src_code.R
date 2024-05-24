@@ -2,8 +2,8 @@
 #' how a search and replace string task 
 #' can be performed with R across several files
 
-# dir_nam = 'Projects/'
-dir_nam = 'modflow_development/'
+dir_nam = 'Projects/'
+# dir_nam = 'modflow_development/'
 # dir_nam = 'projects/sasb_smc_reeval/'
 # dir_nam = '/'
 filenames <- list.files(dir_nam,recursive = TRUE)
@@ -12,7 +12,7 @@ filenames <- filenames[stringr::str_detect(filenames, "\\.R|\\.py|\\.ipynb")]
 f = filenames[1]
 
 ## Find the source R script that creates an output
-output_name <- 'dataretrieval'
+output_name <- 'flow_obs_table'
 # output_name <- 'sasb'
 
 for( f in filenames ){

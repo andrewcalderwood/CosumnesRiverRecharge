@@ -155,6 +155,9 @@ rivers_clip = gpd.clip(rivers, m_domain)
 rivers_clip.plot()
 # rivers_clip.GNIS_Name.unique()
 
+# %% [markdown]
+# Need to update this script to take in label as an argument likely via a class to more easily produce the outputs
+
 # %%
 # print(rivers_clip.columns)
 # Split into individual streams/creeks

@@ -249,9 +249,9 @@ cimis_all_out.to_csv(join(gwfm_dir, 'UZF_data',(strt_date+'_to_'+end_date).repla
 # %% [markdown]
 # # UZF update
 # Currently new csv of the most recent CIMIS precipitation and ETo data have to be manually downloaded, then the code auto appends them together.   
-# - `00_Simple crop input.py` has to be re-run to create the long_ETc_all_lu.hdf5 file used by the soil water budget
-#     - the script doesn't depend on a start or end date, calculates the full period
-#     - need to break up into subscripts as some parts shouldn't be re-run since they are slow
+# - `00a_DWR_LU_preparation.py` can be re-run as new LU maps are available, less urgent
+# - `00b_Crop_ET.py` must be run to extend model into present, creates long_ETc_all_lu.hdf5
+# - `00c_ETc_arrays.py` takes ETc and land use to make arrays of ETc for each day, creates irrigated_year.hdf5 and native_year.hdf5
 # - `02_Basic soil budget - fields.py` runs the field by field soil water budget
 #     - the script uses a start and end date to filter the input
 # ## WEL

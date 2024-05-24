@@ -1958,6 +1958,10 @@ gag = flopy.modflow.ModflowGage(model=m, numgage= len(gag_out_files), gage_data=
                                 # filenames =gage_file+gag_out_files
                                )
 
+# %%
+mcc_d = pd.read_csv(join(gwfm_dir, 'SFR_data','MCC_flow_obs_all.csv'), index_col='DATE TIME', parse_dates=True)
+mcc_d.loc[strt_date:end_date].to_csv(join(model_ws, 'input_data','flow_obs_gage.csv'))
+
 # %% [markdown]
 # ## GHB NW, SE set up
 

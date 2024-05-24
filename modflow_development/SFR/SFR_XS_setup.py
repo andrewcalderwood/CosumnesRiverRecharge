@@ -14,6 +14,10 @@
 
 # %% [markdown]
 # Translatation of DEM to SFR usable data
+#
+# - loads HEC-RAS dem to look at auto-transects, this code is improved in the Oneto-Denier project
+# - code uses Constantine cross-sections and profile to identify the location of the cross-sections spatially
+# - code uses Michigan bar field measurements to create a rating curve table
 
 # %%
 import os
