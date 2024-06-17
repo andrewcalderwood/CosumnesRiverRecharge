@@ -92,8 +92,8 @@ def plt_cln(ax, nbins=5, label=True):
 
     return None
 
-def plt_arrow(ax, xoff = 0.7, yoff=0.15):
-    x, y, arrow_length = xoff, yoff, 0.1
+def plt_arrow(ax, xoff = 0.7, yoff=0.15, arrow_length = 0.1):
+    x, y, arrow_length = xoff, yoff, arrow_length
     ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
                 arrowprops=dict(facecolor='black', width=5, headwidth=15),
                 ha='center', va='top', fontsize=20, 
