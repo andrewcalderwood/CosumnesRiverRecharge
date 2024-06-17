@@ -82,6 +82,7 @@ data_dir = join(proj_dir, 'model_inputs')
 # %%
 # run_dir = 'C://WRDAPP/GWFlowModel'
 run_dir = 'F://WRDAPP/GWFlowModel'
+run_dir = 'D://WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
 # # model_nam = 'setback_streamflow'
@@ -112,7 +113,6 @@ gel.write_file()
 # test to see if model will run with longer itemp, owhm might auto correct
 m.chd.write_file()
 m.ghb.write_file()
-
 m.nwt.write_file()
 
 # %%
@@ -358,6 +358,7 @@ for t in np.arange(0, nper):
 
 # %% [markdown]
 # Write out modflow files that are not impacted by irrigation optimization (GHB, CHD, UPW, OC, NWT, DIS)
+# - I may want to see about turning this into a function.
 
 # %%
 ##############################################################################################

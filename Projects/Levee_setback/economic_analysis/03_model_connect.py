@@ -136,6 +136,8 @@ all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns
 
 # %%
 # all_run_dates
+# simple code to set dates for april 1
+all_run_dates = pd.date_range(all_strt_date, all_end_date,freq='AS-Apr')
 
 # %%
 # this loop was set to run for the years of interest
