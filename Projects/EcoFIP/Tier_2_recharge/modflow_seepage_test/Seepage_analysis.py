@@ -6,12 +6,15 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# %% [markdown]
+# Script loads modflow sfr output for 10 realizations and concatenates it to reload for the seepage_mapping script. Neither Seepage_analysis.py or seepage_mapping.py were used for the final version of the EcoFIP Tier 2 analysis.
 
 # %%
 # standard python utilities

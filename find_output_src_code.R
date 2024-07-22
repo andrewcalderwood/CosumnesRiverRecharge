@@ -2,7 +2,7 @@
 #' how a search and replace string task 
 #' can be performed with R across several files
 
-dir_nam = 'Projects/'
+dir_nam = 'Projects/Levee_setback/economic_analysis'
 # dir_nam = 'modflow_development/'
 # dir_nam = 'projects/sasb_smc_reeval/'
 # dir_nam = '/'

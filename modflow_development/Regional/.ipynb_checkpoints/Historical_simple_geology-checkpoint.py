@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -104,20 +104,13 @@ list(m_domain.geometry.values[0].exterior.coords)
 ss_bool = False # no steady state period
 
 # %%
-
-# Transient -> might want to think about making SP1 steady
-# calibration run dates
-# end_date = pd.to_datetime('2021-09-30')
-# strt_date = pd.to_datetime('2018-10-01')
-
 # scenario run_dates dry -> wet -> dry
-# end_date = pd.to_datetime('2020-09-30')
-# strt_date = pd.to_datetime('2015-10-01')
 ss_strt = pd.to_datetime('2010-10-01')
 end_date = pd.to_datetime('2020-09-30')
 end_date = pd.to_datetime('2022-09-30') # 
 # end_date = pd.to_datetime('2014-10-1') # steady state plus one date avoids recoding anything
 strt_date = pd.to_datetime('2014-10-01')
+strt_date = pd.to_datetime('2000-10-01')
 
 
 dates = pd.date_range(strt_date, end_date)
@@ -213,6 +206,11 @@ print('TPROGs layers', nlay_tprogs)
 scenario='reconnection'
 # scenario='no_reconnection'
 
+# %% [markdown]
+# The floodplain reconnection took place in 2014. For 2000-2014 should we imagine in remains in place since we are mostly interested in before after?
+# - We could also just make the lakebed conductance zero until 2014
+# - or we run two different models
+
 # %%
 ext_dir = 'F:/WRDAPP'
 c_dir = 'C:/WRDAPP'
@@ -225,12 +223,15 @@ elif os.path.exists(c_dir):
 loadpth = loadpth +'/GWFlowModel/Cosumnes/Regional/'
 model_ws = loadpth+'historical_simple_geology'
 model_ws = loadpth+'input_write'
-if scenario=='reconnection':
-    model_ws +='_'+scenario
+# if scenario=='reconnection':
+#     model_ws +='_'+scenario
+model_ws = model_ws + '_' + str(strt_date.year)+'_'+str(end_date.year)
     
 if nper <=2:
     model_ws = loadpth+'steadystate'
 print(model_ws)
+
+# %%
 
 # %%
 # switch to modflow nwt to enable option bloack for use in owhm
@@ -403,14 +404,14 @@ top_botm[1:,:,:] = m.dis.botm.array
 # Specify no flow boundary based on rough approx of geology (upper basin volcanics)
 ibound = np.ones([nlay, nrow,ncol])
 
-
 cutoff_elev = 56
 ibound = ibound*(dem_data<cutoff_elev)
 
 plt.imshow(ibound[0,:,:])
 
 # %% [markdown]
-# ### Create a line bounding the noflow region to set the specified head boundary
+# ### Create a line bounding the foothill region
+# This should be more of a function as most of this is independent of model input except the layer bottoms.
 
 # %%
 import pprint
@@ -505,7 +506,6 @@ plt.colorbar(shrink=0.5)
 deep_geology = np.invert(ibound[:,:,:].astype(bool))
 
 
-
 # %%
 np.savetxt(gwfm_dir+'/BAS6/deep_geology_'+str(nlay)+'layer.tsv', np.reshape(deep_geology, (nlay*nrow,ncol)), delimiter ='\t')
 np.savetxt(model_ws+'/input_data/deep_geology.tsv', np.reshape(deep_geology, (nlay*nrow,ncol)), delimiter ='\t')
@@ -565,17 +565,10 @@ ibound[botm > dem_data] = 0
 # plt.colorbar()
 
 # %%
-def find_isolated_active(arr):
-    """ Given an array of 0 and 1 integer find where 1 are surrounded by 0 """
-    # values to pad before and after
-    d_r = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=0)
-    d_c = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=1)
-    # identify where an active cell begins and ends on either side of a cell
-    r_act = (d_r[:, :-1]==1)&(d_r[:,1:]==-1)
-    c_act = (d_c[ :-1]==1)&(d_c[1:]==-1)
-    # then identify where there is true in row and column directions
-    hor_act = r_act & c_act
-    return(hor_act)
+from mf_utility import find_isolated_active
+
+# %%
+
 
 # where the ibound active cells are horizontally surrounded, convert to inactive
 # hasn't removed any from regional model as is
@@ -685,20 +678,8 @@ gel_dir = join(gwfm_dir,'UPW_data')
 # %%
 eff_K = pd.read_csv(join(gel_dir, 'permeameter_regional.csv'))
 
-
 # %%
-def param_load(model_ws, file_dir, file_name):
-    """ Check if a file exists in the model directory if not copy from Box location"""
-    if file_name in os.listdir(model_ws):
-        print('exists')
-        params = pd.read_csv(join(model_ws, file_name))
-    else:
-        print('added to model workspace')
-        params = pd.read_csv(join(file_dir,file_name))
-        params.to_csv(join(model_ws,file_name), index=False)
-    return(params)
-
-
+from mf_utility import param_load
 
 # %%
 mf_tprogs_dir = gwfm_dir+'/UPW_data/tprogs_final/'
@@ -929,10 +910,11 @@ mcs.plot_array(a=hk_ma, norm = mpl.colors.LogNorm())
 plt.ylim(-100,100)
 
 # %% [markdown]
-# ## Surface vka adjustments
+# ## Surface vka adjustments 
+#
 # Need to adjust the surface rates to be more representative and to avoid excess leakage. 
 # - vka_quants fails with Maples et al. 2019 params because there is more low K which throws off the vka_min and max of sand.
-# - 
+# - could also use AEM data to provide a limiting rate for the upper aquifer
 
 # %%
 # this may not be needed
@@ -1066,7 +1048,8 @@ lak_grid = gpd.read_file(join(lak_shp, 'lak_grid_cln.shp'))
 # # SFR
 
 # %% [markdown]
-# ## Adjust Blodgett Dam scenario here
+# ## Adjust scenario here
+# we should try to move more of this to pre-processing again for the network connection
 
 # %%
 # temporary while troubleshooting
@@ -1097,8 +1080,6 @@ deer_ck['reach'] = np.arange(1, len(deer_ck)+1)
 
 # define michigan bar segment (1-based)
 mb_seg = 2
-
-# %%
 
 # %%
 # using floodplain logger locations to update XSlocs
@@ -1311,6 +1292,14 @@ dc_seg += 1
 # ### Read in 8 pt XS, revised by simplifying from Constantine 2001
 
 # %%
+mb_seg = 2
+# needed to define reach data and segment data
+xs_sfr = pd.read_csv(join(gwfm_dir, 'SFR_data', 'xs_sfr.csv'))
+# needed for icalc=2 input
+XS8pt = pd.read_csv(sfr_dir+'8pointXS.csv')
+
+
+# %%
 
 tabfiles_dict={1: {'numval': nper, 'inuit': 56}}
 if mb_seg ==2:
@@ -1405,6 +1394,9 @@ sfr_scale = xs_sfr[['iseg','reach','rname']].copy().assign(strhc1_scale=1)
 sfr_scale.loc[sfr_scale.rname=='Deer Creek', 'strhc1_scale'] = dc_scale
 sfr_scale.loc[sfr_scale.rname=='Cosumnes River', 'strhc1_scale'] = cr_scale
 
+# %% [markdown]
+# This code had an issue with tc.get_tprogs_for_elev on 2024-7-17 calling an excess memory error.
+
 # %%
 # calculate the mean water surface for the simulation period
 mean_wse_arr = np.mean(kriged_arr, axis=0)
@@ -1413,7 +1405,6 @@ sfr_dem = np.copy(dem_data)
 sfr_dem[sfr_rows, sfr_cols] = sfr_top
 # use 10 mean below land surface or historic wse whichever is shallower
 sfr_hk_bot = np.max((sfr_dem-15, mean_wse_arr), axis=0)
-
 
 # sample unsaturated zone conductivity for uhc
 # unsat_K_all  = tc.get_tprogs_for_elev(K, sfr_dem, mean_wse_arr, tprogs_info)

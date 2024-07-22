@@ -13,6 +13,9 @@
 #     name: python3
 # ---
 
+# %% [markdown]
+# The model data summary script loads the 10 realizations that were considered of interest to summarize characteristics like the hydraulic conductivity of the aquifer and stream sediments. These data were shared with cbec but ultimately not used for the EcoFIP Tier 2 analysis.
+
 # %%
 # standard python utilities
 import os

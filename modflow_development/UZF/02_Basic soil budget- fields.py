@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -116,11 +116,14 @@ ETc_all = ETc_all.reindex(dates)
 # %% [markdown]
 # # Spatial data
 # The land use data doesn't specify water source for most, listed as * so missing.
+# - this code could be re-run to include native use but it would require updating the soil data
 
 # %%
 ag_lu = gpd.read_file(join(uzf_dir,'county_landuse', 'domain_ag_lu_2018.shp'))
 # 5 duplicates in irrigation efficiency
 ag_irr_eff = ag_lu[['geom_id', 'name', 'irr_name', 'Avg_eff']].drop_duplicates()
+
+# %%
 
 # %%
 # load cleaned soil data for ag fields

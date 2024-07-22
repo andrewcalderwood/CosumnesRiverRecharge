@@ -1,3 +1,4 @@
+# %%
 """
 mf_utility module. 
 Different functions for modflow set up with general python functions
@@ -12,7 +13,7 @@ import pandas as pd
 import os
 from os.path import join, exists
 import flopy
-#%% Model development
+# %% Model development
 
 
 def get_layer_from_elev(elev, botm_slice, nlay):
@@ -42,18 +43,28 @@ def param_load(model_ws, file_dir, file_name):
     return(params)
 
 
-#%% Post-processing
+# %% Post-processing
 
-def clean_hob(model_ws, dt_ref, split_c = 'p'):
+def clean_hob(model_ws, dt_ref, split_c = 'p', obs_id_spd=True):
+    """
+    model_ws: modflow workspace
+    dt_ref: dataframe with columns for date time, kstp_kper (stp, per)
+    split_c: character that defines split in in obs_nam between base name and obs ID
+    obs_id_spd: bool whether the obs ID is indicative of spd (otherwise numeral order)
+    hobout: dataframe with sim_val, obs_val, obs_nam
+    """
     hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
                          dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
     # # if only one obs exists correct naming convention
     one_obs = ~hobout.obs_nam.str.contains('.0')
     hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+split_c+str(1).zfill(5)
+    if obs_id_spd:
+        hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split(split_c,n=2, expand=True)
+        hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
+        hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
+    else:
+        hobout[['Sensor', 'obs_num']] = hobout.obs_nam.str.split(split_c,n=2, expand=True)
 
-    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split(split_c,n=2, expand=True)
-    hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
-    hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
     hobout.loc[hobout.sim_val.isin([-1e30, -999.99,-9999]), 'sim_val'] = np.nan
     hobout = hobout.dropna(subset='sim_val')
     hobout['error'] = hobout.obs_val - hobout.sim_val
@@ -192,3 +203,16 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
         sfrdf['connected'] = (sfrdf.gradient < 1)
     return(sfrdf)
 
+
+# %%
+def find_isolated_active(arr):
+    """ Given an array of 0 and 1 integer find where 1 are surrounded by 0 """
+    # values to pad before and after
+    d_r = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=0)
+    d_c = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=1)
+    # identify where an active cell begins and ends on either side of a cell
+    r_act = (d_r[:, :-1]==1)&(d_r[:,1:]==-1)
+    c_act = (d_c[ :-1]==1)&(d_c[1:]==-1)
+    # then identify where there is true in row and column directions
+    hor_act = r_act & c_act
+    return(hor_act)

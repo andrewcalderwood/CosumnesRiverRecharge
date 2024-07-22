@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -50,11 +50,6 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
-# %%
-
-loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Regional/'
-
-model_ws = loadpth + 'crop_modflow'
 
 # %%
 def ymd2dt(year, month, day, year_adj):
@@ -137,7 +132,7 @@ def load_var(crop, year=None):
 
 
 # %%
-def load_hyd(year, dates):
+def load_hyd(dates):
     ## Potential ETo spatial interpolation from CIMIS
     fn = glob.glob(join(uzf_dir,'CIMIS','Cosumnes_dailyET_precip*.csv'))
     daily_data = pd.DataFrame()
@@ -172,6 +167,10 @@ def load_hyd(year, dates):
 
 # %%
 def load_Kc(year):
+    """
+    Convert spreadsheet of Kc dates with column for month and day to a date object
+    given a year
+    """
     fn = join(data_dir,'static_model_inputs.xlsx')
     Kc = pd.read_excel(fn, sheet_name='Kc', comment='#')
     Kc = Kc.set_index('Period')
@@ -186,8 +185,10 @@ def load_Kc(year):
 
 # %%
 def get_Kc_dates(Kc_dates_c, Kc_c):
-    """ Given a dataframe with the dates for Kc periods and a dataframe with those Kc values create a timeseries
-    of Kc values"""
+    """ 
+    Given a dataframe with the dates for Kc periods and a dataframe with those Kc values create a timeseries
+    of Kc values
+    """
     Kc_df_all = pd.DataFrame()
     # initial period and mid season are constant, crop dev and late season are linear
     # initial period
@@ -219,12 +220,14 @@ def get_Kc_dates(Kc_dates_c, Kc_c):
 #
 
 # %%
-def load_soil(crop, crop_in):
+def load_soil(crop, crop_in, field_ids = 'parcel'):
     ''' Imports soil data for all fields and subsets to those for the parcels
     with the current crop
     crop: string specifying the crop
-    crop_in: dataframe with parcel_id, name (crop), pod'''
-    field_ids = 'parcel' # 'ag'
+    crop_in: dataframe with parcel_id, name (crop), pod
+    field_ids: flag to determine which dataset to use
+    '''
+    # field_ids = 'parcel' # 'ag'
     # load cleaned soil data for ag fields
     soil_path = join(uzf_dir,'clean_soil_data')
     # soil data for each ag field

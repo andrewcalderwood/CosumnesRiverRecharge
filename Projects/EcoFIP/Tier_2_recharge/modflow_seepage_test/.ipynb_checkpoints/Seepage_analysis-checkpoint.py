@@ -6,12 +6,15 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# %% [markdown]
+# Script loads modflow sfr output for 10 realizations and concatenates it to reload for the seepage_mapping script. Neither Seepage_analysis.py or seepage_mapping.py were used for the final version of the EcoFIP Tier 2 analysis.
 
 # %%
 # standard python utilities
@@ -47,7 +50,7 @@ git_dir = join(doc_dir, 'GitHub')
 gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 
 bas_dir = join(gwfm_dir, 'BAS6')
-proj_dir = join(gwfm_dir,'EcoFIP')
+proj_dir = join(gwfm_dir, 'Projects','EcoFIP')
 out_dir = join(proj_dir, 'output')
 fig_dir = join(proj_dir,'figures')
 
@@ -74,6 +77,15 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
+# method to set default plot parameters, no longer need to specify 300 dpi each time, may not need to specify dimensions either
+# sns.set_theme(rc={"figure.dpi": 300})
+plt.rcParams.update({"figure.dpi": 300})
+
+
+# %% [markdown]
+# # load modflow
+
+# %%
 run_dir = 'C://WRDAPP/GWFlowModel'
 # run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
@@ -81,9 +93,10 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
-# model_nam = 'foothill_vani10'
-model_nam = 'strhc1_scale'
+model_nam = 'foothill_vani10'
+# model_nam = 'strhc1_scale'
 # model_nam = 'sfr_uzf'
+model_name = '3layer'
 # model_nam = 'parallel_realizations/realization005'
 
 model_ws = loadpth+model_nam
@@ -94,7 +107,7 @@ print(model_nam)
 load_only = ['DIS','BAS6','UPW','OC','SFR','LAK',
             'RCH', 'WEL'
             ]
-m = flopy.modflow.Modflow.load('MF.nam', model_ws= model_ws, 
+m = flopy.modflow.Modflow.load('MF.nam', model_ws= base_model_ws, 
                                 exe_name='mf-owhm', version='mfnwt',
                               load_only = load_only
                               )
@@ -110,6 +123,9 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 # round of the steady state period
 dt_ref['dt'] = dt_ref.dt.dt.round('D')
 dt_ref = dt_ref[~dt_ref.steady]
+
+# %% [markdown]
+# # load data
 
 # %%
 # realizations to present the results for
@@ -250,9 +266,9 @@ if rewrite:
     # calculate the effective rate of seepage
     sfrdf_all['Qaquifer_rate'] = sfrdf_all.Qaquifer/(sfrdf_all.rchlen*sfrdf_all.width)
     # about 220 MB
-    # need to specify format as table to keep as table and avoid segmenting in weird ways
-    sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'), 
-                                  key='all', complevel=4, data_columns = grp_cols, format = 'table', mode='w')
+
+    sfrdf_all.reset_index()[keep_cols].to_hdf(join(out_dir, 'sfrdf_all.hdf5'),  format='table',
+                                  key='all', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
 sfrdf_all = pd.read_hdf(join(out_dir, 'sfrdf_all.hdf5'),  key='all', complevel=4)
@@ -269,7 +285,7 @@ if rewrite:
     
     # produces file of 6 MB without data_columns
     # file of 12 MB with data columns of grp_cols
-    sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'), 
+    sfr_mon_all[keep_cols].to_hdf(join(out_dir, 'sfrdf_mon_all.hdf5'),  format='table',
                                   key='monthly', complevel=4, data_columns = grp_cols, mode='w')
 
 # %%
@@ -294,7 +310,7 @@ from report_cln import magnitude
 # plt.rcdefaults() # reset
 
 # %%
-fig,ax = plt.subplots()
+fig,ax = plt.subplots(figsize=(6.5,5),dpi=300)
 for r in best10.realization.values:
     sfr_plt = sfr_avg_all.loc[sfr_avg_all.realization==r]
     sfr_plt.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, label=r,legend=False)
@@ -306,6 +322,25 @@ ax.set_ylabel('Stream loss rate (m/day)')
 
 sfr_avg.plot(x='Total distance (m)',y='Qaquifer_rate', ax=ax, legend=False, color='black', linestyle='--',label='Mean')
 plt.legend(title='Realization')
+
+
+# %% [markdown]
+# It turns out that the confidence intervals are calculated with [bootstrapping](https://stackoverflow.com/questions/46125182/is-seaborn-confidence-interval-computed-correctly) of the original sample which may not work as well with a small sample size. 
+#
+# - sb.utils.ci(sb.algorithms.bootstrap(np.arange(100))) is essentially what it does  
+#
+# "The seaborn terminology is somewhat specific, because a confidence interval in statistics can be parametric or nonparametric. To draw a parametric confidence interval, you scale the standard error, using a formula similar to the one mentioned above. For example, an approximate 95% confidence interval can be constructed by taking the mean +/- two standard errors"  
+# > plot_errorbars(("se", 2))
+#
+
+# %%
+# it turns out that
+
+# g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('ci',95))
+g = sns.lineplot(sfr_avg_all, x='Total distance (m)', y='Qaquifer_rate', errorbar=('se',2))
+
+g.set(yscale='log', ylim=(1E-2, 1E2), title = '10 Realizations')
+g.set( ylabel='Stream loss rate (m/day)')
 
 
 # %% [markdown]
@@ -373,8 +408,11 @@ g = sns.lineplot(sfr_mon, x='Total distance (m)', y='Qaquifer_rate', errorbar=('
 
 g.set(yscale='log', ylim=(1E-2, None), title = 'Realization '+str(r))
 g.set(xlim = (13E3, 40E3), ylabel='Qaquifer (m/day)')
+
 # sns.set(rc={'figure.figsize':(6.5,6.5)})
 # plt.savefig(join(fig_dir, 'stream_loss_with_CI_r'+str(r)+'.png'), bbox_inches='tight')
+
+# %%
 
 # %%
 for r in best10.realization.values:

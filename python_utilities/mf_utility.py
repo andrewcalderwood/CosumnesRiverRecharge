@@ -203,3 +203,16 @@ def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
         sfrdf['connected'] = (sfrdf.gradient < 1)
     return(sfrdf)
 
+
+# %%
+def find_isolated_active(arr):
+    """ Given an array of 0 and 1 integer find where 1 are surrounded by 0 """
+    # values to pad before and after
+    d_r = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=0)
+    d_c = np.diff(np.pad(arr, pad_width=(0,1), constant_values=1), axis=1)
+    # identify where an active cell begins and ends on either side of a cell
+    r_act = (d_r[:, :-1]==1)&(d_r[:,1:]==-1)
+    c_act = (d_c[ :-1]==1)&(d_c[1:]==-1)
+    # then identify where there is true in row and column directions
+    hor_act = r_act & c_act
+    return(hor_act)
