@@ -30,7 +30,9 @@ def base_soil_dict(soil_ag):
     soil['nfield'] = len(soil_ag)
 
     # # when soil_K_low is missing using a substitute of Ksat/10
-    soil['Ks'] = np.where(soil_ag.Ksat_Low==0, soil_ag.Ksat/10, soil_ag.Ksat_Low)
+    # soil['Ks'] = np.where(soil_ag.Ksat_Low==0, soil_ag.Ksat/10, soil_ag.Ksat_Low)
+    # K_low seems to underestimate percolation so trying with Ksat_rep
+    soil['Ks'] = soil_ag.Ksat.values
     soil['por'] = soil_ag.Porosity.values/100
     soil['eps'] = soil_ag.EPS.values
     soil['CN'] = soil_ag.CN.values

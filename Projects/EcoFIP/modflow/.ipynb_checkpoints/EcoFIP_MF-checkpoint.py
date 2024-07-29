@@ -66,7 +66,6 @@ lwa_dir = join(usr_dir, 'LWA Dropbox','01_Project-Teams')
 proj_dir = join(lwa_dir, '669.03 - DWR Cosumnes Floodplain Recharge')
 main_concept_dir = join(proj_dir, 'Concepts')
 gis_dir = join(main_concept_dir,'GIS')
-concept_dir = join(main_concept_dir,'Blodgett_Dam')
 
 
 # %%
@@ -100,9 +99,6 @@ model_ws = loadpth+model_nam
 
 
 # %%
-copy_files=False
-
-# %%
 load_only = ['DIS','BAS6','UPW','OC','SFR','LAK',
             'RCH', 'WEL'
             ]
@@ -127,7 +123,13 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 # Use Blodgett Dam shapefile as a test case. Also this needs to be generalized if possible to be re-ran as a complete script for each different concept.
 
 # %%
+copy_files=False
+# copy_files=True
+
+# %%
 concept_name = 'Blodgett_Dam'
+concept_name = 'Hanford_Gravel'
+
 concept_ws = join(loadpth,'EcoFIP',concept_name)
 m.model_ws = concept_ws
 
@@ -151,18 +153,45 @@ if copy_files:
 
 # %%
 concept_dir = join(gwfm_dir,'Projects',concept_name)
-# load shapefile that defines geospatial extent for test
-gdf_extent = gpd.read_file(join(concept_dir,'geospatial', 'blodgett_dam_restoration_extent', 'blodgett_dam_restoration_extent.shp'))
-# gdf_extent = gdf_extent[gdf_extent.id ==0]
+
+
 # load model grid for the test
 # gridp = gpd.read_file(join(
 zon_stats = gpd.read_file(join(gwfm_dir, 'DIS_data', 'grid_zonal_stats','elevation_m_statistics.shp'))
 
 # %%
-# get local elevation information for the concept
-proj_zon_stats = gpd.overlay(zon_stats, gdf_extent)
-proj_zon_stats[['i','j']] = proj_zon_stats[['row','column']] - 1
+# load shapefile that defines geospatial extent for test
+# gdf_extent = gpd.read_file(join(concept_dir,'geospatial', 'blodgett_dam_restoration_extent', 'blodgett_dam_restoration_extent.shp'))
+# gdf_extent = gdf_extent[gdf_extent.id ==0]
+# # get local elevation information for the concept
+# proj_zon_stats = gpd.overlay(zon_stats, gdf_extent)
 
+
+
+# %%
+concept_data = join(main_concept_dir,'data')
+os.listdir(concept_data)
+# load processed data from cbec
+# the units appears to be in feet 
+proj_zon_stats = pd.read_csv(join(concept_data,concept_name+'_Elev_Grid_Cells.csv'))
+grp_cols = ['node','row','column']
+# convert numeric float columns from ft to meters
+scale_cols = proj_zon_stats.columns.difference(grp_cols)
+proj_zon_stats[scale_cols] *= 0.3048
+
+# %%
+wse_grid = pd.read_csv(join(concept_data,concept_name+'_WSE_Grid_Cells.csv'))
+# wse is in ft and area is in ft^2
+wse_grid.area *= (0.3048**2)
+wse_grid.wse *= (0.3048)
+
+# %%
+# convert dataframe to geodataframe in case needed
+proj_zon_stats = zon_stats[['row','column','geometry']].merge(proj_zon_stats)
+
+# %%
+# standard addition of 0-based columns for use in python
+proj_zon_stats[['i','j']] = proj_zon_stats[['row','column']] - 1
 
 
 # %%
@@ -198,7 +227,9 @@ fields = gpd.read_file(join(gis_dir, 'modflow_related','ag_fields_with_well_loc.
 
 # %%
 # identify fields in the AOI that need to have pumping scaled
-field_well = gpd.overlay(fields, gdf_extent)
+# field_well = gpd.overlay(fields, gdf_extent)
+# use whole cells from zone stats if gdf_extent is unavailable
+field_well = gpd.overlay(fields, proj_zon_stats[['mean','geometry']])
 # calculate the scaling of pumping based on the field removed
 field_well['area_scale'] = (1-field_well.area)/field_well.full_area
 # get the zero-based row-column
@@ -293,6 +324,25 @@ rch.write_file()
 
 
 # %% [markdown]
+# # Make sure OC saves budget and heads
+
+# %%
+# For later model runs when all the data is needed to be saved
+month_intervals = (pd.date_range(strt_date,end_date, freq="MS")-strt_date).days
+spd = {}
+spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,m.dis.nper,1)}
+# spd = { (j,0): ['save head'] for j in np.arange(0,nper,1)}
+
+for j in month_intervals:
+    spd[j, 0] = ['save head', 'save budget','print budget']
+    # spd[j, 0] = ['save head', 'print budget']
+    
+oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True)
+
+# %%
+oc.write_file()
+
+# %% [markdown]
 # # SFR Updates
 # Two options:
 # 1. Totally replace the streamflow routing with RIV cells with stage based on output from HEC-RAS
@@ -300,6 +350,7 @@ rch.write_file()
 #     - downstream segment needs to divert flow from upstream to skip over the RIV cells
 #     - if the RIV is removed in the dry season then the segment data could be redefined to allow flow passing through the segments
 #     - **likely need to define strhc1 by segment to be able to assign a value of 0 when RIV cells overlap.** Easiest fix is this, to simply just remove SFR seepage but maintain flow passing through.
+# 3. Consider updating strhc1 to use the leakage rates identified with the EcoFIP Tier 2 (soil map + AEM Ksat)
 
 # %%
 # just for testing
@@ -312,13 +363,43 @@ sfr = m.sfr
 reach_data = pd.DataFrame(sfr.reach_data)
 
 # %%
+# proj_zon_stats
+
+# %%
 # identify stream reaches impacted by the updated concept
-update_reach = reach_data.merge(proj_grid[['row','column','i','j']])
+update_reach = proj_zon_stats[['row','column','i','j','mean','min','geometry']].merge(reach_data)
 drop_strhc1 = reach_data.reachID.isin(update_reach.reachID)
 # make the stream hydraulic conductivity 0 where it will be overlapped
 # by floodplain cells driven by the river package
 reach_data.loc[drop_strhc1, 'strhc1'] = 0
 
+
+# %%
+# review sfr cells that are overlapped
+reach_chk = update_reach[['row','column','iseg','ireach','reachID','strtop','mean','min']]
+reach_chk = reach_chk.sort_values(['iseg','ireach'])
+print('Difference in MF stream top and concept cell minimum')
+print((reach_chk.strtop-reach_chk['min']).apply([np.mean, np.std]))
+
+# %%
+reach_chk.to_csv(join(m.model_ws, 'sfr_riv_df.csv'),index=False)
+
+# %%
+# plot to visualize the difference in elevation across space
+fig,ax=plt.subplots(figsize=(4,2))
+reach_chk.plot(x='reachID',y=['strtop','min'],ax=ax)
+plt.ylabel('Eleveation (m)')
+plt.legend(['SFR','cbec'])
+
+# %% [markdown]
+# It appears that the fine resolution DEM cbec uses identifies significantly deeper stream channel bottoms for each cell or the cell minimum is not representative of the useable channel bottom (e.g., it's a scour hole).
+
+# %%
+# create short summary of which SFR stream cells we are removing the conductance
+import matplotlib.pyplot as plt 
+fig,ax=plt.subplots(figsize=(3,2))
+update_reach.plot(color='darkblue',ax=ax)
+proj_zon_stats.plot(color='none',edgecolor='black',ax=ax)
 
 # %%
 sfr.reach_data.strhc1 = reach_data.strhc1
@@ -337,17 +418,28 @@ from mf_utility import get_layer_from_elev
 
 # %% [markdown]
 # It may make sense to move the hydraulic conductivity work to pre-processing or have the standard model save as needed for each tprogs realization
+#
+# Our river bottom and thickness is most important for defining our hydraulic gradient starting point and it is the elevatoin where we'll see flows drain out.
+# - the absolute minimum in a cell may not be well connected but the first quartile likely represents an appropriate starting location. rbot has to be set to the minimum or flows in the stream will constantly have WSE below rbot
 
 # %%
 riv_df = proj_zon_stats.copy()
 
 # for the test we can use the average max value
-riv_df['rbot'] = (riv_df['mean']+riv_df['min'])/2
+# riv_df['rbot'] = (riv_df['mean']+riv_df['min'])/2
 
+riv_df['rbot'] = riv_df['min']
 
 # get model layer (0-based) for river package
 botm_slice = m.dis.botm.array[:, riv_df.i, riv_df.j]
 riv_df['k'] = get_layer_from_elev(riv_df['rbot'].values, botm_slice, m.dis.nlay)
+
+
+# %%
+# check the typical difference from the minimum to 1st quartile
+# 2 meters is not bad since that is similar uncertainty to the
+# streambed thickness
+(riv_df.Q1st-riv_df['min']).mean()
 
 
 # %%
@@ -405,9 +497,12 @@ unsat_K_all  = tc.get_tprogs_for_elev(K, riv_dem, riv_vka_bot, tprogs_info)
 # calculate geometric mean for the unsat zone routing
 unsat_K = gmean(unsat_K_all, axis=0)
 
+
+
+
+# %%
 # sample unsat K for each floodplain cell
 riv_df['uhc'] = unsat_K[riv_df.i, riv_df.j]
-
 
 # %% [markdown]
 # Calculate the conductance (C = K * l * w/ b)  
@@ -424,7 +519,11 @@ sfr_tab.columns=['time','flow']
 sfr_tab['log10_flow']=np.log10(np.where(sfr_tab.flow==0,1,sfr_tab.flow))
 sfr_tab['flow_scale'] = sfr_tab.log10_flow/sfr_tab.log10_flow.max()
 
+# %% [markdown]
+# Temporary code to substitute in for floodplain stage before data from cbec
+
 # %%
+
 max_stage = riv_df['max'].quantile(0.9)
 # based on review of results of riv vs sfr the floodplain
 # stage can't be greater than 28 m and floodplain would likely lower this
@@ -434,9 +533,8 @@ min_stage, max_stage
 # approximate stage for each stress period based on inundation
 spd_stage = min_stage+sfr_tab.flow_scale*(max_stage-min_stage)
 
-
-# %%
 spd_stage.to_csv(join(m.model_ws,'river_stage.csv'))
+
 
 # %%
 # test version
@@ -450,21 +548,78 @@ riv_df['wetted_area'] = riv_df.area
 m.dis.nper, len(sfr_tab)
 
 # %%
+# t0 = time.time()
+# riv_dict = dict()
+# for t in np.arange(0, m.dis.nper):
+#     riv_df_in = riv_df.copy()
+#     # for test dataset
+#     riv_df_in['stage'] = spd_stage[t]
+#     riv_df_in['wetted_area'] = riv_df_in.area*sfr_tab.flow_scale.iloc[t]    
+#     # drop river cells if none is saturated
+#     riv_df_in = riv_df_in.loc[riv_df_in.stage > riv_df_in.rbot]
+#     # calculate the conductance (C = K * l * w/ b)
+#     riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.wetted_area / 2
+#     # sample relevant columns for input
+#     riv_dict[t] = riv_df_in[['k','i','j','stage','cond','rbot']].values
+
+# t1 = time.time()
+# print(t1-t0)
+
+# %%
+# convert to datetime
+wse_grid.date = pd.to_datetime(wse_grid.date)
+# subset WSE data to model period
+wse_model = wse_grid[(wse_grid.date>=strt_date)&(wse_grid.date<end_date)]
+wse_model=wse_model.set_index('date')
+
+
+
+# %%
+keep_riv_cols= ['row','column','i','j','k','rbot','uhc']
+
+
+# %%
+riv_df_all = riv_df[keep_riv_cols].copy()
+# identify dates for stage data
+riv_df_all = wse_model.reset_index().merge(riv_df_all).set_index('date')
+
+# there is a slight issue in the test dataset
+# where WSE is less than the minimum cell level
+riv_df_all = riv_df_all[riv_df_all.wse>riv_df_all.rbot]
+
+# the dataset also has dates where the WSE > rbot but the area is null
+riv_df_all = riv_df_all.dropna(subset=['wse','area'])
+
+riv_df_all.to_csv(join(m.model_ws,'river_spd_df.csv'))
+
+# %%
+dates = pd.date_range(strt_date, end_date)
+# dates
+
+# %%
+t=0
+d=dates[t]
+# riv_df_in.area
+
+# %%
+# riv_dict[0][:10]
+
+# %%
+# runs pretty slow
 t0 = time.time()
 riv_dict = dict()
-for t in np.arange(0, m.dis.nper):
-    riv_df_in = riv_df.copy()
+for t, d in enumerate(dates):
+    # riv_df_in = riv_df[keep_riv_cols].copy()
+    # # identify dates for stage data
+    # riv_df_in = wse_model.loc[d].merge(riv_df_in)
+    if d in riv_df_all.index:
+        riv_df_in = riv_df_all.loc[d].copy()
 
-    riv_df_in['stage'] = spd_stage[t]
-    riv_df_in['wetted_area'] = riv_df_in.area*sfr_tab.flow_scale.iloc[t]
-    # drop river cells if none is saturated
-    riv_df_in = riv_df_in.loc[riv_df_in.stage > riv_df_in.rbot]
+    # # drop river cells if none is saturated
     # calculate the conductance (C = K * l * w/ b)
-    riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.wetted_area / 2
-    
+    riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.area / 2
     # sample relevant columns for input
-    riv_dict[t] = riv_df_in[['k','i','j','stage','cond','rbot']].values
-
+    riv_dict[t] = riv_df_in[['k','i','j','wse','cond','rbot']].values
 
 t1 = time.time()
 print(t1-t0)
@@ -480,8 +635,84 @@ riv = flopy.modflow.ModflowRiv(model = m, stress_period_data = riv_dict, ipakcb 
 # solution was to remove stress periods where stage is below rbot
 riv.check()
 
+# using updated input dataset from cbec found
+# instances of Not a number and stage below rbot
+
 # %%
 riv.write_file()
 
 # %% [markdown]
 # Update name file to account for new river package
+#
+
+# %% [markdown]
+# ## Add river obs
+# Use river obs to help post-process between recharge in floodplain and in the river.
+
+# %%
+# riv_df.shape
+# keep_bool
+
+# %%
+# differentiate between concept cells in the river vs floodplain
+zon_merge = proj_zon_stats[['row','column','i','j','mean','min','geometry']]
+flag_cells = zon_merge.merge(reach_data[['i','j','iseg','ireach','reachID']],how='left')
+
+
+# %%
+# flag_cells.reachID.isna().sum()
+# floodplain cells are group 1
+flag_cells['rvob_grp'] = 1
+# river cells are group 2
+flag_cells.loc[~flag_cells.reachID.isna(),'rvob_grp'] = 2
+
+# %%
+
+
+nqclfb
+
+# %%
+nper = m.dis.nper
+
+# %%
+# number of cell groups (number of flow observations), 
+# for cosumnes can be 2: stream or floodplain
+nqfb = 2
+# number of cells total for all cell groups
+nqcfb = riv.stress_period_data[0].shape[0]
+# number of time obs for all cell groups
+nqtfb = nper
+# number of times of flow observations for a cell group, list of length nqgb
+nqobfb = [nper, nper]
+# number of cells in a group, list of length nqgb
+nqclfb = []
+for n in flag_cells.rvob_grp.unique():
+    nqclfb += [int((flag_cells.rvob_grp==n).sum())]
+    
+# obs name, list of length nqtfb
+obsnam = ['klam_gain' + str(s).zfill(3) for s in np.arange(0,nper)]
+# obsnam = ['klam_lower', 'klam_upper']
+# number of reference stress period, list
+irefsp = np.arange(0,nper).tolist()
+# time offset from beginning of stress period, list
+toffset = [0]*nper
+# flow observation for each cell group, list
+# negative for flow out of aquifer
+flwobs = [-klam_gain_sum]*nper
+# flwobs = [klam_gain_lower,klam_gain_upper]
+# layer, row, col, factor list of length(nqfb, nqclfb) for each
+layer = [chd.stress_period_data[0].k]*nper
+row = [chd.stress_period_data[0].i]*nper
+column = [chd.stress_period_data[0].j]*nper
+fact = np.ones(nqclfb)/nqclfb
+factor = [fact]*nper
+
+# flowtype (string) – String that corresponds to the head-dependent flow boundary condition type (CHD, GHB, DRN, RIV)
+flowtype = 'RIV'
+extension = 'rvob'
+chob_unit = [40,42]
+chob = flopy.modflow.ModflowFlwob(model = m, nqfb=nqfb,nqcfb=nqcfb,nqtfb=nqtfb,nqobfb=nqobfb,nqclfb=nqclfb,
+                          obsnam=obsnam,irefsp=irefsp,toffset=toffset,flwobs=flwobs,
+                          layer=layer,row=row,column=column,factor=factor,
+                          flowtype = flowtype, extension = extension,
+                                 filenames = ['MF.rvob','MF.rvob.out'])

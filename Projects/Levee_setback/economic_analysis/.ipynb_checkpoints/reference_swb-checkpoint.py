@@ -102,8 +102,6 @@ soil_ag_all = soil_ag_all.merge(nat_lu)
 soil_ag_all = soil_ag_all[~soil_ag_all.name.isna()]
 
 # %%
-
-# %%
 # reference for field to grid cell
 grid_soil = pd.read_csv(join(soil_path, field_ids+'_field_to_cell.csv'), index_col=0)
 
@@ -134,11 +132,14 @@ end_date = '2021-9-30'
 dates = pd.date_range(strt_date, end_date)
 
 # %%
-# load CIMIS rain, ETo data
+# load CIMIS rain, ETo data m/day
 rain, ETo_df = swb.load_hyd(dates)
 
 # %%
-# load in pre-processed array of ETc for all time
+plt.plot(rain)
+
+# %%
+# load in pre-processed array of ETc for all time, m/day
 ETc_long = pd.read_hdf(join(uzf_dir, "dwr_ETc",'long_ETc_all_lu.hdf5'), key='variable')
 # convert to column format
 ETc_all = ETc_long.pivot(columns='variable', values='value')
@@ -156,12 +157,19 @@ ETc[np.isnan(ETc)] = 0
 
 
 # %%
+ETc.shape
+
+# %%
 # create soil dictionary
 soil_dict = base_soil_dict(soil_ag_all)
 # convert to class for cleaner referencing
 soil = cost_variables(soil_dict)
 # assume baseline depth of 2 meters
 soil.depth = 2
+soil.depth = soil_ag_all.SoilDepth.values
+
+# %%
+soil_dict['Ks']
 
 # %%
 # soil_crop = swb.load_soil(pred_dict[crop], crop_in)
@@ -172,19 +180,20 @@ soil.depth = 2
 # %%
 from functions.swb_functions import calc_S, calc_pc
 
-    # %%
-    nfield = soil.nfield
-    nper = ETc.shape[0]
-    
-    # m2_ac = (1/0.3048**2)/43560 # convert from m2 to acres
+# %%
+nfield = soil.nfield
+nper = ETc.shape[0]
 
-    wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
-    pc = np.zeros((nper, nfield)) # percolation
-    rp = np.zeros((nper, nfield)) # runoff 
-    ETa = np.zeros((nper, nfield)) # actual ET
-    irr_sw = np.zeros((nper,nfield))
-    irr_gw = np.zeros((nper,nfield))
-    soildepth=2
+# m2_ac = (1/0.3048**2)/43560 # convert from m2 to acres
+
+wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
+pc = np.zeros((nper, nfield)) # percolation
+rp = np.zeros((nper, nfield)) # runoff 
+ETa = np.zeros((nper, nfield)) # actual ET
+irr_sw = np.zeros((nper,nfield))
+irr_gw = np.zeros((nper,nfield))
+soildepth=2
+soildepth = soil_ag_all.SoilDepth.values
 
 # %%
 # plt.plot(water_in)
@@ -215,23 +224,55 @@ for ns, n in enumerate(np.arange(-1, nper-1)):
     wc[ns+1] = wc[ns+1] + (-pc[n+1])/soildepth
 
 # %%
+wc[ns]
+
+# %%
 ns=850
-calc_pc(wc[ns], soil.por, soil.Ks, soil.m)
+calc_pc(.4, soil.por, soil.Ks, soil.m)
 # ns
+
+# %%
+import matplotlib.pyplot as plt
+
+# %%
 
 # %%
 fig,ax = plt.subplots(3,1)
 # plt.plot(water_in, label='water in')
 ax[0].plot(rain, label='rain')
 ax[0].plot(rp.mean(axis=1), label='rp')
+ax[0].plot(ETa.mean(axis=1), label='ETc')
 ax[1].plot(pc.mean(axis=1), label='pc')
 ax[-1].plot(wc.mean(axis=1), label='wc')
 
 # runoff potential follows rain at a lesser degree
 ax[0].legend()
 
+# %% [markdown]
+# The model results seem to suggest water content is simply not filling enough to support percolation. A quick check shows once water content hits 0.4 then peroclation is quite high.
+# - i had defaulted soildepth to 2 m which appears to have held excessive soil water storage capacity to allow percolation
+
+# %% [markdown]
+# From regional model with irrigation:
+# - Rainfall+irrigation is usually 0.02 to 0.05
+# - Runoff os around 0.01 to 0.02
+# - ET is around 0.005 in summer
+# - percolation hoavers around 0.001 or a little below
+# - VWC is usually 0.2 in winter and 0.3 in wet years
+
 # %%
-pc = no_irr_swb(soil, rain, ETc)
+# this versoin ends up with zero pc
+# pc = no_irr_swb(soil, rain, ETc)
+
+# %%
+
+# %%
+# convert percolation to dataframe for output
+pc_df = pd.DataFrame(pc, columns=soil_ag_all.UniqueID.values)
+pc_df.index = dates
+
+pc_df.to_csv( join(proj_dir,'native_parcel_zonalstats', 
+                   'swb_percolation.csv'))
 
 # %% [markdown]
 # # check results

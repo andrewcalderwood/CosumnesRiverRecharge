@@ -80,6 +80,10 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 
+# %%
+mf_dir = join(doc_dir, 'GitHub','CosumnesRiverRecharge','modflow_development')
+add_path(mf_dir)
+
 # %% [markdown]
 # # Load data files
 
@@ -112,6 +116,8 @@ end_date = pd.to_datetime('2022-09-30') #
 strt_date = pd.to_datetime('2014-10-01')
 strt_date = pd.to_datetime('2000-10-01')
 
+ss_strt = pd.to_datetime('2000-10-01')
+ss_end = pd.to_datetime('2004-09-30')
 
 dates = pd.date_range(strt_date, end_date)
 
@@ -175,17 +181,13 @@ tprog_total = 64 # 16, 64 3+ hrs #12
 # 30 m amsl creeps into the alluvium a little bit
 # might as well keep up to 40 m and just live with longer run time, it might save more to do more upscaling at depth
 fine_tprogs = True
-if fine_tprogs:
-    # only need tprogs data nearer surface river-aquifer interaction
-    tprog_strt = 40
-    tprog_total = 104 #  
+if fine_tprogs: 
     # thinner tprogs for calibration run
     tprog_strt = 10
-    tprog_total = 40 
-
+    tprog_total = 40 # 150 ft, below WT
+    tprog_total = 30 # 100 ft, at WT
 
 nlay_tprogs = int(tprog_total/tprog_thick)
-# tprogs_strt=-4
 # nlay_tprogs = 0
 
 num_leveling_layers = 1 # layers to create the upscaled unsaturated zone
@@ -193,9 +195,9 @@ drain_layer = 1 # layer to insert in top to drain foothills (filled with regular
 nlay = 2 + num_leveling_layers + drain_layer + nlay_tprogs
 
 # There is essentially no difference bewtween WGS84 and NAD83 for UTM Zone 10N
-# proj4_str='EPSG:26910'
 proj4_str='+proj=utm +zone=10 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 print('TPROGs layers', nlay_tprogs)
+print(nlay)
 
 # %% [markdown]
 # ## Individual Users may change loadpath 
@@ -300,6 +302,7 @@ laguna_bot = np.loadtxt(join(bas_dir, 'mehrten_top.txt'))
 mehrten_bot = np.loadtxt(join(bas_dir, 'mehrten_bottom.txt'))
 no_flow_bound = np.loadtxt(join(bas_dir, 'no_flow_boundary.txt'))
 
+
 # %% [markdown]
 # ## Adjustment to bottom boundary to ensure sufficient top layer thickness for the TPROGS model
 # Although the bottom boundaries are being artifically lowered to allow for sufficient layer thickness, this will be corrected when ibound is implemented based on where the actual bottom boundary is and where there is high elevations based on likelihood to be volcanics geology.  
@@ -314,39 +317,48 @@ no_flow_bound = np.loadtxt(join(bas_dir, 'no_flow_boundary.txt'))
 # leveling_layer_bottom = np.round(np.min(dem_data) - num_leveling_layers*1) - 1
 # minimum thickness between top layer and Laguna?
 # leveling_layer_thickness = [10] # (dem_data - leveling_layer_bottom)/num_leveling_layers
-
-botm[num_leveling_layers-1,:,:] = tprog_strt
-# for i in np.arange(num_leveling_layers-1,0,-1):
-#     botm[i-1,:,:] = botm[i,:,:] - leveling_layer_thickness[i]
- 
-# if a drain layer is active then move leveling layer down
-if drain_layer ==1:
-    botm[1] = tprog_strt
-    botm[0] = dem_data - 1
-    # drain layer must be above 2nd layer
-    botm[0] = np.where(botm[0] <= botm[1] + 1 , botm[1] + 1, botm[0])
-   
-# Create TPROGS layers from top down
-tprog_strt_lay = num_leveling_layers+drain_layer
-for i in np.arange(tprog_strt_lay, tprog_strt_lay + nlay_tprogs):
-    botm[i,:,:] = botm[i-1,:,:] -tprog_thick
+def set_layer_botm(botm,dem_data, 
+                    tprog_strt, tprog_thick, nlay_tprogs,
+                   laguna_bot, mehrten_bot,
+                   num_leveling_layers, drain_layer):
+    botm[num_leveling_layers-1,:,:] = tprog_strt
+    # for i in np.arange(num_leveling_layers-1,0,-1):
+    #     botm[i-1,:,:] = botm[i,:,:] - leveling_layer_thickness[i]
+     
+    # if a drain layer is active then move leveling layer down
+    if drain_layer ==1:
+        botm[1] = tprog_strt
+        botm[0] = dem_data - 1
+        # drain layer must be above 2nd layer
+        botm[0] = np.where(botm[0] <= botm[1] + 1 , botm[1] + 1, botm[0])
+       
+    # Create TPROGS layers from top down
+    tprog_strt_lay = num_leveling_layers+drain_layer
+    for i in np.arange(tprog_strt_lay, tprog_strt_lay + nlay_tprogs):
+        botm[i,:,:] = botm[i-1,:,:] -tprog_thick
+        
+    # Thickness to give to bottom layers below the TPROGS layers just to provide adequate spacing,
+    # this will be corrected by changing the geology in the layers above to account for what is actually in
+    # the Mehrten and what is in the Laguna formations, thickness of 5 also prevents any messy overlap
+    thickness_to_skip =10
+    botm[-2] = laguna_bot
+    # need to adapat this for the case when the bottom of a layer doesn't impact the laguna
+    # # Find where top boundary of Mehrten Formation rises within 10 meters of the top layer (10m for sufficient layer thickness)
+    bot3ind = np.min(np.where(botm[-2,:,:]>botm[-3,:,:]- thickness_to_skip)[1])
     
-# Thickness to give to bottom layers below the TPROGS layers just to provide adequate spacing,
-# this will be corrected by changing the geology in the layers above to account for what is actually in
-# the Mehrten and what is in the Laguna formations, thickness of 5 also prevents any messy overlap
-thickness_to_skip =10
-botm[-2] = laguna_bot
-# need to adapat this for the case when the bottom of a layer doesn't impact the laguna
-# # Find where top boundary of Mehrten Formation rises within 10 meters of the top layer (10m for sufficient layer thickness)
-bot3ind = np.min(np.where(botm[-2,:,:]>botm[-3,:,:]- thickness_to_skip)[1])
+    # # Where the top boundary of Mehrten was within 10 meters of the top layer 
+    # # set it equal to top layer elevation minus 10 for sufficient layer thickness
+    botm[-2,:,bot3ind:] = botm[-3,0,bot3ind]- thickness_to_skip
+    botm[-1] = mehrten_bot
+    # # Repeat steps above for bottom of Mehrten formation with the top of the Mehrten formation
+    bot3ind = np.min(np.where(botm[-1,0,:]>botm[-2,0,:]- thickness_to_skip))
+    botm[-1,:,bot3ind:] = botm[-2,0,bot3ind]-thickness_to_skip
+    return(botm)
 
-# # Where the top boundary of Mehrten was within 10 meters of the top layer 
-# # set it equal to top layer elevation minus 10 for sufficient layer thickness
-botm[-2,:,bot3ind:] = botm[-3,0,bot3ind]- thickness_to_skip
-botm[-1] = mehrten_bot
-# # Repeat steps above for bottom of Mehrten formation with the top of the Mehrten formation
-bot3ind = np.min(np.where(botm[-1,0,:]>botm[-2,0,:]- thickness_to_skip))
-botm[-1,:,bot3ind:] = botm[-2,0,bot3ind]-thickness_to_skip
+botm = set_layer_botm(botm,dem_data, 
+                    tprog_strt, tprog_thick, nlay_tprogs,
+                   laguna_bot, mehrten_bot,
+                   num_leveling_layers, drain_layer)
 
 # %%
 # when you apply the 1/200 aspect the dips in the cell seem a lot less severe, so may just leave the layering as is
@@ -364,9 +376,12 @@ for i in np.arange(0,nlay):
 m.dis.top = dem_data
 # top elevations of tprogs
 tprogs_top = np.full((nrow,ncol), tprog_strt + tprog_thick)
-if fine_tprogs: 
-    top = np.where(tprogs_top>dem_data, tprogs_top, dem_data)
-    m.dis.top = top
+# where tprogs data exceeds the top elevations update top
+# elevations
+# top = np.where(tprogs_top>dem_data, tprogs_top, dem_data)
+top = np.copy(dem_data)
+top[top<tprogs_top] = tprogs_top[top<tprogs_top]
+m.dis.top = top
 
 # Bottom of model based on geology
 m.dis.botm = botm
@@ -414,6 +429,11 @@ plt.imshow(ibound[0,:,:])
 # This should be more of a function as most of this is independent of model input except the layer bottoms.
 
 # %%
+from shapely.ops import LineString, linemerge, polygonize, unary_union
+from shapely.geometry import Polygon
+
+
+# %%
 import pprint
 from rasterio.features import shapes, rasterize
 
@@ -430,18 +450,32 @@ for i in np.arange(0,len(alldata)):
 #         maxl = len(alldata[i][0].get('coordinates')[0])
 #         ind = i
 # select the two longest linestring indexes (1st will be chunk down of divide (lower elevation) 2nd will chunk above (high elev))
-maxl1, maxl2 = np.where(maxl>np.mean(maxl))[0]
-print(maxl[maxl>np.mean(maxl)])
+# maxl1, maxl2 = np.where(maxl>np.mean(maxl))[0]
+# print(maxl[maxl>np.mean(maxl)])
 
 # %%
-# verify the correct vectorized object is selected
+
+# the two largest objects will be the two primary sides of the split
+maxl1 = np.where(maxl==np.sort(maxl)[-1])[0][0]
+def get_rast_poly(maxl, n):
+    maxl2 = np.where(maxl==np.sort(maxl)[-n])[0][0]
+    # verify the correct vectorized object is selected
+    temp = alldata[maxl2][0].get('coordinates')[0]
+    tl = Polygon(temp)
+    return(tl)
+# the line string object of
+tl1 = get_rast_poly(maxl, 1)
+tl2 = get_rast_poly(maxl, 2)
+# determine the smaller of the polygon objects to identify the mountain side
+mtn_id = np.argmin((tl1.area, tl2.area))+1
+
+# %%
+# # now create a linestring object of the smaller polygon
+maxl2 = np.where(maxl==np.sort(maxl)[-mtn_id])[0][0]
 temp = alldata[maxl2][0].get('coordinates')[0]
 tl = LineString(temp)
-tl
 
 # %%
-from shapely.ops import LineString, linemerge, polygonize, unary_union
-tl = LineString(temp)
 
 # Get the constant head or general head boundary after the no flow cells
 linerast = rasterio.features.rasterize([tl], out_shape = np.array((nrow,ncol)))
@@ -455,43 +489,25 @@ np.shape(linerast)
 # ibound[0,linerast==1] = -1
 
 # %%
-from shapely.ops import LineString, linemerge, polygonize, unary_union
-tl = LineString(temp)
-tu = unary_union(tl)
-poly = list(polygonize(tu))
 # Set the polygon/raster for the top layer, no buffer needed
-poly0 = poly[0].buffer(distance = 0)
+poly0 = Polygon(temp)
 polyrast0 = rasterio.features.rasterize([poly0], out_shape = np.array((nrow,ncol)))
-# Set the polygon/raster for the top layer, slight buffer needed to expand geologic formation outward with depth as 
-# naturally occurs
-poly1 = poly[0].buffer(distance = 13)
-polyrast1 = rasterio.features.rasterize([poly1], out_shape = np.array((nrow,ncol)))
-# Set the polygon/raster for the bottom layer, largest buffer needed
-poly2 = poly[0].buffer(distance = 17)
-polyrast2 = rasterio.features.rasterize([poly2], out_shape = np.array((nrow,ncol)))
 
 ibound = np.ones([nlay, nrow,ncol])
-# Need to decide whether all layers or just the top layer are affected by ibound from elevation
-# it is better to define the top layer with a simple dem>elevation check than the rasterize functins that isn't perfect
-# ibound[0,polyrast0==1] = 0
-# Need to decide whether all layers or just the top layer are affected by ibound from elevation
-ibound[-2,polyrast1==1] = 0
-# Need to decide whether all layers or just the top layer are affected by ibound from elevation
-ibound[-1,polyrast2==1] = 0
 
 # The bottom boundary has a dip of 1-2 degrees which is essentially a slope of 0.015 based on given cross section data
-# The layer thickness for TPROGS
-laythk = tprog_thick
-# It appeared shapely buffer is on the scale of kilometers
-run = (laythk/0.015)/1000
-run_const = run
-for i in np.arange(1,nlay-2):
-    # error saying poly[i] is not subscriptable
-    polyi = poly[0].buffer(distance = run)
+# calculate average layer thickness to inform step of deep geology
+avg_thick = abs(np.diff(top_botm[:,polyrast0==1],axis=0).mean(axis=1))
+run_total = 0
+for i in np.arange(1,nlay):
+    # slope of bottom boundary
+    run = (avg_thick[i-1]/0.02)/delr
+    run_total += run
+    polyi = Polygon(temp).buffer(distance = run_total)
     polyrast = rasterio.features.rasterize([polyi], out_shape = np.array((nrow,ncol)))
     # Need to decide whether all layers or just the top layer are affected by ibound from elevation
     ibound[i,polyrast==1] = 0
-    run += run_const
+# plt.imshow(ibound[:,50], aspect=5)
 
 # %%
 # wherever the constant head/specified head bound is the cells need to be active
@@ -555,20 +571,8 @@ ibound = np.ones((nlay,nrow,ncol))
 ibound[botm > dem_data] = 0
 
 
-
-# %%
-# there are a few isolated active cells that OWHM auto marks as inactive
-# it would be better to pre-process this
-
-# %%
-# plt.imshow(deep_geology[0])
-# plt.colorbar()
-
 # %%
 from mf_utility import find_isolated_active
-
-# %%
-
 
 # where the ibound active cells are horizontally surrounded, convert to inactive
 # hasn't removed any from regional model as is
@@ -730,7 +734,8 @@ tprogs_info = [80, -80, 320]
 
 tprogs_line = np.loadtxt(tprogs_files[r])
 # # # using m.dis.top to account for cases when top is above dem
-masked_tprogs= tc.tprogs_cut_elev(tprogs_line, m.dis.top.array, tprogs_info)
+# masked_tprogs= tc.tprogs_cut_elev(tprogs_line, m.dis.top.array, tprogs_info)
+masked_tprogs= tc.tprogs_cut_elev(tprogs_line, np.full((nrow,ncol),tprogs_info[0]), tprogs_info)
 
 # with h5py.File(tprogs_fn, mode='r') as f:
 #     tprogs_arr = f['tprogs']['r'+str(r).zfill(3)][:].astype(float)
@@ -769,6 +774,7 @@ Ss_c = tc.get_tprogs_for_elev(Ss, top, bot1, tprogs_info)
 Sy_c = tc.get_tprogs_for_elev(Sy, top, bot1, tprogs_info)
 n_c = tc.get_tprogs_for_elev(porosity, top, bot1, tprogs_info)
 
+tprog_strt_lay = num_leveling_layers+drain_layer
 # upscale as preset
 for kt, k in enumerate(np.arange(tprog_strt_lay,nlay_tprogs+tprog_strt_lay)):
     hk[k,:] = np.mean(K_c[upscale*kt:upscale*(kt+1)], axis=0)
@@ -809,15 +815,6 @@ vka_quants['facies'] = params.loc[tprogs_vals].Lithology.values
 for p in tprogs_vals:
     vka[(vka<vka_quants.loc[p,'vka_max'])&(vka>vka_quants.loc[p,'vka_min'])] /= params.vani[p]
 
-
-# %%
-# vka_quants
-# vka_quants = params.loc[1:4].copy()[['Lithology','K_m_d']].rename(columns={"K_m_d":'vka_max'})
-# vka_quants2
-# vka_min = vka_quants2.loc[1:3, 'vka_max'] + (vka_quants2.loc[1:4].vka_max.diff().values[1:]/2)
-# vka_min.loc[4] = vka_quants2.loc[4,'vka_max']
-# vka_min.name = 'vka_min'
-# vka_quants2pd.concat((vka_quants2, vka_min), axis=1)
 
 # %%
 vka_quants.to_csv(join(model_ws, 'vka_quants.csv'))
@@ -1207,6 +1204,9 @@ def clean_reach_routing(XSg):
     #     XSg.loc[XSg.iseg==ns,'ireach'] = np.arange(1,np.sum(XSg.iseg==ns)+1)
     return(XSg)
     
+
+
+# %%
 XSg  = XSg_all.sort_values(['Site','reach']).copy()
 XSg = clean_reach_routing(XSg)
 # need to start all segments one further from Michigan bar (they assume MB starts at 1)
@@ -1394,20 +1394,18 @@ sfr_scale = xs_sfr[['iseg','reach','rname']].copy().assign(strhc1_scale=1)
 sfr_scale.loc[sfr_scale.rname=='Deer Creek', 'strhc1_scale'] = dc_scale
 sfr_scale.loc[sfr_scale.rname=='Cosumnes River', 'strhc1_scale'] = cr_scale
 
-# %% [markdown]
-# This code had an issue with tc.get_tprogs_for_elev on 2024-7-17 calling an excess memory error.
-
 # %%
 # calculate the mean water surface for the simulation period
-mean_wse_arr = np.mean(kriged_arr, axis=0)
+mean_wse_arr = np.nanmean(kriged_arr, axis=0)
 
 sfr_dem = np.copy(dem_data)
 sfr_dem[sfr_rows, sfr_cols] = sfr_top
 # use 10 mean below land surface or historic wse whichever is shallower
 sfr_hk_bot = np.max((sfr_dem-15, mean_wse_arr), axis=0)
+# if it returns an elevation within 1 m of stream bottom then return at least 1 m below stream bottom
+sfr_hk_bot = np.where(sfr_hk_bot>sfr_dem-1, sfr_dem - 1, sfr_hk_bot)
 
 # sample unsaturated zone conductivity for uhc
-# unsat_K_all  = tc.get_tprogs_for_elev(K, sfr_dem, mean_wse_arr, tprogs_info)
 unsat_K_all  = tc.get_tprogs_for_elev(K, sfr_dem, sfr_hk_bot, tprogs_info)
 # calculate geometric mean for the unsat zone routing
 unsat_K = gmean(unsat_K_all, axis=0)
@@ -1752,7 +1750,7 @@ cfs2cmd = (86400/(3.28**3))
 inflow['flow_cmd'] = inflow.flow_cfs * cfs2cmd
 
 # filter out data between the stress period dates
-inflow_ss = inflow.loc[ss_strt:strt_date]
+inflow_ss = inflow.loc[ss_strt:ss_end]
 inflow = inflow.loc[strt_date:end_date]
 
 flw_time = perlen[:-1]
@@ -1919,11 +1917,14 @@ if scenario != 'no_reconnection':
 # ## Add Gage for lake/sfr output
 
 # %%
+
+# %%
 sensors = pd.read_csv(gwfm_dir+'/Mapping/allsensor_latlong.csv')
 sensors = gpd.GeoDataFrame(sensors,geometry=gpd.points_from_xy(sensors.Longitude, sensors.Latitude))
 sensors.crs = 'epsg:4326'
 sensors = sensors.to_crs('epsg:32610')
-mcc_grid = gpd.sjoin(sensors[sensors.Site_id=='MCC'],xs_sfr)
+xs_sfr_gdf = grid_p.merge(xs_sfr) # make geospatial xs_sfr for spatial join
+mcc_grid = gpd.sjoin(sensors[sensors.Site_id=='MCC'],xs_sfr_gdf)
 
 
 # %%
@@ -2047,38 +2048,43 @@ stats.plot(y=['ci95_hi','ci95_lo'], ax=ax, color='gray', alpha=0.9)
 
 # %%
 
-def prep_ghb_df(ghb_df, hk):
-    """ Given rows and columns create GHB based on interpolated head levels"""
-    # pull out head for rows and columns
-    rows = ghb_df.row.values
-    cols = ghb_df.column.values
-    ghb_lay = ghb_df.layer.values
-    ghb_hd = ghb_df.set_index(['row','column'])
-    head = ghb_hd.loc[list(zip(rows, cols))].value.values
-    # ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay) #0-based
+# def prep_ghb_df(ghb_df, hk, nlay):
+#     """ Given rows and columns create GHB based on interpolated head levels"""
+#     # pull out head for rows and columns
+#     rows = ghb_df.row.values
+#     cols = ghb_df.column.values
+#     ghb_lay = ghb_df.layer.values
+#     ghb_hd = ghb_df.set_index(['row','column'])
+#     head = ghb_hd.loc[list(zip(rows, cols))].value.values
+#     # ghb_lay = get_layer_from_elev(head, botm[:,rows, cols], m.dis.nlay) #0-based
 
-    df = pd.DataFrame(np.zeros((np.sum(nlay - ghb_lay),5)))
-    df.columns = ['k','i','j','bhead','cond']
-    # get all of the i, j,k indices to reduce math done in the for loop
-    n=0
-    nk = 0 
-    for i, j in list(zip(rows,cols)):
-        for k in np.arange(ghb_lay[nk], nlay):
-            df.loc[n,'i'] = i
-            df.loc[n,'j'] = j
-            df.loc[n,'k'] = k
-            n+=1
-        # update layer sampling location
-        nk +=1
+#     df = pd.DataFrame(np.zeros((np.sum(nlay - ghb_lay),5)))
+#     df.columns = ['k','i','j','bhead','cond']
+#     # get all of the i, j,k indices to reduce math done in the for loop
+#     n=0
+#     nk = 0 
+#     for i, j in list(zip(rows,cols)):
+#         for k in np.arange(ghb_lay[nk], nlay):
+#             df.loc[n,'i'] = i
+#             df.loc[n,'j'] = j
+#             df.loc[n,'k'] = k
+#             n+=1
+#         # update layer sampling location
+#         nk +=1
 
-    df[['k','i','j']] = df[['k','i','j']].astype(int)
-#     hk = hk[df.k, df.i, df.j] # old hk with cell by cell values
-    distance = ghb_hd.loc[list(zip(df.i, df.j))].ghb_dist.values
-    cond = hk*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*delr/distance
-    df.cond = cond
-    df.bhead = ghb_hd.loc[list(zip(df.i, df.j))].value.values
-    # drop cells where the head is below the deepest cell?
-    return(df)
+#     df[['k','i','j']] = df[['k','i','j']].astype(int)
+# #     hk = hk[df.k, df.i, df.j] # old hk with cell by cell values
+#     distance = ghb_hd.loc[list(zip(df.i, df.j))].ghb_dist.values
+#     cond = hk*(top_botm[df.k, df.i, df.j]-top_botm[df.k +1 , df.i, df.j])*delr/distance
+#     df.cond = cond
+#     df.bhead = ghb_hd.loc[list(zip(df.i, df.j))].value.values
+#     # drop cells where the head is below the deepest cell?
+#     return(df)
+
+# %%
+import GHB.f_ghb_utilities
+reload(GHB.f_ghb_utilities)
+from GHB.f_ghb_utilities import prep_ghb_df
 
 
 # %%
@@ -2145,7 +2151,7 @@ ghb_hk = np.nanmean(hk) # temporary fill in to account for new parameters
 if ss_bool == True:
     # set steady state period
 #     ghb_all_ss = ghb_df(ghb_ss.row, ghb_ss.column, ghb_ss.set_index(['row','column']), distance = 1)
-    ghb_all_ss = prep_ghb_df(ghb_ss, ghb_hk)
+    ghb_all_ss = prep_ghb_df(ghb_ss, ghb_hk,top_botm)
     ghb_dict[0] = pd.concat((ghb_all_ss, ghbdelta_spd)).values
 
 
@@ -2153,7 +2159,7 @@ for n in np.arange(0, len(months)):
     df_spd = df_mon.loc[months[n]]
     spd = month_intervals[n]
 #     ghb_gen = ghb_df(df_spd.row, df_spd.column, df_spd.set_index(['row','column']), distance = 1)
-    ghb_gen = prep_ghb_df(df_spd, ghb_hk)
+    ghb_gen = prep_ghb_df(df_spd, ghb_hk, top_botm)
     ghb_dict[spd] = pd.concat((ghb_gen, ghbdelta_spd)).values
     
 
@@ -2329,7 +2335,7 @@ rain_arr = np.repeat(np.repeat(np.reshape(rain_df.values, (rain_df.shape[0],1,1)
 
 
 # create array for every steady state period of rainfall
-rain_df = rain_m[ss_strt:strt_date].resample('D').interpolate('zero')['Fair Oaks']
+rain_df = rain_m[ss_strt:ss_end].resample('D').interpolate('zero')['Fair Oaks']
 rain_arr_ss = np.repeat(np.repeat(np.reshape(rain_df.values, (rain_df.shape[0],1,1)), nrow, axis=1),ncol, axis=2)
 rain_arr_ss = rain_arr_ss.mean(axis=0)
 
@@ -2339,7 +2345,7 @@ agETc, natETc = dwr_etc(strt_date, end_date)
 ETc = agETc + natETc
 
 # %%
-ss_agETc, ss_natETc = dwr_etc(ss_strt, strt_date)
+ss_agETc, ss_natETc = dwr_etc(ss_strt, ss_end)
 ss_ETc = ss_agETc+ss_natETc
 
 # %% [markdown]

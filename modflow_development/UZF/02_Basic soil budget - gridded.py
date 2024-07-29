@@ -404,11 +404,15 @@ plt.plot(last2_ts)
 # The summed irrigation is less than ETc because not all of the land is irrigated. 
 
 # %%
+pc[:,~ag_arr].mean(axis=1).mean()/pc[:,ag_arr].mean(axis=1).mean()
+
+# %%
 fig,ax = plt.subplots(6,1,sharex=True)
 ax[0].plot(rain_arr.mean(axis=(1,2)))
 ax[1].plot(rp.mean(axis=(1,2)))
 ax[2].plot(ETa.mean(axis=(1,2)))
-ax[3].plot(pc.mean(axis=(1,2)))
+ax[3].plot(pc.mean(axis=(1,2)),label='all')
+ax[3].plot(pc[:,~ag_arr].mean(axis=(1)), label='native')
 ax[4].plot(wc.mean(axis=(1,2)))
 # plot irrigation and applied water for ag lands only
 ax[5].plot(ETa[:,ag_arr].mean(axis=(1)))

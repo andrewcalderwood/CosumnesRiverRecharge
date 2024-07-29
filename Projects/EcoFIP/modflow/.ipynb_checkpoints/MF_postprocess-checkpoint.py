@@ -126,6 +126,8 @@ base_model_ws = join(loadpth, 'EcoFIP')
 
 # list the modflow model concept workspaces
 concepts = os.listdir(base_model_ws)
+print(concepts)
+
 
 
 # %% [markdown]
@@ -145,11 +147,17 @@ wb0, out_cols, in_cols = clean_wb(model_ws, dt_ref)
 
 # %%
 n= 0
-concept_ws = join(base_model_ws, concepts[n])
+concept = concepts[n]
+concept = 'Hanford_Gravel'
+
+concept_ws = join(base_model_ws, concept)
+print(concept)
+
+# %%
 wb, out_cols, in_cols = clean_wb(concept_ws, dt_ref)
 
 # %%
-label_restoration = concepts[n]
+label_restoration = concept
 label_baseline = 'Baseline'
 
 # %%
@@ -178,12 +186,15 @@ fig.tight_layout(h_pad=0.1)
 # %%
 # also want to review the floodplain recharge which only exists in the 
 # concept version
+scale = 1E-3
 riv_plt = wb.resample('MS').mean(numeric_only=True).RIV_IN.multiply(scale)
 fig,ax =plt.subplots(figsize=(6,3))
 riv_plt.plot(ax=ax)
 
 # %% [markdown]
-# Floodplain recharge (RIV_IN) shows declining rates with time likely as more water is recharged there is a reduced gradient. However, the rates are about 1/5 of the total stream seepage so it may be slightly overestimating recharge.
+# - For Blodgett_Dam Floodplain recharge (RIV_IN) shows declining rates with time likely as more water is recharged there is a reduced gradient. However, the rates are about 1/5 of the total stream seepage so it may be slightly overestimating recharge.
+# - the results for Hanford_Gravel are similar but with more frequent inundation each year because it includes stream cells.
+#     - because it includes stream cells we should set up the results to differentiate stream recharge and floodplain recharge form the Concepts. In this case the baseline model may need to have RIV cells inserted in the stream cells to help maintain a consistent comparison or we need to reconsider the conductances and gradient verus that in SFR
 
 # %%
 from matplotlib.patches import Patch
@@ -228,6 +239,22 @@ fig.tight_layout(h_pad=0.1)
 # - stream profile to show the change in groundwater elevation and seepage between concepts.
 
 # %%
+# floodplain cell locations for sampling groundwater levels
+riv_df = pd.read_csv(join(concept_ws, 'river_ijk.csv'),index_col=0)
+riv_idx = list(zip(riv_df.k, riv_df.i, riv_df.j))
+# input floodplain stage
+# spd_stage = pd.read_csv(join(concept_ws,'river_stage.csv')) # test
+
+riv_df_all = pd.read_csv(join(concept_ws,'river_spd_df.csv'))
+riv_df_all.date = pd.to_datetime(riv_df_all.date)
+riv_df_all['depth'] = riv_df_all.wse - riv_df_all.rbot
+
+# %%
+# the cells overlapped by floodplain and river
+reach_chk = pd.read_csv(join(concept_ws, 'sfr_riv_df.csv'))
+# reach_chk
+
+# %%
 import mf_utility
 from importlib import reload
 reload(mf_utility)
@@ -249,6 +276,14 @@ sfr_stage_mean0 = riv_sfrdf0.groupby('dt')['stage'].mean()
 # sfrdf0
 
 # %%
+# compare the simulated SFR stage/depth to that from cbec
+riv_sfr_chk = riv_df_all[['date','row','column','depth','area','vol']].merge(sfrdf, left_on=['date','row','column'], 
+                 right_on=['dt','row','column'])
+# calculate difference in depth from cbec to SFR
+riv_sfr_chk['depth_diff'] = riv_sfr_chk.depth_x-riv_sfr_chk.depth_y
+riv_sfr_chk.groupby(['row','column'])['depth_diff'].mean()
+
+# %%
 # riv_sfr_sum.plot()
 
 # %%
@@ -258,14 +293,14 @@ sfr_stage_mean0 = riv_sfrdf0.groupby('dt')['stage'].mean()
 # sfrdf0
 
 # %%
-ax.set_yscale('log')
-# ax.set_xlim(.7,.8)
-# ax.set_xlim(0, .7)
-# ax.set_xlim(0.55,0.65)
-ax.set_ylabel('Discharge ($m^3/d$)')
-ax.set_xlabel('Exceedance Probability')
-# plt_flow_duration(sfrdf0, sfrdf, [2015], ax)
-fig.legend([label_restoration,label_baseline], ncol=2, loc='outside upper center', bbox_to_anchor=(0.5, 1.0),)
+# ax.set_yscale('log')
+# # ax.set_xlim(.7,.8)
+# # ax.set_xlim(0, .7)
+# # ax.set_xlim(0.55,0.65)
+# ax.set_ylabel('Discharge ($m^3/d$)')
+# ax.set_xlabel('Exceedance Probability')
+# # plt_flow_duration(sfrdf0, sfrdf, [2015], ax)
+# fig.legend([label_restoration,label_baseline], ncol=2, loc='outside upper center', bbox_to_anchor=(0.5, 1.0),)
 
 
 # %% [markdown]
@@ -283,15 +318,11 @@ riv_plt = wb.resample('MS').mean(numeric_only=True).RIV_IN
 
 
 # %%
-# floodplain cell locations for sampling groundwater levels
-riv_df = pd.read_csv(join(concept_ws, 'river_ijk.csv'),index_col=0)
-riv_idx = list(zip(riv_df.k, riv_df.i, riv_df.j))
-# input floodplain stage
-spd_stage = pd.read_csv(join(concept_ws,'river_stage.csv'))
-
-# %%
 riv_head0 = get_lak_head(hdobj0, riv_idx)
 riv_head = get_lak_head(hdobj, riv_idx)
+
+# %%
+avg_wse = riv_df_all.groupby('date')[['wse']].mean()
 
 # %%
 
@@ -307,7 +338,8 @@ ax[1].plot(sfr_leak_sum0.multiply(1E-3).values) # baseline
 ax[1].set_ylabel('Floodplain Recharge\n(thousand $m^3/day$)')
 
 # ax[2].yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
-ax[-2].plot(spd_stage.flow_scale.values)
+# ax[-2].plot(spd_stage.flow_scale.values)
+ax[-2].plot(avg_wse.values)
 ax[-2].plot(sfr_stage_mean0.values)
 ax[2].set_ylabel('Floodplain\nStage (m)')
 
@@ -319,5 +351,62 @@ fig.tight_layout(h_pad=-0.1)
 plt.xlabel('Datetime')
 
 # %% [markdown]
+# - When running the test info on hanford gravel we find a similar problem with higher rates of summertime recharge when it is driven by the stream only and winter recharge is 10-20 times greater. We may need to reduce the conductance or compare how the gradient is calculated.
+
+# %% [markdown]
 # - The test concept of Blodgett Dam shows the concept floodplain stage is way higher than the pre-existing river stage which isn't possible. The floodplain stage should not be greater than 27 on average, this will lower max stage by 7 m.
 # - Adjusting the max stage to 27 m produced more reasonable results where stage doesn't exceed river stage and we don't see as extreme recharge and rise in GWL. Likely we should remove the log scale calculation as it allows the floodplain to remain elevated for longer.
+
+# %%
+# define zone where there is floodplain cells
+zon = np.zeros((m.dis.nrow, m.dis.ncol),dtype=int)
+zon[riv_df.i, riv_df.j] = 1
+
+# %%
+# flopy.modflow.Modflow
+
+# %%
+time0 = time.time()
+cbc = join(concept_ws, 'MF.cbc')
+kstpkper = dt_ref.kstpkper.iloc[:18]
+zb = flopy.utils.ZoneBudget(cbc, zon, kstpkper)
+# zb_df = zb.get_dataframes()
+time1 = time.time()
+dtime = time1-time0
+print(dtime)
+
+# %%
+# zb.get_dataframes()
+# can sample just river leakage to save time
+riv_wb = pd.DataFrame(zb.get_budget(['FROM_RIVER_LEAKGE','TO_RIVER_LEAKAGE']))
+zb.get_dataframes()
+
+
+# %%
+def zone_clean(cbc,zon,  kstpkper):
+    zb = flopy.utils.ZoneBudget(cbc, zon, kstpkper)
+    zb_df = zb.get_dataframes()
+    # ungroup by timestep
+    zb_df = zb_df.reset_index()
+    names = zb_df.name.unique()
+    zb_df = zb_df.pivot(index = 'totim', columns = 'name',values = 'ZONE_1')
+    
+    # columns to make negative
+    to_cols = zb_df.columns[zb_df.columns.str.contains('TO_')]
+    # get net GHB
+    zb_df['GHB_NET'] = zb_df.TO_HEAD_DEP_BOUNDS - zb_df.FROM_HEAD_DEP_BOUNDS
+    # to storage is gw increase (positive)
+    stor_cols = zb_df.columns[zb_df.columns.str.contains('STORAGE')]
+    zb_df['dSTORAGE'] = (zb_df.TO_STORAGE - zb_df.FROM_STORAGE)
+    zb_df['dSTORAGE_sum'] = zb_df.dSTORAGE.copy().cumsum()
+    zb_df = zb_df.drop(columns=stor_cols)
+    zb_df = zb_df.reset_index()
+    strt_date = pd.to_datetime(m.dis.start_datetime)
+    zb_df.totim = strt_date+(zb_df.totim*24).astype('timedelta64[h]')
+    zb_df = zb_df.set_index('totim')
+    # convert 4 hr time steps to daily basis
+    zb_df = zb_df.resample('D').mean()
+    # summarize to monthly sum
+    zb_mon = zb_df.resample('MS').sum()
+    zb_mon['PERCENT_ERROR'] = zb_mon['IN-OUT']/np.mean((zb_mon.TOTAL_IN, zb_mon.TOTAL_OUT), axis=0)
+    return(zb_df, zb_mon)
