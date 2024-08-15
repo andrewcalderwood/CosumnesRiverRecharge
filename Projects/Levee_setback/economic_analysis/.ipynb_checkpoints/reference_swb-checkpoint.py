@@ -94,6 +94,8 @@ CN = pd.read_csv(join(soil_path, field_ids+'_field_CN.csv'),index_col = 0)
 nat_lu = pd.read_csv(join(proj_dir, 'native_parcel_zonalstats','native_land_use.csv'))
 
 # %%
+
+# %%
 soil_ag_all = pd.merge(soil_ag_in, CN)
 
 # add crop data to fields, NAs are introduced for when a crop isn't specified
@@ -125,6 +127,7 @@ def no_irr_swb(soil, rain, ETc):
 
 # %% [markdown]
 # We should be able to run all fields at once since there is no interdependency or optimization required.
+# - for the irrigated fields in the winter we need to run a code like this that updates based on crops.
 
 # %%
 strt_date = '2014-10-1'
@@ -134,9 +137,6 @@ dates = pd.date_range(strt_date, end_date)
 # %%
 # load CIMIS rain, ETo data m/day
 rain, ETo_df = swb.load_hyd(dates)
-
-# %%
-plt.plot(rain)
 
 # %%
 # load in pre-processed array of ETc for all time, m/day
@@ -157,7 +157,7 @@ ETc[np.isnan(ETc)] = 0
 
 
 # %%
-ETc.shape
+print(ETc_all.columns.values)
 
 # %%
 # create soil dictionary

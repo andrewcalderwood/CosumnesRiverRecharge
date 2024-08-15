@@ -236,7 +236,26 @@ transg = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 2000,
 # drop transects that are less than 25% in the domain
 transg = transg[gpd.overlay(transg, m_domain).geometry.length > 3300*2*0.25]
 transg['line'] = np.arange(0,len(transg))
-transg.to_file(gis_dir+'/transect_lines_3300.shp')
+# transg.to_file(gis_dir+'/transect_lines_3300.shp')
+
+# %%
+# need to crop transects where they overlap
+
+# using buffer and overlay doesn't work because the buffer doesn't sufficiently overlap the cross-sections
+# need to use a line split and drop the that doesn't touch the river line
+# create uni-direction buffer
+transg_buf_1way = transg.copy()
+transg_buf_1way.geometry = transg_buf_1way.buffer(-400, single_sided=True)
+# first remove the original transect from the buffer
+transg_buf_1way = transg_buf_1way.overlay(transg, how='difference')
+# now create an udpated cross-section with the overlapping part removed
+transg_new = transg.copy()
+transg_new = transg_new.overlay(transg_buf_1way, how='difference')
+
+fig,ax = plt.subplots()
+transg_buf_1way.plot(ax=ax,color='red')
+transg.plot(ax=ax)
+transg_new.plot(color='limegreen', ax=ax)
 
 
 # %%

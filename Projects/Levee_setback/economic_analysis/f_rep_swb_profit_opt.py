@@ -409,7 +409,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 if out.fun >0:
                     tol /=10
                     irr_lvl[:] = np.copy(irr_lvl_base)
-                if tol < 1E-5:
+                if tol < 1E-4:
                     break # if tolerance gets too small then skip
                 # make sure irrigation is saved in the right spot
                 if water_source=='gw':

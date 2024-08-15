@@ -236,7 +236,61 @@ transg = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 2000,
 # drop transects that are less than 25% in the domain
 transg = transg[gpd.overlay(transg, m_domain).geometry.length > 3300*2*0.25]
 transg['line'] = np.arange(0,len(transg))
-transg.to_file(gis_dir+'/transect_lines_3300.shp')
+# transg.to_file(gis_dir+'/transect_lines_3300.shp')
+
+# %%
+# Combine all lines in gdf_lines_2 into a single geometry (unary_union)
+splitter = transg.unary_union
+
+# Function to split each line in gdf_lines_1 by the splitter
+def split_line_by_splitter(line, splitter):
+    if line.intersects(splitter):
+        # Split the line by the splitter
+        split_result = split(line, splitter)
+        # If the result is a MultiLineString, split into separate LineStrings
+        if isinstance(split_result, MultiLineString):
+            return list(split_result.geoms)
+        else:
+            return [split_result]
+    else:
+        return [line]
+
+# Apply the splitting function to all lines in gdf_lines_1
+
+
+
+# %%
+from shapely.ops import split
+
+# Apply the splitting function to all lines in gdf_lines_1
+split_geometries = transg['geometry'].apply(lambda x: split_line_by_splitter(x, splitter))
+
+# Flatten the list of lists into a single list of geometries
+split_lines = [geom for sublist in split_geometries for geom in sublist]
+
+# Create a new GeoDataFrame with the split lines
+gdf_split_result = gpd.GeoDataFrame(geometry=split_lines, crs=gdf_lines_1.crs)
+
+
+# %%
+# need to crop transects where they overlap
+
+# using buffer and overlay doesn't work because the buffer doesn't sufficiently overlap the cross-sections
+# need to use a line split and drop the that doesn't touch the river line
+# create uni-direction buffer
+transg_buf_1way = transg.copy()
+
+# transg_buf_1way.geometry = transg_buf_1way.buffer(-400, single_sided=True)
+# # first remove the original transect from the buffer
+# transg_buf_1way = transg_buf_1way.overlay(transg, how='difference')
+# # now create an udpated cross-section with the overlapping part removed
+# transg_new = transg.copy()
+# transg_new = transg_new.overlay(transg_buf_1way, how='difference')
+
+fig,ax = plt.subplots()
+transg_buf_1way.plot(ax=ax,color='red')
+transg.plot(ax=ax)
+transg_new.plot(color='limegreen', ax=ax)
 
 
 # %%

@@ -279,7 +279,7 @@ print(all_run_dates)
 
 # %%
 # # this loop was set to run for the years of interest
-for m_per in np.arange(3, all_run_dates.shape[0]-1):
+for m_per in np.arange(4, all_run_dates.shape[0]-1):
 # for m_per in [2]:
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
@@ -290,9 +290,7 @@ for m_per in np.arange(3, all_run_dates.shape[0]-1):
     print(m_strt.date(),'to', m_end.date())
 
     # %%
-    # year = 2015
     year = m_strt.year
-    # year
     # crop='Corn'
 
 # %% [markdown]
@@ -430,11 +428,6 @@ for m_per in np.arange(3, all_run_dates.shape[0]-1):
     dtw_simple_df = calc_simple_dtw(well_dtw, year, dtw_step = 10)
     dtw_simple_df.to_csv(join(model_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
 
-# %%
-# pd.DataFrame(dtw_simple[:,0], dtw_avg.index).loc['2020-02-12':'2020-10-04'].plot()
-# plt.plot(dtw_simple.mean(axis=0))
-# pd.concat([dtw_simple_df]*2, axis=1)
-# dtw_simple_df.iloc[:, ::2]
 
 # %% [markdown]
 # ## No irrigation SWB
@@ -527,7 +520,7 @@ for m_per in np.arange(3, all_run_dates.shape[0]-1):
 
 # %% [markdown]
 # ## RCH input
-
+    print('Beginning MODFLOW input update')
     # %%
     # join water budget data to field area for scaling to cell for recharge
     rch_df = pc_df_all.merge(field_df)
@@ -568,7 +561,8 @@ for m_per in np.arange(3, all_run_dates.shape[0]-1):
             rch_arr[spd_df.row-1, spd_df.column-1] = spd_df.rch_rate
         # assign values to recharge dict
         rch_dict[t] = rch_arr
-
+    # print to help ID errors
+    print('Finished updating RCH dictionary')
 # %% [markdown]
 # ## WEL input
 
@@ -584,21 +578,23 @@ for m_per in np.arange(3, all_run_dates.shape[0]-1):
 
 # %%
 # allocate dictionary for recharge
-wel_dict = dict()
-for t, d in enumerate(dates):
-    # get data for the stress period
-    if d in wel_df.index:
-        spd_df = wel_df.loc[d]
-        wel_arr = spd_df[['k','i','j','flux']].values
-    else:
-        wel_arr = [[0,0,0,0]]
-    # append domestic well pumping to pumping dataset
-    dom_loc['flux'] = - dom_use.loc[d,'flux_m3d']*dom_loc.pump_scale
-    wells_dom = dom_loc[['layer','row','column','flux']].values
-    
-    # assign input to well dictionary
-    wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
-
+# I think the issue here with writing input was indentation was incorrect
+    wel_dict = dict()
+    for t, d in enumerate(dates):
+        # get data for the stress period
+        if d in wel_df.index:
+            spd_df = wel_df.loc[d]
+            wel_arr = spd_df[['k','i','j','flux']].values
+        else:
+            wel_arr = [[0,0,0,0]]
+        # append domestic well pumping to pumping dataset
+        dom_loc['flux'] = - dom_use.loc[d,'flux_m3d']*dom_loc.pump_scale
+        wells_dom = dom_loc[['layer','row','column','flux']].values
+        
+        # assign input to well dictionary
+        wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
+    # print to help ID errors
+    print('Finished updating WEL dictionary')
 
 # %%
 # import matplotlib.pyplot as plt
@@ -610,6 +606,7 @@ for t, d in enumerate(dates):
 # # Run update modflow
 
     # %%
+    print('Loading in period MODFLOW model')
     # load the existing modflow model for the next year
     mf_ws = join(loadpth, 'crop_modflow/'+str(m_strt.date()))
     m_month = flopy.modflow.Modflow.load(join(mf_ws,'MF.nam'), model_ws = mf_ws, load_only=['DIS'])
@@ -635,10 +632,13 @@ for t, d in enumerate(dates):
     
     wel_month.write_file()
     rch_month.write_file()
+    print('Finish writing new modflow input')
     
 
 
     # %%
+    # need to specify the path of the modflow exe or it defaults to mf2005 and crashes
+    m_month.exe_name = 'mf-owhm.exe'
     success, buff = m_month.run_model()
 
 # %% [markdown]

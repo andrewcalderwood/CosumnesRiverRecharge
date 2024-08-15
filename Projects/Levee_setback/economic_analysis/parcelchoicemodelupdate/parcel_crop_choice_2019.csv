@@ -46,11 +46,11 @@ parcel_id,Crop_Choice
 3400104,Unclassified fallow
 3400105,Unclassified fallow
 3400107,Vineyards
-3400108,Unclassified fallow
+3400108,Vineyards
 3400110,Unclassified fallow
-3400112,Unclassified fallow
+3400112,Vineyards
 3400113,Unclassified fallow
-3400114,Unclassified fallow
+3400114,Vineyards
 3400116,Vineyards
 3400117,Unclassified fallow
 3400118,Unclassified fallow
@@ -116,7 +116,7 @@ parcel_id,Crop_Choice
 3400228,Unclassified fallow
 3400230,Unclassified fallow
 3400233,Unclassified fallow
-3400234,Unclassified fallow
+3400234,Vineyards
 3400236,Unclassified fallow
 3400239,Unclassified fallow
 3400242,Vineyards
@@ -149,18 +149,18 @@ parcel_id,Crop_Choice
 3400290,Unclassified fallow
 3400291,Unclassified fallow
 3400292,Unclassified fallow
-3400293,Unclassified fallow
+3400293,Vineyards
 3400296,Unclassified fallow
 3400298,Unclassified fallow
 3400300,Unclassified fallow
 3400301,Unclassified fallow
 3400302,Unclassified fallow
 3400303,"Corn, sorghum or Sudan"
-3400308,"Corn, sorghum or Sudan"
+3400308,Vineyards
 3400311,Unclassified fallow
 3400312,Unclassified fallow
 3400316,Unclassified fallow
-3400317,Unclassified fallow
+3400317,Vineyards
 3400321,Unclassified fallow
 3400324,Unclassified fallow
 3400325,Unclassified fallow
@@ -203,7 +203,7 @@ parcel_id,Crop_Choice
 3400398,Unclassified fallow
 3400399,Unclassified fallow
 3400400,Unclassified fallow
-3400404,Vineyards
+3400404,Unclassified fallow
 3400405,Unclassified fallow
 3400408,Unclassified fallow
 3400409,Unclassified fallow
@@ -223,7 +223,7 @@ parcel_id,Crop_Choice
 3400442,Unclassified fallow
 3400444,Unclassified fallow
 3400448,Vineyards
-3400449,Vineyards
+3400449,Unclassified fallow
 3400450,Unclassified fallow
 3400454,Unclassified fallow
 3400455,Unclassified fallow
@@ -339,8 +339,8 @@ parcel_id,Crop_Choice
 3400674,Vineyards
 3400679,Unclassified fallow
 3400680,Unclassified fallow
-3400685,Unclassified fallow
-3400686,Unclassified fallow
+3400685,Vineyards
+3400686,Vineyards
 3400687,Vineyards
 3400688,Unclassified fallow
 3400690,Vineyards
@@ -359,7 +359,7 @@ parcel_id,Crop_Choice
 3400726,Unclassified fallow
 3400727,Vineyards
 3400729,Unclassified fallow
-3400734,Unclassified fallow
+3400734,Vineyards
 3400738,Unclassified fallow
 3400739,Unclassified fallow
 3400751,Unclassified fallow
@@ -373,7 +373,7 @@ parcel_id,Crop_Choice
 3400767,Unclassified fallow
 3400768,Unclassified fallow
 3400769,Unclassified fallow
-3400772,Unclassified fallow
+3400772,Vineyards
 3400774,Unclassified fallow
 3400778,Unclassified fallow
 3400779,Unclassified fallow
@@ -405,14 +405,14 @@ parcel_id,Crop_Choice
 3400827,Unclassified fallow
 3400828,Unclassified fallow
 3400830,Unclassified fallow
-3400832,Unclassified fallow
+3400832,Vineyards
 3400834,Unclassified fallow
 3400837,Unclassified fallow
 3400840,Unclassified fallow
 3400842,"Corn, sorghum or Sudan"
 3400844,Unclassified fallow
 3400846,Unclassified fallow
-3400847,Unclassified fallow
+3400847,Vineyards
 3400848,Unclassified fallow
 3400849,Unclassified fallow
 3400851,Unclassified fallow
@@ -435,7 +435,7 @@ parcel_id,Crop_Choice
 3400885,Unclassified fallow
 3400888,Unclassified fallow
 3400895,Unclassified fallow
-3400900,Unclassified fallow
+3400900,Vineyards
 3400902,Unclassified fallow
 3400904,Unclassified fallow
 3400905,Unclassified fallow
@@ -513,7 +513,7 @@ parcel_id,Crop_Choice
 3401073,Unclassified fallow
 3401074,Unclassified fallow
 3401082,Unclassified fallow
-3401087,Vineyards
+3401087,Unclassified fallow
 3401088,Unclassified fallow
 3401089,Unclassified fallow
 3401092,Unclassified fallow
@@ -551,7 +551,7 @@ parcel_id,Crop_Choice
 3401171,Unclassified fallow
 3401172,Unclassified fallow
 3401175,Unclassified fallow
-3401177,Unclassified fallow
+3401177,"Corn, sorghum or Sudan"
 3401179,Unclassified fallow
 3401180,Unclassified fallow
 3401181,Unclassified fallow
@@ -601,7 +601,7 @@ parcel_id,Crop_Choice
 3401288,Unclassified fallow
 3401289,Unclassified fallow
 3401295,Unclassified fallow
-3401296,"Corn, sorghum or Sudan"
+3401296,Vineyards
 3401297,Unclassified fallow
 3401299,Unclassified fallow
 3401301,Unclassified fallow
@@ -649,7 +649,7 @@ parcel_id,Crop_Choice
 3401382,Unclassified fallow
 3401383,Vineyards
 3401384,Unclassified fallow
-3401385,Unclassified fallow
+3401385,"Corn, sorghum or Sudan"
 3401387,Unclassified fallow
 3401391,Unclassified fallow
 3401392,Unclassified fallow
@@ -675,7 +675,7 @@ parcel_id,Crop_Choice
 3401433,Unclassified fallow
 3401436,Unclassified fallow
 3401439,Vineyards
-3401442,"Corn, sorghum or Sudan"
+3401442,Unclassified fallow
 3401448,Vineyards
 3401457,Unclassified fallow
 3401458,Vineyards
@@ -688,7 +688,7 @@ parcel_id,Crop_Choice
 3401472,Unclassified fallow
 3401473,Unclassified fallow
 3401474,Other
-3401476,Unclassified fallow
+3401476,Vineyards
 3401477,Unclassified fallow
 3401480,Unclassified fallow
 3401481,Unclassified fallow
@@ -721,7 +721,7 @@ parcel_id,Crop_Choice
 3401539,Unclassified fallow
 3401540,Unclassified fallow
 3401543,Unclassified fallow
-3401544,Unclassified fallow
+3401544,Vineyards
 3401546,Unclassified fallow
 3401547,Unclassified fallow
 3401549,Unclassified fallow
@@ -759,7 +759,7 @@ parcel_id,Crop_Choice
 3401602,Unclassified fallow
 3401603,Unclassified fallow
 3401604,Unclassified fallow
-3401605,Unclassified fallow
+3401605,Vineyards
 3401606,Unclassified fallow
 3401607,Unclassified fallow
 3401608,Unclassified fallow
@@ -836,7 +836,7 @@ parcel_id,Crop_Choice
 3401735,Unclassified fallow
 3401736,Unclassified fallow
 3401737,Unclassified fallow
-3401738,Unclassified fallow
+3401738,Vineyards
 3401739,Unclassified fallow
 3401748,Unclassified fallow
 3401751,Unclassified fallow
@@ -860,7 +860,7 @@ parcel_id,Crop_Choice
 3401795,Unclassified fallow
 3401798,Vineyards
 3401800,Vineyards
-3401801,Unclassified fallow
+3401801,Vineyards
 3401802,Vineyards
 3401811,Unclassified fallow
 3401815,Unclassified fallow
@@ -883,7 +883,7 @@ parcel_id,Crop_Choice
 3401886,Vineyards
 3401888,"Corn, sorghum or Sudan"
 3401894,Unclassified fallow
-3401897,"Corn, sorghum or Sudan"
+3401897,Vineyards
 3401901,Unclassified fallow
 3401903,Unclassified fallow
 3401908,Vineyards
@@ -950,7 +950,7 @@ parcel_id,Crop_Choice
 3402104,Unclassified fallow
 3402105,Unclassified fallow
 3402106,Unclassified fallow
-3402107,Unclassified fallow
+3402107,Vineyards
 3402108,Other
 3402109,Unclassified fallow
 3402110,Unclassified fallow
@@ -1092,13 +1092,13 @@ parcel_id,Crop_Choice
 3402471,Vineyards
 3402474,Unclassified fallow
 3402476,Unclassified fallow
-3402478,Unclassified fallow
+3402478,Vineyards
 3402480,Vineyards
-3402482,Unclassified fallow
+3402482,Vineyards
 3402490,Unclassified fallow
-3402492,Unclassified fallow
+3402492,Vineyards
 3402493,Unclassified fallow
-3402494,Unclassified fallow
+3402494,Vineyards
 3402495,Vineyards
 3402502,Vineyards
 3402504,Unclassified fallow
@@ -1169,7 +1169,7 @@ parcel_id,Crop_Choice
 3402670,Unclassified fallow
 3402674,Vineyards
 3402676,Vineyards
-3402677,Unclassified fallow
+3402677,Vineyards
 3402682,Vineyards
 3402684,Unclassified fallow
 3402692,Unclassified fallow
@@ -1196,7 +1196,7 @@ parcel_id,Crop_Choice
 3402737,Unclassified fallow
 3402739,Vineyards
 3402740,Vineyards
-3402741,Unclassified fallow
+3402741,Vineyards
 3402743,Unclassified fallow
 3402744,Unclassified fallow
 3402747,Unclassified fallow
@@ -1213,7 +1213,7 @@ parcel_id,Crop_Choice
 3402768,Unclassified fallow
 3402771,"Corn, sorghum or Sudan"
 3402772,Unclassified fallow
-3402775,"Corn, sorghum or Sudan"
+3402775,Unclassified fallow
 3402777,Unclassified fallow
 3402779,Unclassified fallow
 3402780,Unclassified fallow
@@ -1226,12 +1226,12 @@ parcel_id,Crop_Choice
 3402797,Unclassified fallow
 3402798,Unclassified fallow
 3402799,Unclassified fallow
-3402800,Unclassified fallow
-3402801,"Corn, sorghum or Sudan"
+3402800,Vineyards
+3402801,Vineyards
 3402802,Unclassified fallow
 3402803,Unclassified fallow
 3402805,Unclassified fallow
-3402808,"Corn, sorghum or Sudan"
+3402808,Unclassified fallow
 3402809,Unclassified fallow
 3402810,Unclassified fallow
 3402812,Unclassified fallow
@@ -1282,7 +1282,7 @@ parcel_id,Crop_Choice
 3402912,Unclassified fallow
 3402913,Unclassified fallow
 3402915,Unclassified fallow
-3402916,Unclassified fallow
+3402916,Vineyards
 3402917,"Corn, sorghum or Sudan"
 3402919,Unclassified fallow
 3402920,Unclassified fallow
@@ -1299,7 +1299,7 @@ parcel_id,Crop_Choice
 3402941,Unclassified fallow
 3402943,Unclassified fallow
 3402946,Unclassified fallow
-3402949,"Corn, sorghum or Sudan"
+3402949,Unclassified fallow
 3402956,Unclassified fallow
 3402958,Unclassified fallow
 3402962,Unclassified fallow
@@ -1331,7 +1331,7 @@ parcel_id,Crop_Choice
 3403001,Unclassified fallow
 3403002,Unclassified fallow
 3403003,Unclassified fallow
-3403007,Unclassified fallow
+3403007,Vineyards
 3403010,Vineyards
 3403012,Unclassified fallow
 3403013,Unclassified fallow
@@ -1346,7 +1346,7 @@ parcel_id,Crop_Choice
 3403042,Unclassified fallow
 3403045,Vineyards
 3403046,Unclassified fallow
-3403047,"Corn, sorghum or Sudan"
+3403047,Vineyards
 3403048,Unclassified fallow
 3403049,Unclassified fallow
 3403053,Unclassified fallow
@@ -1398,12 +1398,12 @@ parcel_id,Crop_Choice
 3403139,Unclassified fallow
 3403141,Vineyards
 3403143,Unclassified fallow
-3403146,"Corn, sorghum or Sudan"
+3403146,Unclassified fallow
 3403149,Unclassified fallow
 3403152,Vineyards
 3403154,Vineyards
 3403155,Unclassified fallow
-3403156,Unclassified fallow
+3403156,Vineyards
 3403157,Unclassified fallow
 3403158,Unclassified fallow
 3403159,Unclassified fallow
@@ -1423,9 +1423,9 @@ parcel_id,Crop_Choice
 3403186,Unclassified fallow
 3403187,Unclassified fallow
 3403191,Vineyards
-3403193,Unclassified fallow
+3403193,Vineyards
 3403194,Unclassified fallow
-3403195,Unclassified fallow
+3403195,Vineyards
 3403197,Unclassified fallow
 3403199,Unclassified fallow
 3403200,Unclassified fallow
@@ -1437,8 +1437,8 @@ parcel_id,Crop_Choice
 3403208,Vineyards
 3403210,Unclassified fallow
 3403212,Unclassified fallow
-3403213,"Corn, sorghum or Sudan"
-3403215,"Corn, sorghum or Sudan"
+3403213,Vineyards
+3403215,Unclassified fallow
 3403216,Unclassified fallow
 3403217,Unclassified fallow
 3403223,Unclassified fallow
@@ -1462,10 +1462,10 @@ parcel_id,Crop_Choice
 3403259,Vineyards
 3403260,Unclassified fallow
 3403261,Unclassified fallow
-3403263,"Corn, sorghum or Sudan"
+3403263,Unclassified fallow
 3403264,Unclassified fallow
 3403266,Unclassified fallow
-3403268,Unclassified fallow
+3403268,Vineyards
 3403271,"Corn, sorghum or Sudan"
 3403273,Vineyards
 3403274,Unclassified fallow
@@ -1484,15 +1484,15 @@ parcel_id,Crop_Choice
 3403301,Unclassified fallow
 3403303,Unclassified fallow
 3403304,Vineyards
-3403305,Unclassified fallow
+3403305,Vineyards
 3403306,Unclassified fallow
 3403307,Unclassified fallow
 3403314,Unclassified fallow
-3403316,"Corn, sorghum or Sudan"
+3403316,Vineyards
 3403320,Unclassified fallow
 3403322,Unclassified fallow
-3403324,Unclassified fallow
-3403325,Unclassified fallow
+3403324,Vineyards
+3403325,Vineyards
 3403327,Unclassified fallow
 3403329,Unclassified fallow
 3403335,Unclassified fallow
@@ -1534,7 +1534,7 @@ parcel_id,Crop_Choice
 3403400,Unclassified fallow
 3403401,Unclassified fallow
 3403404,Unclassified fallow
-3403407,Unclassified fallow
+3403407,Vineyards
 3403408,Unclassified fallow
 3403409,Unclassified fallow
 3403415,Unclassified fallow
@@ -1601,7 +1601,7 @@ parcel_id,Crop_Choice
 3403536,Unclassified fallow
 3403537,Unclassified fallow
 3403538,Unclassified fallow
-3403539,Unclassified fallow
+3403539,Vineyards
 3403540,Unclassified fallow
 3403544,Unclassified fallow
 3403545,Unclassified fallow
@@ -1655,7 +1655,7 @@ parcel_id,Crop_Choice
 3403634,Unclassified fallow
 3403635,Unclassified fallow
 3403637,Unclassified fallow
-3403638,Unclassified fallow
+3403638,Vineyards
 3403639,Unclassified fallow
 3403641,Unclassified fallow
 3403642,Unclassified fallow
@@ -1665,7 +1665,7 @@ parcel_id,Crop_Choice
 3403653,Unclassified fallow
 3403655,Unclassified fallow
 3403656,0
-3403657,Unclassified fallow
+3403657,Vineyards
 3403658,Unclassified fallow
 3403663,Unclassified fallow
 3403664,Unclassified fallow
@@ -1735,13 +1735,13 @@ parcel_id,Crop_Choice
 3403810,Unclassified fallow
 3403812,Unclassified fallow
 3403813,Unclassified fallow
-3403814,"Corn, sorghum or Sudan"
+3403814,Vineyards
 3403815,"Corn, sorghum or Sudan"
 3403817,Unclassified fallow
 3403821,Unclassified fallow
 3403822,Unclassified fallow
 3403826,Vineyards
-3403827,Unclassified fallow
+3403827,Vineyards
 3403831,Unclassified fallow
 3403832,Unclassified fallow
 3403833,Unclassified fallow
@@ -1755,7 +1755,7 @@ parcel_id,Crop_Choice
 3403850,Unclassified fallow
 3403855,Unclassified fallow
 3403858,Unclassified fallow
-3403860,Unclassified fallow
+3403860,Vineyards
 3403861,Unclassified fallow
 3403866,Unclassified fallow
 3403867,Unclassified fallow
@@ -1777,7 +1777,7 @@ parcel_id,Crop_Choice
 3403890,Vineyards
 3403891,Unclassified fallow
 3403894,Unclassified fallow
-3403897,Unclassified fallow
+3403897,Vineyards
 3403898,Unclassified fallow
 3403900,Unclassified fallow
 3403901,Unclassified fallow
@@ -1813,7 +1813,7 @@ parcel_id,Crop_Choice
 3403954,Unclassified fallow
 3403960,Unclassified fallow
 3403966,Unclassified fallow
-3403974,"Corn, sorghum or Sudan"
+3403974,Unclassified fallow
 3403976,Unclassified fallow
 3403979,Vineyards
 3403981,"Corn, sorghum or Sudan"
@@ -1828,7 +1828,7 @@ parcel_id,Crop_Choice
 3403998,Unclassified fallow
 3404000,Unclassified fallow
 3404008,"Corn, sorghum or Sudan"
-3404009,"Corn, sorghum or Sudan"
+3404009,Vineyards
 3404010,Unclassified fallow
 3404011,Unclassified fallow
 3404014,Unclassified fallow
@@ -1840,10 +1840,10 @@ parcel_id,Crop_Choice
 3404037,Unclassified fallow
 3404038,Unclassified fallow
 3404039,Unclassified fallow
-3404048,Vineyards
+3404048,Unclassified fallow
 3404049,Unclassified fallow
 3404055,Unclassified fallow
-3404056,"Corn, sorghum or Sudan"
+3404056,Unclassified fallow
 3404059,Vineyards
 3404061,Vineyards
 3404062,Unclassified fallow
@@ -1876,7 +1876,7 @@ parcel_id,Crop_Choice
 3404104,Vineyards
 3404106,"Corn, sorghum or Sudan"
 3404107,Unclassified fallow
-3404109,"Corn, sorghum or Sudan"
+3404109,Unclassified fallow
 3404114,Vineyards
 3404119,Unclassified fallow
 3404121,Unclassified fallow
@@ -1888,13 +1888,13 @@ parcel_id,Crop_Choice
 3404131,Unclassified fallow
 3404132,Unclassified fallow
 3404133,Unclassified fallow
-3404136,Unclassified fallow
+3404136,Vineyards
 3404138,Unclassified fallow
 3404139,Vineyards
 3404141,Vineyards
 3404142,Unclassified fallow
-3404144,Vineyards
-3404145,"Corn, sorghum or Sudan"
+3404144,Unclassified fallow
+3404145,Vineyards
 3404146,Unclassified fallow
 3404147,Vineyards
 3404149,Vineyards
@@ -1934,7 +1934,7 @@ parcel_id,Crop_Choice
 3404211,Unclassified fallow
 3404213,Unclassified fallow
 3404215,Unclassified fallow
-3404217,Unclassified fallow
+3404217,Vineyards
 3404218,Unclassified fallow
 3404219,Unclassified fallow
 3404220,Unclassified fallow
@@ -1951,7 +1951,7 @@ parcel_id,Crop_Choice
 3404242,Unclassified fallow
 3404243,Unclassified fallow
 3404248,Unclassified fallow
-3404249,Unclassified fallow
+3404249,Vineyards
 3404253,Vineyards
 3404257,Unclassified fallow
 3404259,Unclassified fallow
@@ -1974,7 +1974,7 @@ parcel_id,Crop_Choice
 3404290,"Corn, sorghum or Sudan"
 3404293,Unclassified fallow
 3404294,Vineyards
-3404295,Unclassified fallow
+3404295,Vineyards
 3404297,Unclassified fallow
 3404298,Unclassified fallow
 3404300,Unclassified fallow
@@ -2006,7 +2006,7 @@ parcel_id,Crop_Choice
 3404355,Unclassified fallow
 3404356,Unclassified fallow
 3404360,Unclassified fallow
-3404363,Unclassified fallow
+3404363,Vineyards
 3404366,Unclassified fallow
 3404367,Unclassified fallow
 3404370,Vineyards
@@ -2027,14 +2027,14 @@ parcel_id,Crop_Choice
 3404399,Unclassified fallow
 3404400,Unclassified fallow
 3404401,"Corn, sorghum or Sudan"
-3404402,Vineyards
+3404402,Unclassified fallow
 3404403,"Corn, sorghum or Sudan"
 3404406,Unclassified fallow
 3404410,Unclassified fallow
 3404412,Unclassified fallow
 3404413,Unclassified fallow
 3404414,Unclassified fallow
-3404416,Unclassified fallow
+3404416,Vineyards
 3404417,Unclassified fallow
 3404418,Unclassified fallow
 3404419,Unclassified fallow
@@ -2058,7 +2058,7 @@ parcel_id,Crop_Choice
 3404450,Vineyards
 3404452,Vineyards
 3404453,Unclassified fallow
-3404454,Unclassified fallow
+3404454,Vineyards
 3404455,Vineyards
 3404460,"Corn, sorghum or Sudan"
 3404462,Unclassified fallow
@@ -2115,7 +2115,7 @@ parcel_id,Crop_Choice
 3404547,Unclassified fallow
 3404549,Unclassified fallow
 3404550,Unclassified fallow
-3404551,Vineyards
+3404551,"Corn, sorghum or Sudan"
 3404553,Vineyards
 3404555,Unclassified fallow
 3404556,Unclassified fallow
@@ -2127,11 +2127,11 @@ parcel_id,Crop_Choice
 3404568,Unclassified fallow
 3404569,Unclassified fallow
 3404573,Vineyards
-3404575,"Corn, sorghum or Sudan"
+3404575,Unclassified fallow
 3404576,Unclassified fallow
 3404577,Unclassified fallow
 3404579,Unclassified fallow
-3404583,Vineyards
+3404583,Unclassified fallow
 3404589,Unclassified fallow
 3404591,Unclassified fallow
 3404592,Unclassified fallow
@@ -2162,7 +2162,7 @@ parcel_id,Crop_Choice
 3404646,Unclassified fallow
 3404647,Unclassified fallow
 3404648,Unclassified fallow
-3404654,Vineyards
+3404654,Unclassified fallow
 3404656,Unclassified fallow
 3404657,Unclassified fallow
 3404659,Unclassified fallow
@@ -2184,14 +2184,14 @@ parcel_id,Crop_Choice
 3404704,Unclassified fallow
 3404706,Unclassified fallow
 3404707,Unclassified fallow
-3404709,Unclassified fallow
+3404709,Vineyards
 3404712,Unclassified fallow
 3404713,Unclassified fallow
 3404715,Vineyards
 3404724,Unclassified fallow
 3404725,Unclassified fallow
-3404732,Vineyards
-3404735,Unclassified fallow
+3404732,Unclassified fallow
+3404735,Vineyards
 3404737,Unclassified fallow
 3404739,Unclassified fallow
 3404742,Unclassified fallow
@@ -2203,7 +2203,7 @@ parcel_id,Crop_Choice
 3404752,Unclassified fallow
 3404753,Unclassified fallow
 3404754,Unclassified fallow
-3404755,Unclassified fallow
+3404755,Vineyards
 3404756,Unclassified fallow
 3404758,Unclassified fallow
 3404760,Unclassified fallow
@@ -2212,23 +2212,23 @@ parcel_id,Crop_Choice
 3404764,Unclassified fallow
 3404765,Unclassified fallow
 3404770,Unclassified fallow
-3404774,"Corn, sorghum or Sudan"
+3404774,Vineyards
 3404779,Unclassified fallow
 3404781,Unclassified fallow
 3404784,Unclassified fallow
 3404785,Unclassified fallow
 3404786,Unclassified fallow
-3404787,Unclassified fallow
+3404787,Vineyards
 3404791,Unclassified fallow
 3404794,Unclassified fallow
 3404795,Unclassified fallow
-3404796,Vineyards
+3404796,Unclassified fallow
 3404798,Unclassified fallow
 3404799,Unclassified fallow
 3404803,Unclassified fallow
 3404806,Unclassified fallow
 3404809,Vineyards
-3404810,"Corn, sorghum or Sudan"
+3404810,Vineyards
 3404812,Unclassified fallow
 3404813,Unclassified fallow
 3404814,Unclassified fallow
@@ -2266,10 +2266,10 @@ parcel_id,Crop_Choice
 3404881,Vineyards
 3404882,"Corn, sorghum or Sudan"
 3404883,Unclassified fallow
-3404884,Vineyards
+3404884,Unclassified fallow
 3404885,Unclassified fallow
 3404886,Vineyards
-3404887,Unclassified fallow
+3404887,Vineyards
 3404893,Vineyards
 3404894,Unclassified fallow
 3404897,Unclassified fallow
@@ -2278,7 +2278,7 @@ parcel_id,Crop_Choice
 3404901,Unclassified fallow
 3404902,Vineyards
 3404904,Unclassified fallow
-3404908,Unclassified fallow
+3404908,Vineyards
 3404909,Unclassified fallow
 3404910,Unclassified fallow
 3404911,Unclassified fallow
@@ -2299,7 +2299,7 @@ parcel_id,Crop_Choice
 3404942,Unclassified fallow
 3404943,Unclassified fallow
 3404944,Unclassified fallow
-3404945,"Corn, sorghum or Sudan"
+3404945,Vineyards
 3404948,Unclassified fallow
 3404953,Unclassified fallow
 3404954,Vineyards
@@ -2321,7 +2321,7 @@ parcel_id,Crop_Choice
 3404978,Vineyards
 3404980,Unclassified fallow
 3404981,Unclassified fallow
-3404982,"Corn, sorghum or Sudan"
+3404982,Unclassified fallow
 3404984,Unclassified fallow
 3404985,Unclassified fallow
 3404987,Unclassified fallow
@@ -2343,7 +2343,7 @@ parcel_id,Crop_Choice
 3405031,Unclassified fallow
 3405034,Unclassified fallow
 3405035,Unclassified fallow
-3405038,Unclassified fallow
+3405038,"Corn, sorghum or Sudan"
 3405039,Unclassified fallow
 3405040,Unclassified fallow
 3405042,Unclassified fallow
@@ -2416,7 +2416,7 @@ parcel_id,Crop_Choice
 3405185,Unclassified fallow
 3405186,Vineyards
 3405188,Unclassified fallow
-3405189,Unclassified fallow
+3405189,Vineyards
 3405190,Unclassified fallow
 3405192,Unclassified fallow
 3405193,Unclassified fallow
@@ -2445,7 +2445,7 @@ parcel_id,Crop_Choice
 3405228,Unclassified fallow
 3405229,Unclassified fallow
 3405231,Unclassified fallow
-3405232,Unclassified fallow
+3405232,Vineyards
 3405241,Unclassified fallow
 3405245,Unclassified fallow
 3405246,Vineyards
@@ -2503,7 +2503,7 @@ parcel_id,Crop_Choice
 3405359,Unclassified fallow
 3405361,Unclassified fallow
 3405362,Vineyards
-3405366,Unclassified fallow
+3405366,Vineyards
 3405368,Unclassified fallow
 3405369,Unclassified fallow
 3405372,Unclassified fallow
@@ -2544,7 +2544,7 @@ parcel_id,Crop_Choice
 3405445,Unclassified fallow
 3405446,Unclassified fallow
 3405447,Unclassified fallow
-3405452,Vineyards
+3405452,Unclassified fallow
 3405454,Unclassified fallow
 3405455,Vineyards
 3405456,Unclassified fallow
@@ -2568,7 +2568,7 @@ parcel_id,Crop_Choice
 3405491,Unclassified fallow
 3405492,Unclassified fallow
 3405493,Unclassified fallow
-3405494,Unclassified fallow
+3405494,Vineyards
 3405496,"Corn, sorghum or Sudan"
 3405497,Unclassified fallow
 3405498,Unclassified fallow
@@ -2599,7 +2599,7 @@ parcel_id,Crop_Choice
 3405555,Unclassified fallow
 3405558,Vineyards
 3405560,Unclassified fallow
-3405563,Unclassified fallow
+3405563,Vineyards
 3405568,Unclassified fallow
 3405573,Vineyards
 3405574,"Corn, sorghum or Sudan"
@@ -2613,7 +2613,7 @@ parcel_id,Crop_Choice
 3405589,Unclassified fallow
 3405590,Unclassified fallow
 3405591,Vineyards
-3405593,Unclassified fallow
+3405593,"Corn, sorghum or Sudan"
 3405598,Unclassified fallow
 3405599,Unclassified fallow
 3405600,Vineyards
@@ -2644,7 +2644,7 @@ parcel_id,Crop_Choice
 3405649,Unclassified fallow
 3405651,Unclassified fallow
 3405652,Unclassified fallow
-3405654,Unclassified fallow
+3405654,Vineyards
 3405656,Unclassified fallow
 3405658,Unclassified fallow
 3405661,Unclassified fallow
@@ -2667,7 +2667,7 @@ parcel_id,Crop_Choice
 3405696,Unclassified fallow
 3405697,"Corn, sorghum or Sudan"
 3405698,Unclassified fallow
-3405700,"Corn, sorghum or Sudan"
+3405700,Vineyards
 3405701,Unclassified fallow
 3405705,Unclassified fallow
 3405712,Unclassified fallow
@@ -2693,7 +2693,7 @@ parcel_id,Crop_Choice
 3405745,Unclassified fallow
 3405747,Unclassified fallow
 3405753,Unclassified fallow
-3405757,Vineyards
+3405757,Unclassified fallow
 3405758,Unclassified fallow
 3405759,Unclassified fallow
 3405763,Unclassified fallow
@@ -2721,7 +2721,7 @@ parcel_id,Crop_Choice
 3405807,Unclassified fallow
 3405809,Unclassified fallow
 3405812,Unclassified fallow
-3405813,Unclassified fallow
+3405813,Vineyards
 3405814,Unclassified fallow
 3405815,Unclassified fallow
 3405817,Unclassified fallow
@@ -2761,9 +2761,9 @@ parcel_id,Crop_Choice
 3405890,"Corn, sorghum or Sudan"
 3405892,Unclassified fallow
 3405893,Unclassified fallow
-3405895,Unclassified fallow
+3405895,"Corn, sorghum or Sudan"
 3405896,Unclassified fallow
-3405897,Vineyards
+3405897,Unclassified fallow
 3405899,Vineyards
 3405900,Unclassified fallow
 3405904,Unclassified fallow
@@ -2774,7 +2774,7 @@ parcel_id,Crop_Choice
 3405917,Unclassified fallow
 3405920,Unclassified fallow
 3405921,Unclassified fallow
-3405922,Unclassified fallow
+3405922,Vineyards
 3405923,Unclassified fallow
 3405924,Unclassified fallow
 3405927,Unclassified fallow
@@ -2784,7 +2784,7 @@ parcel_id,Crop_Choice
 3405934,Unclassified fallow
 3405935,Vineyards
 3405936,Vineyards
-3405938,Unclassified fallow
+3405938,Vineyards
 3405941,Unclassified fallow
 3405944,Unclassified fallow
 3405946,Vineyards
@@ -2878,14 +2878,14 @@ parcel_id,Crop_Choice
 3406129,Unclassified fallow
 3406130,Vineyards
 3406133,Unclassified fallow
-3406134,Unclassified fallow
+3406134,Vineyards
 3406135,Unclassified fallow
 3406136,Unclassified fallow
 3406137,Unclassified fallow
 3406138,Unclassified fallow
 3406144,Unclassified fallow
 3406145,Unclassified fallow
-3406146,"Corn, sorghum or Sudan"
+3406146,Unclassified fallow
 3406147,Vineyards
 3406148,Unclassified fallow
 3406149,Unclassified fallow
@@ -2903,8 +2903,8 @@ parcel_id,Crop_Choice
 3406183,Unclassified fallow
 3406186,Unclassified fallow
 3406187,Unclassified fallow
-3406192,Unclassified fallow
-3406193,Unclassified fallow
+3406192,Vineyards
+3406193,Vineyards
 3406194,Unclassified fallow
 3406195,Unclassified fallow
 3406197,Unclassified fallow
@@ -2919,7 +2919,7 @@ parcel_id,Crop_Choice
 3406212,Unclassified fallow
 3406214,Unclassified fallow
 3406217,Unclassified fallow
-3406218,"Corn, sorghum or Sudan"
+3406218,Vineyards
 3406219,Unclassified fallow
 3406220,Unclassified fallow
 3406221,Unclassified fallow
@@ -2976,7 +2976,7 @@ parcel_id,Crop_Choice
 3406319,Unclassified fallow
 3406320,Unclassified fallow
 3406321,Vineyards
-3406323,Unclassified fallow
+3406323,Vineyards
 3406327,Unclassified fallow
 3406329,Unclassified fallow
 3406334,Unclassified fallow
@@ -3032,8 +3032,8 @@ parcel_id,Crop_Choice
 3406423,Unclassified fallow
 3406425,Unclassified fallow
 3406430,Unclassified fallow
-3406431,Unclassified fallow
-3406433,Unclassified fallow
+3406431,Vineyards
+3406433,Vineyards
 3406434,Unclassified fallow
 3406435,Other
 3406436,Unclassified fallow
@@ -3095,12 +3095,12 @@ parcel_id,Crop_Choice
 3406545,Unclassified fallow
 3406548,Unclassified fallow
 3406549,Vineyards
-3406550,Vineyards
+3406550,Unclassified fallow
 3406555,Unclassified fallow
 3406556,Unclassified fallow
 3406559,Vineyards
 3406560,Unclassified fallow
-3406562,Unclassified fallow
+3406562,Vineyards
 3406563,Vineyards
 3406564,Unclassified fallow
 3406566,Vineyards
@@ -3124,7 +3124,7 @@ parcel_id,Crop_Choice
 3406600,Unclassified fallow
 3406601,Unclassified fallow
 3406602,Unclassified fallow
-3406603,Unclassified fallow
+3406603,Vineyards
 3406605,Unclassified fallow
 3406615,Unclassified fallow
 3406616,Unclassified fallow
@@ -3140,7 +3140,7 @@ parcel_id,Crop_Choice
 3406633,Unclassified fallow
 3406635,Unclassified fallow
 3406636,Unclassified fallow
-3406637,"Corn, sorghum or Sudan"
+3406637,Unclassified fallow
 3406638,Unclassified fallow
 3406640,Unclassified fallow
 3406642,Unclassified fallow
@@ -3153,13 +3153,13 @@ parcel_id,Crop_Choice
 3406656,Vineyards
 3406659,Unclassified fallow
 3406660,Unclassified fallow
-3406662,Unclassified fallow
+3406662,Vineyards
 3406663,Unclassified fallow
 3406665,Unclassified fallow
 3406669,Unclassified fallow
 3406672,Unclassified fallow
 3406678,"Corn, sorghum or Sudan"
-3406680,Unclassified fallow
+3406680,Vineyards
 3406681,Unclassified fallow
 3406682,Unclassified fallow
 3406686,Unclassified fallow
@@ -3183,7 +3183,7 @@ parcel_id,Crop_Choice
 3406715,Vineyards
 3406718,Unclassified fallow
 3406721,Unclassified fallow
-3406722,Unclassified fallow
+3406722,Vineyards
 3406723,Vineyards
 3406727,Unclassified fallow
 3406728,Unclassified fallow
@@ -3263,7 +3263,7 @@ parcel_id,Crop_Choice
 3406889,Unclassified fallow
 3406891,Unclassified fallow
 3406893,Unclassified fallow
-3406894,Unclassified fallow
+3406894,Vineyards
 3406897,Unclassified fallow
 3406899,Vineyards
 3406900,Unclassified fallow
@@ -3273,7 +3273,7 @@ parcel_id,Crop_Choice
 3406906,Unclassified fallow
 3406907,Unclassified fallow
 3406911,Unclassified fallow
-3406913,Unclassified fallow
+3406913,Vineyards
 3406914,Unclassified fallow
 3406915,Unclassified fallow
 3406917,Unclassified fallow
@@ -3284,7 +3284,7 @@ parcel_id,Crop_Choice
 3406926,Unclassified fallow
 3406928,Unclassified fallow
 3406930,Unclassified fallow
-3406933,"Corn, sorghum or Sudan"
+3406933,Unclassified fallow
 3406935,Unclassified fallow
 3406936,Unclassified fallow
 3406937,Unclassified fallow
@@ -3298,7 +3298,7 @@ parcel_id,Crop_Choice
 3406953,Unclassified fallow
 3406954,Unclassified fallow
 3406957,Unclassified fallow
-3406959,Unclassified fallow
+3406959,Vineyards
 3406960,Unclassified fallow
 3406965,Unclassified fallow
 3406966,"Corn, sorghum or Sudan"
@@ -3319,7 +3319,7 @@ parcel_id,Crop_Choice
 3406996,Unclassified fallow
 3406998,Vineyards
 3406999,Vineyards
-3407003,Unclassified fallow
+3407003,Vineyards
 3407004,Unclassified fallow
 3407005,Unclassified fallow
 3407009,Unclassified fallow
@@ -3363,9 +3363,9 @@ parcel_id,Crop_Choice
 3407080,Unclassified fallow
 3407082,Vineyards
 3407083,Unclassified fallow
-3407084,Unclassified fallow
+3407084,Vineyards
 3407087,Unclassified fallow
-3407088,Unclassified fallow
+3407088,Vineyards
 3407089,Vineyards
 3407094,Unclassified fallow
 3407096,Unclassified fallow
@@ -3389,7 +3389,7 @@ parcel_id,Crop_Choice
 3407133,Unclassified fallow
 3407136,Unclassified fallow
 3407141,Unclassified fallow
-3407142,"Corn, sorghum or Sudan"
+3407142,Vineyards
 3407145,Unclassified fallow
 3407146,Unclassified fallow
 3407147,Unclassified fallow
@@ -3409,7 +3409,7 @@ parcel_id,Crop_Choice
 3407176,Unclassified fallow
 3407182,Vineyards
 3407183,Unclassified fallow
-3407185,Unclassified fallow
+3407185,Vineyards
 3407186,Unclassified fallow
 3407193,Unclassified fallow
 3407194,Unclassified fallow
@@ -3458,7 +3458,7 @@ parcel_id,Crop_Choice
 3407312,Vineyards
 3407313,Unclassified fallow
 3407314,Unclassified fallow
-3407316,Vineyards
+3407316,Unclassified fallow
 3407318,Unclassified fallow
 3407319,Unclassified fallow
 3407322,Vineyards
@@ -3470,7 +3470,7 @@ parcel_id,Crop_Choice
 3407330,"Corn, sorghum or Sudan"
 3407333,Unclassified fallow
 3407334,Vineyards
-3407342,Vineyards
+3407342,"Corn, sorghum or Sudan"
 3407356,Unclassified fallow
 3407365,Unclassified fallow
 3407367,Unclassified fallow
@@ -3490,7 +3490,7 @@ parcel_id,Crop_Choice
 3407390,Unclassified fallow
 3407391,Unclassified fallow
 3407395,Vineyards
-3407397,Vineyards
+3407397,Unclassified fallow
 3407398,Unclassified fallow
 3407399,Unclassified fallow
 3407400,Unclassified fallow
@@ -3681,7 +3681,7 @@ parcel_id,Crop_Choice
 3407837,"Corn, sorghum or Sudan"
 3407840,"Corn, sorghum or Sudan"
 3407841,Unclassified fallow
-3407842,Unclassified fallow
+3407842,Vineyards
 3407843,Unclassified fallow
 3407844,Vineyards
 3900473,"Corn, sorghum or Sudan"
@@ -3692,11 +3692,11 @@ parcel_id,Crop_Choice
 3900879,Unclassified fallow
 3900902,Unclassified fallow
 3901491,Vineyards
-3901941,Unclassified fallow
+3901941,Vineyards
 3901949,Unclassified fallow
 3902018,Vineyards
 3902040,Unclassified fallow
-3902252,Unclassified fallow
+3902252,"Corn, sorghum or Sudan"
 3902430,Vineyards
 3902446,Unclassified fallow
 3902544,Unclassified fallow
@@ -3735,7 +3735,7 @@ parcel_id,Crop_Choice
 3905300,"Corn, sorghum or Sudan"
 3905521,Unclassified fallow
 3905571,"Corn, sorghum or Sudan"
-3905586,Vineyards
+3905586,Unclassified fallow
 3905637,Unclassified fallow
 3905682,Unclassified fallow
 3905697,Vineyards
@@ -3781,7 +3781,7 @@ parcel_id,Crop_Choice
 3910079,"Corn, sorghum or Sudan"
 3910120,Vineyards
 3910325,Vineyards
-3910416,Unclassified fallow
+3910416,Vineyards
 3910593,Unclassified fallow
 3910725,Vineyards
 3910778,Unclassified fallow
@@ -3814,13 +3814,13 @@ parcel_id,Crop_Choice
 3912946,Vineyards
 3912981,Unclassified fallow
 3913048,Unclassified fallow
-3913086,Vineyards
+3913086,Unclassified fallow
 3913108,Unclassified fallow
 3913126,"Corn, sorghum or Sudan"
 3913200,Unclassified fallow
 3913553,Unclassified fallow
 3913555,Vineyards
-3913605,Vineyards
+3913605,Unclassified fallow
 3913659,Unclassified fallow
 3913664,Vineyards
 3913696,Unclassified fallow
@@ -3835,7 +3835,7 @@ parcel_id,Crop_Choice
 3914251,Unclassified fallow
 3914281,Unclassified fallow
 3914338,Unclassified fallow
-3914402,Unclassified fallow
+3914402,Vineyards
 3914773,Unclassified fallow
 3914799,Unclassified fallow
 3914948,Unclassified fallow
@@ -3849,7 +3849,7 @@ parcel_id,Crop_Choice
 3915691,Unclassified fallow
 3915704,Unclassified fallow
 3915739,"Corn, sorghum or Sudan"
-3915760,Unclassified fallow
+3915760,Vineyards
 3915778,Unclassified fallow
 3915877,Unclassified fallow
 3915938,Unclassified fallow
@@ -3877,7 +3877,7 @@ parcel_id,Crop_Choice
 3919653,Unclassified fallow
 3919802,Unclassified fallow
 3919871,Vineyards
-3919942,Vineyards
+3919942,Unclassified fallow
 3919983,Unclassified fallow
 3920184,Unclassified fallow
 3920273,Unclassified fallow

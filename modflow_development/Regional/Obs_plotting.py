@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -107,12 +107,9 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
-# # model_nam = 'fine_tprogs_more_rain'
-# model_nam = '3layer'
-# model_nam = 'params_maples_fine'
-model_nam = 'mid_res_tprogs'
-model_nam = 'historical_geology_cal'
-model_nam = 'historical_extended'
+# model_nam = 'historical_geology_cal'
+# model_nam = 'historical_extended'
+model_nam = 'input_write_2000_2022'
 
 model_ws = loadpth+model_nam
 
@@ -298,7 +295,7 @@ plt.xlabel('Date')
 
 
 # %%
-hobout = clean_hob(model_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'})
+hobout = clean_hob(model_ws, dt_ref, split_c = '.', obs_id_spd=False).rename(columns={'Sensor':'obs_site'})
 
 
 # %%
@@ -569,7 +566,7 @@ stn_chk[cols]
 
 # %%
 ghb_dir = join(gwfm_dir, 'GHB_data')
-year = 2019 # 2016
+year = 2010 # 2016
 filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
 # convert from ft to meters
 hd_strt = np.loadtxt(filename)*0.3048
@@ -669,10 +666,6 @@ sfr_arr[reach_data.i, reach_data.j] = reach_data.strhc1
 # ax.imshow(sfr_arr, norm = mpl.colors.LogNorm())
 # for n in chk_all:
 #     ax.scatter(n[2], n[1], marker='x')
-
-# %%
-# plt.imshow(hk[10])
-model_ws
 
 # %%
 hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
