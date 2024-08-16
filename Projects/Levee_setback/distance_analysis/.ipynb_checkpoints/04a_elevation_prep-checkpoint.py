@@ -239,18 +239,113 @@ transg['line'] = np.arange(0,len(transg))
 # transg.to_file(gis_dir+'/transect_lines_3300.shp')
 
 # %%
+from shapely.ops import split
+# Combine all lines in gdf_lines_2 into a single geometry (unary_union)
+splitter = transg.unary_union
+
+# Function to split each line in gdf_lines_1 by the splitter
+def split_line_by_splitter(line, splitter):
+    if line.intersects(splitter):
+        # Split the line by the splitter
+        split_result = split(line, splitter)
+        # If the result is a MultiLineString, split into separate LineStrings
+        if isinstance(split_result, MultiLineString):
+            return list(split_result.geoms)
+        else:
+            return [split_result]
+    else:
+        return [line]
+
+# Apply the splitting function to all lines in gdf_lines_1
+
+
+
+# %%
+# need to iterate over each XS line and drop that from the list with which
+# we'll sjoin to split
+
+# %%
+
+# %%
+split_xs = transg.copy()
+
+# split_xs = gpd.GeoDataFrame()
+# go from downstream to upstream to prefer the upstream cross-section
+for n in np.flip(transg.index.values):
+# for n in [26]:
+    # find xs to split if needed
+    ind_xs = split_xs.loc[[n]].copy()
+    # use the rest of the XS to split
+    # could potentially filter down to the 2 above and 2 below
+    split_xs = split_xs.drop(n).copy()
+# transg
+
+    # where the XS overlaps with any other XS then split
+    split_geom = split_line_by_splitter(ind_xs.geometry.iloc[0],  split_xs.unary_union)[0]
+    if isinstance(split_geom, shapely.GeometryCollection):
+        for s, geom in enumerate(split_geom.geoms):
+            # print(geom.length)
+            # scale the geometry ever so slightly to prevent overlap
+            ind_xs.geometry = [geom]
+            ind_xs.geometry = ind_xs.geometry.scale(0.99)
+            ind_xs['xs_split'] = int(s)
+            split_xs = pd.concat((split_xs,ind_xs))
+    else:
+        ind_xs.geometry = [split_geom]
+
+        split_xs = pd.concat((split_xs,ind_xs))
+
+# only keep the split segments that are touching the Cosumnes River
+split_xs = split_xs.sjoin( cr[['GNIS_Name','geometry']], how='inner')
+split_xs = split_xs.drop(columns=['xs_split','index_right','GNIS_Name'])
+
+
+# %%
+
+# %%
+n
+split_xs
+ind_xs
+
+# %%
+
+# %%
+
+# %%
+
+# split_result = split(ind_xs.geometry, splitter.unary_union)
+# isinstance(split_result, MultiLineString)
+ax=transg.plot(color='black')
+# transg.loc[[n]].copy().plot(ax=ax,color='red')
+split_xs.plot(ax=ax, color='red')
+
+# %%
+from shapely.ops import split
+
+# Apply the splitting function to all lines in gdf_lines_1
+split_geometries = transg['geometry'].apply(lambda x: split_line_by_splitter(x, splitter))
+
+# Flatten the list of lists into a single list of geometries
+split_lines = [geom for sublist in split_geometries for geom in sublist]
+
+# Create a new GeoDataFrame with the split lines
+gdf_split_result = gpd.GeoDataFrame(geometry=split_lines, crs=gdf_lines_1.crs)
+
+
+# %%
 # need to crop transects where they overlap
 
 # using buffer and overlay doesn't work because the buffer doesn't sufficiently overlap the cross-sections
 # need to use a line split and drop the that doesn't touch the river line
 # create uni-direction buffer
 transg_buf_1way = transg.copy()
-transg_buf_1way.geometry = transg_buf_1way.buffer(-400, single_sided=True)
-# first remove the original transect from the buffer
-transg_buf_1way = transg_buf_1way.overlay(transg, how='difference')
-# now create an udpated cross-section with the overlapping part removed
-transg_new = transg.copy()
-transg_new = transg_new.overlay(transg_buf_1way, how='difference')
+
+# transg_buf_1way.geometry = transg_buf_1way.buffer(-400, single_sided=True)
+# # first remove the original transect from the buffer
+# transg_buf_1way = transg_buf_1way.overlay(transg, how='difference')
+# # now create an udpated cross-section with the overlapping part removed
+# transg_new = transg.copy()
+# transg_new = transg_new.overlay(transg_buf_1way, how='difference')
 
 fig,ax = plt.subplots()
 transg_buf_1way.plot(ax=ax,color='red')

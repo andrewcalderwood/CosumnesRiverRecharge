@@ -239,6 +239,7 @@ transg['line'] = np.arange(0,len(transg))
 # transg.to_file(gis_dir+'/transect_lines_3300.shp')
 
 # %%
+from shapely.ops import split
 # Combine all lines in gdf_lines_2 into a single geometry (unary_union)
 splitter = transg.unary_union
 
@@ -258,6 +259,65 @@ def split_line_by_splitter(line, splitter):
 # Apply the splitting function to all lines in gdf_lines_1
 
 
+
+# %%
+# need to iterate over each XS line and drop that from the list with which
+# we'll sjoin to split
+
+# %%
+
+# %%
+split_xs = transg.copy()
+
+# split_xs = gpd.GeoDataFrame()
+# go from downstream to upstream to prefer the upstream cross-section
+for n in np.flip(transg.index.values):
+# for n in [26]:
+    # find xs to split if needed
+    ind_xs = split_xs.loc[[n]].copy()
+    # use the rest of the XS to split
+    # could potentially filter down to the 2 above and 2 below
+    split_xs = split_xs.drop(n).copy()
+# transg
+
+    # where the XS overlaps with any other XS then split
+    split_geom = split_line_by_splitter(ind_xs.geometry.iloc[0],  split_xs.unary_union)[0]
+    if isinstance(split_geom, shapely.GeometryCollection):
+        for s, geom in enumerate(split_geom.geoms):
+            # print(geom.length)
+            # scale the geometry ever so slightly to prevent overlap
+            ind_xs.geometry = [geom]
+            ind_xs.geometry = ind_xs.geometry.scale(0.99)
+            ind_xs['xs_split'] = int(s)
+            split_xs = pd.concat((split_xs,ind_xs))
+    else:
+        ind_xs.geometry = [split_geom]
+
+        split_xs = pd.concat((split_xs,ind_xs))
+
+# only keep the split segments that are touching the Cosumnes River
+split_xs = split_xs.sjoin( cr[['GNIS_Name','geometry']], how='inner')
+split_xs = split_xs.drop(columns=['xs_split','index_right','GNIS_Name'])
+
+
+# %%
+
+# %%
+n
+split_xs
+ind_xs
+
+# %%
+
+# %%
+
+# %%
+
+# split_result = split(ind_xs.geometry, splitter.unary_union)
+# isinstance(split_result, MultiLineString)
+ax=transg.plot(color='black')
+# transg.loc[[n]].copy().plot(ax=ax,color='red')
+split_xs.plot(ax=ax, color='red')
 
 # %%
 from shapely.ops import split
