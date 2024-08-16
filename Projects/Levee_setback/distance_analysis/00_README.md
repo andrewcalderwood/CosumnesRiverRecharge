@@ -5,6 +5,7 @@
 3. 04_Setback distance manning's and eco is run to create the XS of the river for each setback distance. Calculates example flood depth array.
 4. 05_Recharge volume prepares maps of the conductivity at the surface (1-2 m). Calculates an example recharge using the constant flood depth array.
 5. 06_Flow passing recharge is the recharge calculation with flow routing between segments based on the flood types from Whipple et al. 2017 and saves information on streamflow, recharge, and depth. This is translated to the script multiprocess_recharge which is used to run the 100 realizations in parallel.
+	- multiprocess_recharge is the parallel script to save the key data
 6. 06b_recharge_plotting is the current iteration of recharge result processing which summarizes total recharge, looks at streamflow depletion and maps depth
 7. 10_method_figures creates a map of the site, example cross-section with flood depths and plots 3D geologic model figures
 

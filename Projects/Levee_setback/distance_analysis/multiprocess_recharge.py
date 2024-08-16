@@ -300,7 +300,7 @@ def run_rech(t):
 
 def main():
     # pool = Pool(processes=multiprocessing.cpu_count()-2)  # set the processes max number to the number of cpus
-    pool = Pool(processes=16)  # with 100/25 that is 4 sets, 16 is 6.25 sets
+    pool = Pool(processes=15)  # with 100/25 that is 4 sets, 16 is 6.25 sets, 15 is 6.667 sets
     # result = pool.map(realization_recharge, range(100)) # original without adding inputs
     result = pool.map(run_rech, range(100))
     pool.close()
