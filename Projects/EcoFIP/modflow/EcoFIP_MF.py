@@ -33,8 +33,8 @@ import time
 
 # standard python plotting utilities
 # import seaborn as sns
-# import matplotlib as mpl
-# import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 # import matplotlib.dates as mdates
 
 # standard geospatial python utilities
@@ -55,9 +55,8 @@ doc_dir = join(usr_dir, 'Documents')
 
 git_dir = join(doc_dir, 'GitHub')
 ## Set up directory referencing
-gwfm_dir = join(usr_dir,'Box/research_cosumnes/GWFlowModel')
-
-bas_dir = join(gwfm_dir, 'BAS6')
+# gwfm_dir = join(usr_dir,'Box/research_cosumnes/GWFlowModel')
+# bas_dir = join(gwfm_dir, 'BAS6')
 # proj_dir = join(gwfm_dir,'Projects','EcoFIP')
 # plt_dir = join(proj_dir,'figures/')
 
@@ -67,6 +66,12 @@ proj_dir = join(lwa_dir, '669.03 - DWR Cosumnes Floodplain Recharge')
 main_concept_dir = join(proj_dir, 'Concepts')
 gis_dir = join(main_concept_dir,'GIS')
 
+# should start using files for EcoFIP stored on Dropbox instead of Box
+gwfm_dir = join(proj_dir, 'data','GWFlowModel')
+gwfm_proj_dir = join(gwfm_dir, 'Projects','EcoFIP')
+
+
+# %%
 
 # %%
 def add_path(fxn_dir):
@@ -87,12 +92,16 @@ from mf_utility import get_dates
 
 
 # %%
+from mf_utility import get_layer_from_elev
+
+# %%
 run_dir = 'C://WRDAPP/GWFlowModel'
 # run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
+model_nam = 'input_write_2014_2020'
 
 
 model_ws = loadpth+model_nam
@@ -118,6 +127,13 @@ gel = m.__getattr__(gel_nam)
 # %%
 # load datetime reference for the model
 strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
+
+# %%
+# load model grid for the test
+# gridp = gpd.read_file(join(
+zon_stats = gpd.read_file(join(gwfm_dir, 'DIS_data', 'grid_zonal_stats','elevation_m_statistics.shp'))
+grid_p = zon_stats[['node','row','column','geometry']].copy()
+grid_p[['i','j']] = grid_p[['row','column']]-1
 
 # %% [markdown]
 # Use Blodgett Dam shapefile as a test case. Also this needs to be generalized if possible to be re-ran as a complete script for each different concept.
@@ -152,14 +168,9 @@ if copy_files:
 
 
 # %%
-concept_dir = join(gwfm_dir,'Projects',concept_name)
-
-
-# load model grid for the test
-# gridp = gpd.read_file(join(
-zon_stats = gpd.read_file(join(gwfm_dir, 'DIS_data', 'grid_zonal_stats','elevation_m_statistics.shp'))
 
 # %%
+# concept_dir = join(gwfm_dir,'Projects',concept_name)
 # load shapefile that defines geospatial extent for test
 # gdf_extent = gpd.read_file(join(concept_dir,'geospatial', 'blodgett_dam_restoration_extent', 'blodgett_dam_restoration_extent.shp'))
 # gdf_extent = gdf_extent[gdf_extent.id ==0]
@@ -202,7 +213,7 @@ proj_zon_stats[['i','j']] = proj_zon_stats[['row','column']] - 1
 # Just looking at the Blodgett Dam project footprint makes me think it could make sense to downsize but that is primarily if we wan to see change in groundwater elevations on a sub-cel scale.
 # - some of these concepts may take place where there is already no pumping
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # # WEL/RCH Updates
 # Remove or scale WEL/RCH where new floodplain interaction is:
 # - ideally we scale the the pumping based on the area of a cell converted to floodplain
@@ -343,14 +354,50 @@ oc = flopy.modflow.ModflowOc(model = m, stress_period_data = spd, compact = True
 oc.write_file()
 
 # %% [markdown]
+# # Conductivity and recharge data
+# Import pre-processed unsaturated conductivity and recharge estimate data from the Tier 2 process.
+# - for the SFR package (in-stream only) we will only use the conductivity estimated from the AEM data
+# - for the RIV package (floodplain) we will use the combined conductivity of AEM and soil map to provide results that remain consistent with the Tier 2 results
+
+# %%
+# load updated seepage maps (lower of soil map and AEM Ksat) for floodplain recharge
+# in the stream channel we should use only AEM Ksat as this is incised so representative of aquifer materials
+
+# only has the final combined rate which should be used for the concept areas to match results between
+# Tier 2 and Tier 3
+rch_gdf = gpd.read_file(join(gwfm_proj_dir,'figures', 'recharge', 'sq','unsaturated_recharge_rate.shp'))
+
+# break up the unsaturated recharge rates into by the grid cell
+rch_grid = gpd.overlay(rch_gdf,grid_p)
+
+# %%
+rch_grid
+
+# %%
+# just the geom K for the river channel where available
+geom_K = gpd.read_file(join(gwfm_proj_dir,'GIS', 'Kgeometric_mean_mf.shp'))
+# for the mf one Region is equal to the node from grid_p
+geom_K = geom_K.rename(columns={'Region':'node'})
+
+# %%
+# average to model grid cell using cell area coverage
+geom_K['cell_frac'] = geom_K.geometry.area/(200*200)
+geom_K['K_m_d_frac'] = geom_K.K_m_d * geom_K.cell_frac
+avg_K = geom_K.groupby('node')[['K_m_d_frac']].sum(numeric_only=True).rename(columns={'K_m_d_frac':'K_m_d'})
+# join to model grid again to get row,column
+avg_K_grid = grid_p.merge(avg_K.reset_index())
+# avg_K_grid[['i','j']] = avg_K_grid[['row','column']]-1
+
+# %% [markdown]
 # # SFR Updates
-# Two options:
+# Three options:
 # 1. Totally replace the streamflow routing with RIV cells with stage based on output from HEC-RAS
 # 2. Replace cells at proposed restoration sites with RIV cells
 #     - downstream segment needs to divert flow from upstream to skip over the RIV cells
 #     - if the RIV is removed in the dry season then the segment data could be redefined to allow flow passing through the segments
-#     - **likely need to define strhc1 by segment to be able to assign a value of 0 when RIV cells overlap.** Easiest fix is this, to simply just remove SFR seepage but maintain flow passing through.
-# 3. Consider updating strhc1 to use the leakage rates identified with the EcoFIP Tier 2 (soil map + AEM Ksat)
+# 3. **likely need to define strhc1 by segment to be able to assign a value of 0 when RIV cells overlap.** Easiest fix is this, to simply just remove SFR seepage but maintain flow passing through.
+#
+# Consider updating strhc1 to use the leakage rates identified with the EcoFIP Tier 2 (soil map + AEM Ksat)
 
 # %%
 # just for testing
@@ -361,17 +408,77 @@ sfr = m.sfr
 
 # %%
 reach_data = pd.DataFrame(sfr.reach_data)
+# merge reaches with new conductivity data
+reach_data = reach_data.merge(avg_K_grid[['i','j','K_m_d']], how='left')
 
 # %%
-# proj_zon_stats
+# do a nearest spatial join to look at potential infill from nearby
+# create a spatial reach data object
+reach_grid = grid_p[['i','j','geometry']].merge(reach_data)
+# identify the cells that didn't find conductivity data
+reach_grid_fill = reach_grid[reach_grid.K_m_d.isna()].copy().drop(columns=['K_m_d'])
+# look to see how far away the nearest cell with data is
+# there is still some missing at 200 m (48 reaches) and 400 m (31 reaches)
+reach_grid_filled = reach_grid_fill.sjoin_nearest(avg_K_grid[['K_m_d','geometry']], how='inner', max_distance=400, distance_col='dist_m')
+
+# average estimated conductivity properties for each reach
+reach_grid_filled = reach_grid_filled.groupby(['iseg','ireach','i','j'])[['K_m_d']].mean(numeric_only=True).reset_index()
+
+# %%
+# identify which data is covered by the spatial join
+reach_keep = reach_grid.merge(reach_grid_filled[['i','j', 'iseg','ireach']], how='left', indicator=True)
+reach_keep = reach_grid[(reach_keep['_merge']=='left_only')]
+
+# append the merged data with the nearest join data
+reach_grid_updated = pd.concat((reach_keep, reach_grid.drop(columns=['K_m_d']).merge(reach_grid_filled)))
+reach_grid_updated = reach_grid_updated.sort_values(['iseg','ireach']).drop(columns=['geometry'])
+
+
+# %%
+# the majority of the model grid stream cells are covered with AEM data
+# and it generally aligns with the existing data
+# reach_data.plot(x='reachID',y=['strhc1','K_m_d'])
+
+# reach_grid_updated.plot(x='reachID',y=['strhc1','K_m_d'])
+
+# %%
+# replace strhc1, TPROGs ksat with the value from AEM
+reach_grid_updated.loc[reach_grid_updated.K_m_d.isna(),'K_m_d'] = reach_grid_updated.loc[reach_grid_updated.K_m_d.isna(),'strhc1']
+
+
+# %%
+# create final reach data for input
+reach_data_f = reach_data.drop(columns='K_m_d').merge(reach_grid_updated[['iseg','ireach','K_m_d']])
+
+# %%
+# load deep geology data and conductivity to prevent over-write of foothill geology
+# need to replace the // with /// to remove URL error
+deep_geology = np.loadtxt(join(model_ws,'input_data', 'deep_geology.tsv').replace('//','///'))
+m_shape = m.dis.botm.shape
+deep_geology = np.reshape(deep_geology, m_shape).astype(bool)
+
+# %%
+# vka_deep = m.upw.vka.array
+# # filter out to deep geology
+# vka_deep[~deep_geology.astype(bool)] = np.nan
+
+# %%
+# the existing conductivity in strhc1 is the unsat K from tprogs so for the deep geology this includes
+# the land surface formation and the deeper units
+reach_data_f['deep_geology'] = deep_geology[reach_data_f.k, reach_data_f.i, reach_data_f.j]
+# where there is deep_geology we could overwrite the final vka
+# reach_data_f.loc[reach_data.deep_geology,'K_m_d'] = reach_data_f.loc[reach_data.deep_geology,'strhc1']
+
+# %% [markdown]
+# One question is whether we want to reset streambed conductances in the upper reaches of Deer Creek and Cosumnes River where we overly what we considered to be lower conductivity foothill formations.
 
 # %%
 # identify stream reaches impacted by the updated concept
-update_reach = proj_zon_stats[['row','column','i','j','mean','min','geometry']].merge(reach_data)
-drop_strhc1 = reach_data.reachID.isin(update_reach.reachID)
+update_reach = proj_zon_stats[['row','column','i','j','mean','min','geometry']].merge(reach_data_f)
+drop_strhc1 = reach_data_f.reachID.isin(update_reach.reachID)
 # make the stream hydraulic conductivity 0 where it will be overlapped
 # by floodplain cells driven by the river package
-reach_data.loc[drop_strhc1, 'strhc1'] = 0
+reach_data_f.loc[drop_strhc1, 'strhc1'] = 0
 
 
 # %%
@@ -402,7 +509,7 @@ update_reach.plot(color='darkblue',ax=ax)
 proj_zon_stats.plot(color='none',edgecolor='black',ax=ax)
 
 # %%
-sfr.reach_data.strhc1 = reach_data.strhc1
+sfr.reach_data.strhc1 = reach_data_f.strhc1
 
 # %%
 sfr.write_file()
@@ -413,14 +520,13 @@ sfr.write_file()
 #
 # When defining the hydraulic conductivity, it may make sense to use the estimated values from the AEM data to improve consistency. Then we could also perhaps go back to a simpler geology of just 3 layers.
 
-# %%
-from mf_utility import get_layer_from_elev
-
 # %% [markdown]
 # It may make sense to move the hydraulic conductivity work to pre-processing or have the standard model save as needed for each tprogs realization
 #
 # Our river bottom and thickness is most important for defining our hydraulic gradient starting point and it is the elevatoin where we'll see flows drain out.
 # - the absolute minimum in a cell may not be well connected but the first quartile likely represents an appropriate starting location. rbot has to be set to the minimum or flows in the stream will constantly have WSE below rbot
+
+# %%
 
 # %%
 riv_df = proj_zon_stats.copy()
@@ -545,32 +651,15 @@ riv_df['wetted_area'] = riv_df.area
 
 
 # %%
-m.dis.nper, len(sfr_tab)
-
-# %%
-# t0 = time.time()
-# riv_dict = dict()
-# for t in np.arange(0, m.dis.nper):
-#     riv_df_in = riv_df.copy()
-#     # for test dataset
-#     riv_df_in['stage'] = spd_stage[t]
-#     riv_df_in['wetted_area'] = riv_df_in.area*sfr_tab.flow_scale.iloc[t]    
-#     # drop river cells if none is saturated
-#     riv_df_in = riv_df_in.loc[riv_df_in.stage > riv_df_in.rbot]
-#     # calculate the conductance (C = K * l * w/ b)
-#     riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.wetted_area / 2
-#     # sample relevant columns for input
-#     riv_dict[t] = riv_df_in[['k','i','j','stage','cond','rbot']].values
-
-# t1 = time.time()
-# print(t1-t0)
-
-# %%
+# drop times when there is no WSE reported
+wse_grid = wse_grid.dropna(subset='wse')
 # convert to datetime
 wse_grid.date = pd.to_datetime(wse_grid.date)
+print('Number of WSE cells from all time', wse_grid.node.unique().shape[0])
 # subset WSE data to model period
-wse_model = wse_grid[(wse_grid.date>=strt_date)&(wse_grid.date<end_date)]
+wse_model = wse_grid[(wse_grid.date>=strt_date)&(wse_grid.date<end_date)].copy()
 wse_model=wse_model.set_index('date')
+print('Number of WSE cells from modeled period', wse_model.node.unique().shape[0])
 
 
 
@@ -593,16 +682,14 @@ riv_df_all = riv_df_all.dropna(subset=['wse','area'])
 riv_df_all.to_csv(join(m.model_ws,'river_spd_df.csv'))
 
 # %%
+# verifies that there are periods when there are more than 53 cells
+riv_cell_count = riv_df_all.groupby('date')[['wse']].count()
+riv_cell_count.wse.plot()
+print('There are',riv_cell_count[riv_cell_count.wse>riv_cell_count.wse.min()].shape[0],'days above the min number of cells.')
+
+# %%
 dates = pd.date_range(strt_date, end_date)
 # dates
-
-# %%
-t=0
-d=dates[t]
-# riv_df_in.area
-
-# %%
-# riv_dict[0][:10]
 
 # %%
 # runs pretty slow
@@ -615,17 +702,20 @@ for t, d in enumerate(dates):
     if d in riv_df_all.index:
         riv_df_in = riv_df_all.loc[d].copy()
 
-    # # drop river cells if none is saturated
-    # calculate the conductance (C = K * l * w/ b)
-    riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.area / 2
-    # sample relevant columns for input
-    riv_dict[t] = riv_df_in[['k','i','j','wse','cond','rbot']].values
+        # # drop river cells if none is saturated
+        # calculate the conductance (C = K * l * w/ b)
+        riv_df_in['cond'] = riv_df_in.uhc * riv_df_in.area / 2
+        # sample relevant columns for input
+        riv_dict[t] = riv_df_in[['k','i','j','wse','cond','rbot']].values
 
 t1 = time.time()
 print(t1-t0)
 
 # %%
-# riv_dict
+# the WSE doesn't seem to change significantly between any period of the dataframe
+n=350
+print(riv_dict[n].shape[0], riv_df_all.loc[dates[n]].shape[0])
+riv_df_all.loc[dates[n]].wse.quantile([0,.5,1])
 
 # %%
 riv = flopy.modflow.ModflowRiv(model = m, stress_period_data = riv_dict, ipakcb = 55)
@@ -647,11 +737,8 @@ riv.write_file()
 
 # %% [markdown]
 # ## Add river obs
-# Use river obs to help post-process between recharge in floodplain and in the river.
-
-# %%
-# riv_df.shape
-# keep_bool
+# Use river obs to help post-process between recharge in floodplain and in the river.  
+# Could also use stream stage, bottom, and gw elevation to back-calculate on cell-by-cell basis.  
 
 # %%
 # differentiate between concept cells in the river vs floodplain
@@ -667,46 +754,61 @@ flag_cells['rvob_grp'] = 1
 flag_cells.loc[~flag_cells.reachID.isna(),'rvob_grp'] = 2
 
 # %%
-
-
-nqclfb
-
-# %%
 nper = m.dis.nper
 
 # %%
 # number of cell groups (number of flow observations), 
 # for cosumnes can be 2: stream or floodplain
-nqfb = 2
+nqfb = len(flag_cells.rvob_grp.unique())
+
 # number of cells total for all cell groups
-nqcfb = riv.stress_period_data[0].shape[0]
+# nqcfb = riv.stress_period_data[0].shape[0] # under-estimate depending the stress period
+nqcfb = flag_cells.shape[0]
 # number of time obs for all cell groups
-nqtfb = nper
-# number of times of flow observations for a cell group, list of length nqgb
+# does this need to be multiplied by the number of cells or cell groups?
+# it needs to be multipled by number of groups because this defines all following inputs
+nqtfb = nper*nqfb
+# number of times of flow observations for a cell group, list of length nqfb
 nqobfb = [nper, nper]
 # number of cells in a group, list of length nqgb
 nqclfb = []
 for n in flag_cells.rvob_grp.unique():
     nqclfb += [int((flag_cells.rvob_grp==n).sum())]
-    
+
+
 # obs name, list of length nqtfb
-obsnam = ['klam_gain' + str(s).zfill(3) for s in np.arange(0,nper)]
-# obsnam = ['klam_lower', 'klam_upper']
+fp_nam = ['fldpln' + str(s).zfill(4) for s in np.arange(0,nper)]
+strm_nam = ['strm' + str(s).zfill(4) for s in np.arange(0,nper)]
+obsnam = fp_nam + strm_nam
 # number of reference stress period, list
-irefsp = np.arange(0,nper).tolist()
+irefsp = np.arange(0,nper).tolist()*nqfb
 # time offset from beginning of stress period, list
-toffset = [0]*nper
+toffset = ([0]*nper)*nqfb
 # flow observation for each cell group, list
 # negative for flow out of aquifer
-flwobs = [-klam_gain_sum]*nper
-# flwobs = [klam_gain_lower,klam_gain_upper]
-# layer, row, col, factor list of length(nqfb, nqclfb) for each
-layer = [chd.stress_period_data[0].k]*nper
-row = [chd.stress_period_data[0].i]*nper
-column = [chd.stress_period_data[0].j]*nper
-fact = np.ones(nqclfb)/nqclfb
-factor = [fact]*nper
+# use 0 since we don't need this for reference
+flwobs = ([0]*nper)*nqfb
 
+# updated above
+
+# layer, row, col, factor list of length(nqfb, nqclfb) for each
+# for RIV these change each spd depending on flooding so they should be dynamic
+riv_spd = riv.stress_period_data
+layer, row, column = [[],[],[]]
+for s in np.arange(0, nper):
+    layer += [list(riv_spd[s].k)]
+    row += [list(riv_spd[s].i)]
+    column += [list(riv_spd[s].j)]
+
+# factor is the portion of the simulated gain or loss in the cell that is included in the total gain or loss for this cell group (fn of eq. 5).
+# this should be one for all, insert for each rvobs group
+factor = []
+for n in nqclfb:
+    factor += [list(np.ones(n))]
+
+
+
+# %%
 # flowtype (string) – String that corresponds to the head-dependent flow boundary condition type (CHD, GHB, DRN, RIV)
 flowtype = 'RIV'
 extension = 'rvob'
@@ -716,3 +818,11 @@ chob = flopy.modflow.ModflowFlwob(model = m, nqfb=nqfb,nqcfb=nqcfb,nqtfb=nqtfb,n
                           layer=layer,row=row,column=column,factor=factor,
                           flowtype = flowtype, extension = extension,
                                  filenames = ['MF.rvob','MF.rvob.out'])
+
+# %%
+chob.write_file()
+
+# %%
+m.model_ws
+
+# %%

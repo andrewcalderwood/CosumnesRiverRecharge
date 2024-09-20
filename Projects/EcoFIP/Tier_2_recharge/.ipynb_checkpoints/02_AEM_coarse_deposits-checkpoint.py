@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -51,10 +51,19 @@ import matplotlib.font_manager as fm
 usr_dir = expanduser('~')
 doc_dir = join(usr_dir, 'Documents')
 # dir of all gwfm data
-gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
-# dir of stream level data for seepage study
+# gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 
 
+# %%
+lwa_dir = join(usr_dir, 'LWA Dropbox','01_Project-Teams')
+proj_dir = join(lwa_dir, '669.03 - DWR Cosumnes Floodplain Recharge')
+# gis_dir = join(main_concept_dir,'GIS')
+
+# should start using files for EcoFIP stored on Dropbox instead of Box
+gwfm_dir = join(proj_dir, 'data','GWFlowModel')
+gwfm_proj_dir = join(gwfm_dir, 'Projects','EcoFIP')
+
+# %%
 sfr_dir = gwfm_dir+'/SFR_data/'
 upw_dir = gwfm_dir+'/UPW_data/'
 
@@ -114,13 +123,18 @@ mr = rivers_clip[rivers_clip.GNIS_Name=='Mokelumne River']
 # ## ecofip reference
 
 # %%
-grid_id= 'parcel'
+# grid_id= 'parcel'
 # grid_id = 'sq'
+grid_id = 'mf'
 
 if grid_id=='parcel':
     gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
 elif grid_id == 'sq':
     gdf_elev = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
+elif grid_id == 'mf':
+    gdf_elev = gpd.read_file(join(gwfm_dir, 'DIS_data', 'grid','grid.shp'))
+    # rename node to Region
+    gdf_elev = gdf_elev.rename(columns={'node':'Region'})
 
 # simpler geodataframe to bring dataframe to geodataframe
 gdf_id = gdf_elev[['Region','geometry']].copy()
@@ -151,9 +165,18 @@ def clean_plot(ax_n):
 
 # %%
 season='spring'
-gdf_gw_long = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 
-                         'GW_elevations_long_'+grid_id+'_'+season+'.shp'))
+
+
+# %%
+if grid_id=='mf':
+        gdf_gw_long.to_csv(join(gis_dir, 'analysis_unit_reference', 
+                         'GW_elevations_long_'+grid_id+'_'+season+'.csv'))
+else:
+    gdf_gw_long = gpd.read_file(join(gis_dir, 'analysis_unit_reference', 
+                             'GW_elevations_long_'+grid_id+'_'+season+'.shp'))
 gdf_gw_long.year = gdf_gw_long.year.astype(int)
+
+# %%
 
 # %% [markdown]
 # For fall groundwater elevations that parcels have a mean standard deviation of 2.64 m across all years (2000-2020), for spring that goes down to 2.28 m.
@@ -428,13 +451,18 @@ def calc_unsat_thickness(avg_K):
 
 
 # %%
+# 
+
+# %%
 avg_K = aem_depth.copy()
 # crop on the parcel level
 avg_K = gpd.overlay(avg_K, gdf_id.to_crs(avg_K.crs))
-# join K data with dtw to subset
-avg_K = avg_K.merge(gdf_gw[['Region','dtw_m']])
-# preliminary cut for unsaturated zone (improve with kriged DTW)
-# avg_K = avg_K[avg_K.Depth_Bott<35]
+
+# # join K data with dtw to subset
+avg_K = avg_K.merge(gdf_gw[['Region','dtw_m']], how='inner')
+# # preliminary cut for unsaturated zone (improve with kriged DTW)
+avg_K = avg_K[avg_K.Depth_Bott<35]
+# the unsat_thickness calc removes areas if they are all saturated
 avg_K = calc_unsat_thickness(avg_K)
 cols = ['Id', 'Region', 'thick','Depth_Mid_', 'PC_avg','K_m_d']
 # Id is for AEM, Region is for EcoFIP

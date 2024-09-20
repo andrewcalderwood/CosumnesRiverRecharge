@@ -469,10 +469,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     # %%
     # runs relatively quickly
     if (not run_opt) & (irr_all is None):
+        # we can have irr_all be an optional input
         print('irr_all not specified for soil water budget')
         print('Assuming no irrigation for all fields')
         irr_all = np.zeros((nfield_crop,2*n_irr))
-
+    print('Calculating true irrigation with irrigation efficiency')
     # scale by irrigation efficiency of the crop after optimizing
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     p_true = np.zeros(nfield_crop) 
@@ -497,6 +498,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 # irr_true[0]
 
     # %%
+
     # break down irrigation into groundwater and surface water time series
     irr_sw_out = np.zeros((nfield_crop, gen.nper))
     irr_sw_out[:, irr_days] = irr_true[:, :n_irr] # SW out
@@ -506,11 +508,14 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 
 
     # %%
+    print('Saving output to files')
+
     # need separte hdf5 for each year because total is 300MB, group by crop in array
     fn = join(base_model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
     crop_arr_to_h5(pc_all, crop, fn)
 
     # save profit and yield values
+    # the profit saved here is negative for minimization
     fn = join(base_model_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
     crop_arr_to_h5(p_true, crop, fn)
 

@@ -100,11 +100,13 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
 
 
 # %%
-def get_wb_by_parcel(model_ws, crop, year,
+def get_wb_by_parcel(model_ws, year,
                      crop_in, crop_list, dtw_simple_df, well_dtw):
     """ 
     Complete function to take representative soil budget output
     and translate it to each parcel by crop type
+    INPUT:
+    
     OUTPUT:
     pc_df_all, irr_sw_df_all, irr_gw_df_all: dataframes with columns for
         UniqueID, date, rate of flux, dtw_id

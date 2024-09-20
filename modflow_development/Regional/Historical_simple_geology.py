@@ -99,6 +99,8 @@ xul, yul = list(m_domain.geometry.values[0].exterior.coords)[1]
 list(m_domain.geometry.values[0].exterior.coords)
 # m_domain.geometry.values[0].exterior
 
+# %%
+
 # %% [markdown]
 # # define model attributes
 
@@ -108,16 +110,16 @@ list(m_domain.geometry.values[0].exterior.coords)
 ss_bool = False # no steady state period
 
 # %%
-# scenario run_dates dry -> wet -> dry
-ss_strt = pd.to_datetime('2010-10-01')
-end_date = pd.to_datetime('2020-09-30')
-end_date = pd.to_datetime('2022-09-30') # 
-# end_date = pd.to_datetime('2014-10-1') # steady state plus one date avoids recoding anything
-strt_date = pd.to_datetime('2014-10-01')
+# 20 year run
 strt_date = pd.to_datetime('2000-10-01')
-
+end_date = pd.to_datetime('2022-09-30') # 
 ss_strt = pd.to_datetime('2000-10-01')
 ss_end = pd.to_datetime('2004-09-30')
+# standard 4-6 year run for testing
+strt_date = pd.to_datetime('2014-10-01')
+end_date = pd.to_datetime('2020-09-30')
+ss_strt = pd.to_datetime('2010-10-01')
+ss_end = pd.to_datetime('2014-09-30')
 
 dates = pd.date_range(strt_date, end_date)
 
@@ -223,12 +225,14 @@ elif os.path.exists(c_dir):
     loadpth = c_dir 
 
 loadpth = loadpth +'/GWFlowModel/Cosumnes/Regional/'
-model_ws = loadpth+'historical_simple_geology'
 model_ws = loadpth+'input_write'
 # if scenario=='reconnection':
 #     model_ws +='_'+scenario
 model_ws = model_ws + '_' + str(strt_date.year)+'_'+str(end_date.year)
-    
+
+# model_ws = loadpth+'historical_simple_geology'
+
+
 if nper <=2:
     model_ws = loadpth+'steadystate'
 print(model_ws)
@@ -256,6 +260,9 @@ dis = flopy.modflow.ModflowDis(nrow=nrow, ncol=ncol,
                                xul = xul, yul = yul,rotation=rotation, proj4_str=proj4_str,
                               nper = nper, perlen=perlen, nstp=nstp, steady = steady,
                               start_datetime = strt_date)
+
+# %%
+m.modelgrid
 
 # %%
 
@@ -2800,3 +2807,5 @@ m.check()
 # Writing the MODFLOW data files
 m.write_input()
 
+
+# %%

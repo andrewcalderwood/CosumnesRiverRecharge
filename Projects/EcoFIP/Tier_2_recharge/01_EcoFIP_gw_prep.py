@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -128,6 +128,10 @@ parcel_id = parcel_grid[grid_cols]
 
 
 # %%
+# sq_id
+# grid_elev
+
+# %%
 def elev_stats(raster_name, gdf):
     """ apply raster stats and join to geodataframe """
     # takes several minutes
@@ -141,13 +145,23 @@ def elev_stats(raster_name, gdf):
 
 
 # %%
-dem_raster_name = gwfm_dir+"/DEM_data/USGS_ten_meter_dem/modeldomain_10m_transformed.tif"
-parcel_elev = elev_stats(dem_raster_name, parcel_id.to_crs(raster_crs))
-parcel_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
-
-sq_elev = elev_stats(dem_raster_name, sq_id.to_crs(raster_crs))
-sq_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
-
+grid_id = 'mf'
+for season in ['spring','fall']:
+    # for the modflow grid we can load pre-processed elevation arrays
+    gdf_gw = grid_elev[['node','row','column','mean']].copy()
+    gdf_gw['gse'] = gdf_gw['mean'] # set gse
+    gdf_gw = gdf_gw.drop(columns=['mean']).rename(columns={'node':'Region'})
+    for y in np.arange(2000, 2021):
+        # units in feet
+        wse_arr = np.loadtxt(join(gwfm_dir,'GHB_data','final_WSEL_arrays',season+str(y)+'_kriged_WSEL.tsv'))
+        # convert to wse in meters
+        gdf_gw[y] = gdf_gw.gse - wse_arr[gdf_gw.row-1, gdf_gw.column-1]*0.3048
+    
+    # convert to long format for consistency
+    gdf_gw_long = gdf_gw.melt(id_vars=['Region','row','column','gse'], var_name = 'year', value_name = 'dtw_m')
+    gdf_gw_long.year = gdf_gw_long.year.astype(int)
+    gdf_gw_long.to_csv(join(gis_dir, 'analysis_unit_reference', 
+                         'GW_elevations_long_'+grid_id+'_'+season+'.csv'))
 
 # %% [markdown]
 # ## load interpolated groundwater data
@@ -164,6 +178,14 @@ raster_name = join(ghb_fp, 'fall'+str(y)+'_kriged.tif')
 with rasterio.open(raster_name) as r:
     # print(r.meta)
     raster_crs = r.crs
+
+# %%
+dem_raster_name = gwfm_dir+"/DEM_data/USGS_ten_meter_dem/modeldomain_10m_transformed.tif"
+parcel_elev = elev_stats(dem_raster_name, parcel_id.to_crs(raster_crs))
+parcel_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'parcels_elevation.shp'))
+
+sq_elev = elev_stats(dem_raster_name, sq_id.to_crs(raster_crs))
+sq_elev.to_file(join(gis_dir, 'analysis_unit_reference', 'sq_10ac_elevation.shp'))
 
 
 # %%
@@ -206,6 +228,9 @@ def clean_gdf_gw(gdf_gw, grid_cols, grid_id, season):
 
 # %%
 season='fall'
+
+
+# %%
 parcel_gw = gdf_sample_gwe(parcel_elev, parcel_id, grid_cols, season)
 clean_gdf_gw(parcel_gw, grid_cols, 'parcel', season)
 
@@ -214,12 +239,20 @@ clean_gdf_gw(parcel_gw, grid_cols, 'parcel', season)
 sq_gw = gdf_sample_gwe(sq_elev, sq_id, grid_cols, season)
 clean_gdf_gw(sq_gw, grid_cols, 'sq', season)
 
+
+# %%
+# need to add elevation data for model grid if interested in recharge estimates
+# grid_gw = gdf_sample_gwe(grid_elev, sq_id, grid_cols, season)
+# clean_gdf_gw(grid_gw, grid_cols, 'mf', season)
 
 # %% [markdown]
 # ## spring groundwater level
 
 # %%
 season='spring'
+
+
+# %%
 parcel_gw = gdf_sample_gwe(parcel_elev, parcel_id, grid_cols, season)
 clean_gdf_gw(parcel_gw, grid_cols, 'parcel', season)
 
@@ -230,3 +263,5 @@ clean_gdf_gw(sq_gw, grid_cols, 'sq', season)
 
 
 # %%
+# grid_gw = gdf_sample_gwe(grid_elev, sq_id, grid_cols, season)
+# clean_gdf_gw(grid_gw, grid_cols, 'mf', season)

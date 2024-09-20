@@ -5,12 +5,15 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# %% [markdown]
+# Goal: script to review more specific parts of the output as the testing phase
 
 # %%
 # standard python utilities
@@ -44,14 +47,25 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
 # %%
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-model_ws = loadpth+'historical_simple_geology_reconnection'
-model_ws = loadpth+'crop_soilbudget'
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# model_ws = loadpth+'historical_simple_geology_reconnection'
 
-model_ws = loadpth+'rep_crop_soilbudget'
+# model_ws = loadpth+'rep_crop_soilbudget'
+
+model_ws = join(loadpth,'input_write_2014_2020', 'rep_crop_soilbudget')
 
 
 # %%
+def add_path(fxn_dir):
+    """ Insert fxn directory into first position on path so local functions supercede the global"""
+    if fxn_dir not in sys.path:
+        sys.path.insert(0, fxn_dir)
+# flopy github path - edited
+new_dir = dirname(os.getcwd())
+
+add_path(new_dir)
+import functions.Basic_soil_budget_monthly as swb
+
 
 # %%
 
@@ -74,9 +88,10 @@ def read_crop_arr_h5(crop, h5_fn):
 # %%
 crop='Alfalfa'
 # crop='Pasture'
-# crop='Corn'
-crop='Grape'
-year=2020
+crop='Corn'
+# crop='Grape'
+# crop='Misc Grain and Hay'
+year=2016
 # need separte hdf5 for each year because total is 300MB, group by crop in array
 fn = join(model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
 pc_all = read_crop_arr_h5(crop, fn)
@@ -110,13 +125,13 @@ fn = join(model_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
 pi = -read_crop_arr_h5(crop, fn)
 
 # %% [markdown]
-# The profit reported by the individual site optimization is very high (~\$750) compared to the average soil data for distinct DTW profiles (~\$450)
+# The profit reported by the individual site optimization is very high (\\$ 750) compared to the average soil data for distinct DTW profiles (\\$ 450)
 # - but the printed out profit shows there is a step so this is just an error? or the irr. eff. overweights the profit since the printed values were before updating the irrigation to account for irrigation efficiency.
 # - Yeah it should be the reverse since the printed values have lower profit for the field by field profit
 # - also updated code to use minimum of rooting depth and soil depth to potentially avoid excess water availability
 #
-# Max total profit is 7 tons * 225 \$/ton so \$1,575 - \$78.86 = \$1496.14
-# - with surface water $\8\acre-inch at 42 in gives \$336 water cost so
+# Max total profit is 7 tons * 225 \\$/ton so \\$1,575 - \\$78.86 = \\$1496.14
+# - with surface water \\$8\acre-inch at 42 in gives \\$336 water cost so
 # - I had not finished updating the cost/profit table which might be why the profit was so high
 
 # %%
@@ -129,8 +144,17 @@ pi = -read_crop_arr_h5(crop, fn)
 # # Save output to table format
 
 # %%
+var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+
+
+# %%
 crop_in = pd.read_csv(join(model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
-crop_in = crop_in[crop_in.name=='Vineyards']
+print(crop_in.name.unique())
+crop_in = crop_in[crop_in.name==pred_dict[crop]]
+print(pred_dict[crop])
+
+# %%
+(crop_in.pod_bool==1).any()
 
 # %%
 dtw_df = pd.read_csv(join(model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'), index_col=0)
@@ -140,8 +164,8 @@ dtw_df = pd.read_csv(join(model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'), 
 dtw_df_mean = dtw_df.mean().values
 # temporary adjustment to account for representative testing
 # dtw_df_mean = np.hstack([dtw_df_mean[::2]]*2)
-dtw_df_mean = np.hstack([dtw_df_mean]*2)
-# dtw_df
+# dtw_df_mean = np.hstack([dtw_df_mean]*2)
+dtw_df_mean.shape
 
 # %%
 # summary output from hdf5 into csv

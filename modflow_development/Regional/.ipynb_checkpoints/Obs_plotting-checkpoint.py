@@ -88,6 +88,11 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
+import regional_utilities
+reload(regional_utilities)
+from regional_utilities import clean_wb
+
+# %%
 sfr_dir = gwfm_dir+'/SFR_data/'
 # grid_sfr = gpd.read_file(sfr_dir+'/final_grid_sfr/grid_sfr.shp')
 m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
@@ -201,7 +206,6 @@ plt.plot(rch_total.cumsum(), label='rch')
 plt.plot(pump_total.cumsum(), label='pump')
 plt.legend()
 
-
 # %%
 # plt.imshow(rech.mean(axis=0), vmax=0.001)
 # # plt.imshow(pump_rate.mean(axis=0), vmax=0.005)
@@ -211,32 +215,6 @@ plt.legend()
 
 # %% [markdown]
 # ## Water Budget check
-
-# %%
-def clean_wb(model_ws, dt_ref):
-    # load summary water budget
-    wb = pd.read_csv(model_ws+'/flow_budget.txt', delimiter=r'\s+')
-
-    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
-    wb = wb.merge(dt_ref, on='kstpkper').set_index('dt')
-
-    # calculate change in storage
-    wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
-    # calculate total gw flow, sum GHB, CHD
-    wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
-    wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
-    wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
-    
-    wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
-    wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
-    wb_out_cols= wb_cols[wb_cols.str.contains('_OUT')]
-    wb_in_cols = wb_cols[wb_cols.str.contains('_IN')]
-    # only include columns with values used
-    wb_out_cols = wb_out_cols[np.sum(wb[wb_out_cols]>0, axis=0).astype(bool)]
-    wb_in_cols = wb_in_cols[np.sum(wb[wb_in_cols]>0, axis=0).astype(bool)]
-
-    return(wb, wb_out_cols, wb_in_cols)
-
 
 # %%
 wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
@@ -481,7 +459,7 @@ hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=Fa
 # # nd_chk = [6458, 8437, 9580, 10884, 11448]
 nd_chk = [20055, 16614, 22825] # southeast boundary
 # nd_chk = [10161, 10165, 10383, 11078, 11084] # Oneto-Denier
-hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=True, contour=True)
+hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=False, contour=True)
 
 
 # %%

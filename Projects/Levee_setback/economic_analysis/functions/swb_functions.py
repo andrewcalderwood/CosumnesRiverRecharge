@@ -175,6 +175,7 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
     c_swtot = np.multiply(p_sw, irr_sw[:,0])/in_2_m # Calcualte total surface water costs for the season ($/acre)
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
+    # return as a negative for minimization
     pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
     # forced internal boundary to prevent negatives
     # if any(irr_lvl <0):
@@ -441,6 +442,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     # Y_A = calc_yield(ETc, K_S, K_Y, y_max, yield_ind,  nfield, nper)
     
     ## profit simplified to a function
+    # the profit from calc_profit is made negative for minimization
     # pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o)  
     pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen)  
     if wb_sum.sum(axis=1).mean() > 1E-6:

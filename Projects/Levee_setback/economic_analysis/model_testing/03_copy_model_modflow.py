@@ -13,7 +13,11 @@
 # ---
 
 # %% [markdown]
-# Proof of concept to show that the existing modflow model could be broken up into chunks and run piece by piece (monthly) as the soil water budget will need to be run each year/season.
+# Version to use for running the connected model code with modflow split up into years as needed
+#
+# - This script copy and pastes input files that do not change into each year's run folder
+# - The script updates inputs that have minor changes such as SFR/GHB/CHD
+# - The script pre-processes additional inputs for WEL/RCh which will be read by the connection script when determining the recharge and pumping from each year
 
 # %%
 # standard python utilities
@@ -46,8 +50,6 @@ import contextily as ctx
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
-
-
 
 # %%
 doc_dir = os.getcwd()
@@ -92,6 +94,7 @@ run_dir = 'C:/WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Regional/'
 
 model_nam = 'historical_simple_geology_reconnection'
+model_nam = 'input_write_2014_2020'
 
 base_model_ws = loadpth+model_nam
 
@@ -109,7 +112,9 @@ else:
 gel = m.__getattr__(gel_nam)
 
 # %%
-m.model_ws = loadpth + 'crop_modflow'
+loadpth = run_dir +'/Cosumnes/Economic/'
+
+m.model_ws = join(loadpth, model_nam, 'crop_modflow')
 # # drop HOB since we don't want to update it
 # m.remove_package('HOB')
 # # re-write name file before copying
@@ -148,6 +153,17 @@ inflow['flow_cmd'] = inflow.flow_cfs * (86400/(3.28**3))
 
 # save tabfiles dict to variable for reference
 tabfiles_dict = m.sfr.tabfiles_dict
+
+# %%
+# deer creek doesn't flow in dry-season
+# have minimum flow of 100/200 cfs to start deer creek flowing
+# deer creek is approximated as about 10% of Cosumnes flow during wet season
+dc_min_flow = 100*(86400/(3.28**3))
+inflow_dc = inflow.copy()
+# anything above the flow threshold is 10% of Cosumnes
+inflow_dc.flow_cmd *= 0.1
+# anything below the flow threshold is 0
+inflow_dc.loc[inflow_dc.flow_cmd<dc_min_flow,'flow_cmd'] = 0
 
 # %%
 import h5py
@@ -193,17 +209,17 @@ season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
 
 # %%
-## specify dates where modflow will start 
-all_run_dates = pd.DataFrame()
-# yn = 0
-# y = years[yn]
-for y in years:
-    run_dates = ymd2dt(y, season.month_run, season.day_run)
-    run_dates = run_dates.drop_duplicates().sort_values()
-    run_dates = pd.DataFrame(run_dates).assign(use='irrigation')
-    crop_date = ymd2dt(y, month_crop, day_crop)
-    crop_date = pd.DataFrame(crop_date).assign(use='crop')
-    all_run_dates = pd.concat((all_run_dates, crop_date, run_dates))
+# ## specify dates where modflow will start 
+# all_run_dates = pd.DataFrame()
+# # yn = 0
+# # y = years[yn]
+# for y in years:
+#     run_dates = ymd2dt(y, season.month_run, season.day_run)
+#     run_dates = run_dates.drop_duplicates().sort_values()
+#     run_dates = pd.DataFrame(run_dates).assign(use='irrigation')
+#     crop_date = ymd2dt(y, month_crop, day_crop)
+#     crop_date = pd.DataFrame(crop_date).assign(use='crop')
+#     all_run_dates = pd.concat((all_run_dates, crop_date, run_dates))
 
 # all_run_dates
 # simple code to set dates for april 1
@@ -215,34 +231,8 @@ all_run_dates = pd.concat((pd.DataFrame([all_end_date]).assign(use='end'), all_r
 all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns={0:'date'})
 
 # %%
+all_run_dates.to_csv(join(m.model_ws, 'all_run_dates.csv'), index=False)
 # all_run_dates
-
-# %%
-
-
-# Load the optimized irrigation rates and corresponding deep percolation values
-# translate from fields to grid cells (may be already done in other script)
-
-# where the irrigation optimizer ran overwrite the default DP and AW data
-
-# write the recharge and WEL packages
-
-
-# using the existing full model rewrite the GHB/CHD package for the given dates
-
-# rewrite BAS6 with start heads from previous output
-
-# rewrite geology
-
-# rewrite OC, NWT
-
-# the LAK and SFR packages should similarly be cropped as needed
-# only the SFR package might need updates due to diversion tab files
-# which would need to be added later
-
-# # copy directly from m.sfr doesn't auto-update itmp or the file write path
-# m_month.sfr = m.sfr
-# after troubleshooting I found that the issue was just bad function calling
 
 # %% [markdown]
 # Write out modflow files that are not impacted by irrigation optimization (GHB, CHD, UPW, OC, NWT, DIS)
@@ -260,9 +250,6 @@ all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns
                                           # tabdata= True, tab_files='MF.bath', tab_units=[57],
                                          # )
 
-
-# %%
-m_strt, m_end
 
 # %%
 ##############################################################################################
@@ -289,7 +276,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     spd = np.where((all_dates>=m_strt)&(all_dates<m_end))[0]
 
     ##############################################################################################
-    model_ws = loadpth + 'crop_modflow/'+str(m_strt.date())
+    model_ws = join(m.model_ws,str(m_strt.date()))
 
     # switch to modflow nwt to enable option bloack for use in owhm
     m_month = flopy.modflow.Modflow(modelname = 'MF', exe_name = 'mf-owhm.exe', 
@@ -325,16 +312,12 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     oc_spd[0,0] = ['save head', 'save budget','print budget']
     oc = flopy.modflow.ModflowOc(model = m_month, stress_period_data = oc_spd, compact = True)
     
-    # # add LPF connection and re-write name file
-    # upw_month = flopy.modflow.ModflowUpw.load(loadpth + 'crop_modflow/MF.upw', model=m_month)
-    # # load NWT file
-    # nwt_month = flopy.modflow.ModflowNwt.load(loadpth + 'crop_modflow/MF.nwt', model=m_month)
-
     # load SFR file
-    sfr_month = flopy.modflow.ModflowSfr2.load(loadpth+'crop_modflow/MF.sfr', model=m_month)
+    sfr_month = flopy.modflow.ModflowSfr2.load(join(m.model_ws,'MF.sfr'), model=m_month)
     # need to update the options for SFR to represent the number of tab file rows
     # Add option block at the top of the sfr input file for tabfiles
-    tabfiles_dict[1]['numval'] = nper
+    for k in tabfiles_dict.keys():
+        tabfiles_dict[k]['numval'] = nper
     sfr_month.tabfiles_dict = tabfiles_dict
     num_tab = str(len(tabfiles_dict.keys()))
     options_line = ' reachinput transroute tabfiles '+num_tab+' ' + str(nper) + ' no_reach_layer_change'
@@ -354,11 +337,16 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     chd_month.write_file()
     sfr_month.write_file()
     oc.write_file()
+    
+    print('Done with:', str(m_strt.date()))
 
-    # name file should just be copied over
-    # m_month.write_name_file()
-    # nwt_month.write_file()
-    # # upw_month.write_file()
+# %%
+sfr_month.tabfiles_dict
+
+# %%
+for m_per in np.arange(0, all_run_dates.shape[0]-1):
+    m_strt = all_run_dates.iloc[m_per].date
+    m_end = all_run_dates.iloc[m_per+1].date
 
     # update SFR tab file for Michigan Bar
     # filter out data between the stress period dates
@@ -369,23 +357,18 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     # save file to each model ws for reference
     np.savetxt(join(model_ws,'MF.tab'), time_flow, delimiter = '\t')
     
-    print('Done with:', str(m_strt.date()))
+    # update SFR tab file for Michigan Bar
+    mon_inflow = inflow_dc.loc[m_strt:m_end].copy()
+    mon_inflow['time'] = (mon_inflow.index-m_strt).days
+    # convert to array for writing output
+    time_flow = np.transpose((mon_inflow.time, mon_inflow.flow_cmd))
+    # save file to each model ws for reference
+    np.savetxt(join(model_ws,'MF.dc.tab'), time_flow, delimiter = '\t')
 
 # %%
 m_strt, m_end, nper, spd.shape
 m_strt+pd.DateOffset(days=nper)
 
-
-# %%
-
-# %%
-sfr_month.options
-
-# %%
-np.savetxt(join(model_ws,'MF.tab'), time_flow, delimiter = '\t')
-
-
-# %%
 
 # %%
 # for files that don't need updates
@@ -396,9 +379,12 @@ files_copy = ['MF.lak','MF.bath','MF.evt', 'MF.gage', 'MF.upw','MF.nwt', 'MF.bas
 
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
-    model_ws = loadpth + 'crop_modflow/'+str(m_strt.date())
+    model_ws = join(m.model_ws, str(m_strt.date()))
     for f in files_copy:
         shutil.copy(join(base_model_ws,f), join(model_ws,f))
+
+# %%
+model_ws
 
 # %%
 # name file had HOB manually removed
@@ -406,7 +392,7 @@ files_copy = ['MF.nam']
 
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
-    model_ws = loadpth + 'crop_modflow/'+str(m_strt.date())
+    model_ws = join(m.model_ws, str(m_strt.date()))
     for f in files_copy:
         shutil.copy(join(m.model_ws,f), join(model_ws,f))
 
@@ -427,7 +413,7 @@ m_strt = all_run_dates.iloc[m_per].date
 m_end = all_run_dates.iloc[m_per+1].date
 spd = np.where((all_dates>=m_strt)&(all_dates<m_end))[0]
 
-model_ws = loadpth + 'crop_modflow/'+str(m_strt.date())
+model_ws = join(m.model_ws, str(m_strt.date()))
 
 load_only = ['DIS']
 # switch to modflow nwt to enable option bloack for use in owhm
@@ -451,100 +437,11 @@ wel_month.write_file()
 rch_month.write_file()
 
 
-#     success, buff = m_month.run_model()
-
-# %%
-wel_month.write_file()
-
-# %%
-wel_month.check()
-
-# %%
-# for k in rch_spd.keys():
-#     if rch_spd[k].shape[0]!=100:
-#         print(rch_spd[k].shape)
-
-# error in shape starts in stress period 0
-# rch_spd[0].shape
-# rch_month = flopy.modflow.ModflowRch(model=m_month, nrchop = 3, rech =  rech_spd, ipakcb=55)
-
+success, buff = m_month.run_model()
 
 # %%
 
 # %% [markdown]
 # The previous version that simply rewrote the well and recharge from old inputs will change to use the new soil water budget output for all fields, I may want to write another intermediate script to transfer the soil water budget from by crop to one dataset.
-
-# %%
-# dwr_etc?
-
-# %%
-# ##############################################################################################
-# we use a different approach for the very first period to run
-# for m_per in np.arange(1,5): # runs first year to next crop choice
-# # for m_per in np.arange(0, all_run_dates.shape[0]-1):
-#     m_strt = all_run_dates.iloc[m_per].date
-#     m_end = all_run_dates.iloc[m_per+1].date
-
-#     dates = pd.date_range(m_strt, m_end)
-#     # The number of periods is the number of dates 
-#     nper = len(dates) 
-#     # Identify periods to pull data from
-#     all_dates[(all_dates>=m_strt)&(all_dates<m_end)]
-# #     spd = np.where((all_dates>=m_strt)&(all_dates<m_end))[0]
-
-#     ##############################################################################################
-#     model_ws = loadpth + 'crop_modflow/'+str(m_strt.date())
-
-#     # switch to modflow nwt to enable option bloack for use in owhm
-#     load_only=['UPW','DIS','OC','NWT']
-#     m_month = flopy.modflow.Modflow.load('MF.nam',  model_ws= model_ws,
-#                                         load_only=load_only,
-#                                         )  
-#     ## update deep percolation 
-#     perc = load_perc(m_strt, m_end)
-
-#     # have transient recharge start after the 1st spd
-#     rech_spd = {}
-#     for j in np.arange(0,nper):
-#         rech_spd[j] = perc[j,:,:] 
-
-#     # nrchop = 3, to highest active cell
-#     rch = flopy.modflow.ModflowRch(model = m_month, nrchop=3, rech = rech_spd, ipakcb=55)
-    
-#     ## update pumping
-#     agETc, natETc = dwr_etc(m_strt, m_end)
-#     # net ETc should be ETc from ag and native plants joined
-# #     ETc = agETc + natETc
-#     # already filtering by land type above
-#     ET_ag = np.copy(agETc)
-
-#     wel_spd = dict()
-#     for n, t in enumerate(spd):
-#         wel_spd[n] = m.wel.stress_period_data[t]
-#     # Create well flopy object
-#     wel_month = flopy.modflow.ModflowWel(m_month, stress_period_data=wel_spd,ipakcb=55)
-
-#     strt = np.ones((nlay, nrow, ncol), dtype = np.float32)
-#     # The model should start in hydraulic connection
-#     if spd[0]==0:
-#         strt[:,:,:] = m.dis.top[:,:] #maybe the mean of starting heads i causing issues?
-#     else:
-#         model_ws_last = loadpth + 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date())
-#         hdobj = flopy.utils.HeadFile(model_ws_last + '/MF.hds')
-#         sp_last = hdobj.get_kstpkper()[-1]
-#         strt[:,:,:] = hdobj.get_data(sp_last)
-#     ibound = np.ones([nlay, nrow,ncol])
-
-#     # for the first period we use dem as starting point
-#     # if solver criteria are not met, the model will continue if model percent error is less than stoperror
-#     bas_month = flopy.modflow.ModflowBas(model = m_month, ibound=ibound, strt = strt)
-
-#     # m_month.write_name_file()
-# #     m_month.write_input()
-#     bas_month.write_file()
-#     rch_month.write_file()
-#     wel_month.write_file()
-
-# #     success, buff = m_month.run_model()
 
 # %%

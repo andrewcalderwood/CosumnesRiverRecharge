@@ -126,8 +126,8 @@ base_model_ws = join(loadpth, 'EcoFIP')
 
 # list the modflow model concept workspaces
 concepts = os.listdir(base_model_ws)
+print('Concepts available:\n')
 print(concepts)
-
 
 
 # %% [markdown]
@@ -151,6 +151,7 @@ concept = concepts[n]
 concept = 'Hanford_Gravel'
 
 concept_ws = join(base_model_ws, concept)
+print('Concept to be plotted:')
 print(concept)
 
 # %%
@@ -333,7 +334,9 @@ labels=['SW Inflow \n(million $m^3/d$)', 'Floodplain\nInundation\nStage (m)', 'G
 # scale = 1E6
 fig,ax = plt.subplots(len(cols)+1,1, figsize=(6.5,6.5), dpi=300, sharex=True)
 
+# the concept will include both in river recharge and floodplain
 ax[1].plot(wb.RIV_IN.multiply(1E-3).values) # concept
+# the baseline will only be the streambed recharge
 ax[1].plot(sfr_leak_sum0.multiply(1E-3).values) # baseline
 ax[1].set_ylabel('Floodplain Recharge\n(thousand $m^3/day$)')
 
@@ -356,6 +359,19 @@ plt.xlabel('Datetime')
 # %% [markdown]
 # - The test concept of Blodgett Dam shows the concept floodplain stage is way higher than the pre-existing river stage which isn't possible. The floodplain stage should not be greater than 27 on average, this will lower max stage by 7 m.
 # - Adjusting the max stage to 27 m produced more reasonable results where stage doesn't exceed river stage and we don't see as extreme recharge and rise in GWL. Likely we should remove the log scale calculation as it allows the floodplain to remain elevated for longer.
+
+# %% [markdown]
+# # stream profile
+
+# %%
+
+# %%
+
+# %%
+
+# %% [markdown]
+# # more detailed floodplain recharge
+# To better compare streambed vs floodplain recharge we need to distinguish the portion from in and out of the riverbed.
 
 # %%
 # define zone where there is floodplain cells
