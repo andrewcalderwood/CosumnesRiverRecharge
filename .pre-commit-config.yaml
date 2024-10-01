@@ -1,0 +1,7 @@
+# forces the ipynb to sync with their py pair before commit to avoid conflict
+repos:
+-   repo: https://github.com/mwouts/jupytext
+    rev: v1.14.7  # CURRENT_TAG/COMMIT_HASH
+    hooks:
+    - id: jupytext
+      args: [--sync]
