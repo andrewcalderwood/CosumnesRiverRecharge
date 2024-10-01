@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -14,6 +14,10 @@
 
 # %% [markdown]
 # Translatation of DEM to SFR usable data
+#
+# - loads HEC-RAS dem to look at auto-transects, this code is improved in the Oneto-Denier project
+# - code uses Constantine cross-sections and profile to identify the location of the cross-sections spatially
+# - code uses Michigan bar field measurements to create a rating curve table
 
 # %%
 import os

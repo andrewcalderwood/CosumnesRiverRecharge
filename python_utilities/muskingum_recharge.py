@@ -42,19 +42,31 @@ def Muskingum(I, N, K, X):
     return(Q)
 
 def xs_setback(xs_levee_smooth, setback, levee_ft = 20):
-    ''' Function to add levee wall to XS if setback location is not 20 ft (or user specified) above thalweg'''
+    ''' Function to add levee wall to XS if setback location is not 20 ft (or user specified) above thalweg
+    The code to add levees at the edge doesn't work if there are NA values on the edge
+    '''
     mid = xs_levee_smooth.index[int(xs_levee_smooth.shape[0]/2)] # location that should be channel bottom based on NHD line
     roll_window = 400 # window used to capture true channel minimum
     # for a given setback imagine there is an impenetrable levee blocking overbank flow
     xs_elevs = xs_levee_smooth[mid-100-setback:mid+100+setback]
     # the channel should fall within the center 400m so that minimum can be used to set new levee height
     thalweg = xs_elevs.loc[mid-roll_window/2:mid+roll_window/2].min()
+
     # check to see XS elevation at setback distance to determine if it should be raised to needed levee height
-    # where XS height is less than 16 ft above channel bottom then raise to 16 ft above
-    if xs_elevs.loc[mid-100-setback] - thalweg< levee_ft*0.3048:
-        xs_elevs.loc[mid-100-setback] = thalweg + levee_ft*0.3048
-    if xs_elevs.loc[mid+100+setback] - thalweg< levee_ft*0.3048:
-        xs_elevs.loc[mid+100+setback] = thalweg + levee_ft*0.3048
+    # where XS height is less than levee_ft above channel bottom then raise to levee_ft above
+    # if xs_elevs.loc[mid-100-setback] - thalweg< levee_ft*0.3048:
+    #     xs_elevs.loc[mid-100-setback] = thalweg + levee_ft*0.3048
+    # if xs_elevs.loc[mid+100+setback] - thalweg< levee_ft*0.3048:
+    #     xs_elevs.loc[mid+100+setback] = thalweg + levee_ft*0.3048
+
+    # new verison 2024-9-25, just use first and last point since already filtered
+    # need to adjust code to use the nearest non-NA value for setting the levee height
+    xs_elevs = xs_elevs.dropna()
+    # to the right cross-section distances
+    if xs_elevs.iloc[0] - thalweg< levee_ft*0.3048:
+        xs_elevs.iloc[0] = thalweg + levee_ft*0.3048
+    if xs_elevs.iloc[-1] - thalweg< levee_ft*0.3048:
+        xs_elevs.iloc[-1] = thalweg + levee_ft*0.3048
     return(xs_elevs)
 
 def mannings(d, xs_elevs, n, S):

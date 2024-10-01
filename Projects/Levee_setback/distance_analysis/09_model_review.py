@@ -156,6 +156,26 @@ soil_K = np.reshape(soil_K_out, (100, nrow, ncol))
 
 
 # %%
+dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_linear.tsv')
+
+
+# %%
+# plt.contour(dem_data, levels = np.arange(np.min(dem_data), np.max(dem_data),5))
+# # plt.contour?
+
+# %%
+ns=4
+ng = int(xs_all_cln.shape[1]/ns)
+for n in np.arange(0,ns-1):
+    # print(ng*n, (n+1)*ng)
+    xs_all_cln.iloc[:,ng*n:(n+1)*ng].plot(legend=False)
+    plt.show()
+# xs_all_cln.iloc[ng*ns:(ns+1)*ng,:]
+# ng, ns
+# ng*ns
+# xs_all_cln.shape[0]
+
+# %%
 import h5py
 f = h5py.File(join(chan_dir, 'setback_locs.hdf5'), "r")
 local_str_setbacks = f['setbacks']['local'][:]

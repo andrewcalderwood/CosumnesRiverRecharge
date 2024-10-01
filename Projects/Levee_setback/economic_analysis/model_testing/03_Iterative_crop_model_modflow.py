@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -14,6 +14,8 @@
 
 # %% [markdown]
 # Proof of concept to show that the existing modflow model could be broken up into chunks and run piece by piece (monthly) as the soil water budget will need to be run each year/season.
+#
+# Original version to test the use of modflow to load and re-run, only rewrote the BAS, RCH, WEL (the udpated version under copy_model_modflow updates SFR, GHB, etc as needed)
 
 # %%
 # standard python utilities
@@ -82,6 +84,7 @@ data_dir = join(proj_dir, 'model_inputs')
 # %%
 # run_dir = 'C://WRDAPP/GWFlowModel'
 run_dir = 'F://WRDAPP/GWFlowModel'
+run_dir = 'D://WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
 # # model_nam = 'setback_streamflow'
@@ -112,7 +115,6 @@ gel.write_file()
 # test to see if model will run with longer itemp, owhm might auto correct
 m.chd.write_file()
 m.ghb.write_file()
-
 m.nwt.write_file()
 
 # %%
@@ -358,6 +360,7 @@ for t in np.arange(0, nper):
 
 # %% [markdown]
 # Write out modflow files that are not impacted by irrigation optimization (GHB, CHD, UPW, OC, NWT, DIS)
+# - I may want to see about turning this into a function.
 
 # %%
 ##############################################################################################

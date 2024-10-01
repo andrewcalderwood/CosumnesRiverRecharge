@@ -103,6 +103,9 @@ bnd_dist[['row','column']] -=1
 bnd_dist = bnd_dist.drop(columns=['season'])
 
 # %%
+print('Span:',bnd_dist.year.min(), '-',bnd_dist.year.max())
+
+# %%
 # may need to reconsider boundary GWE that are driving inflow when it should be more static in the foothills
 bnd_dist['dem_m'] = dem_data[bnd_dist.row, bnd_dist.column]
 # alternatively we could switch to using a long-term average GHB head
@@ -127,9 +130,6 @@ bnd_dist_adj.loc[adj_bool, 'value'] = bnd_dist_adj.loc[adj_bool,'dem_m'] -5
 # # iterate over each year, season and row
 
 # %%
-# bnd_dist.
-
-# %%
 # find unique year, season, row combos
 date_combo = bnd_dist_adj[['year','month','row']].drop_duplicates().reset_index(drop=True)
 for n in np.arange(0, len(date_combo)):
@@ -143,8 +143,6 @@ for n in np.arange(0, len(date_combo)):
 
 # filter out to only the upper columns to avoid increasing in elevation 
 bnd_dist_adj = bnd_dist_adj[bnd_dist_adj.column>= adj_min_col +rper]
-
-# %%
 
 # %%
 temp_plt = (bnd_dist_adj.year==2019)&(bnd_dist_adj.month=='Apr')&(bnd_dist_adj.row==99)

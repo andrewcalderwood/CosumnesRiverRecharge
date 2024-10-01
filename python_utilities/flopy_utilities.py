@@ -1,3 +1,4 @@
+# %%
 """
 flopy_utility module. 
 Different functions for working with flopy objects/classes set up with general python functions
@@ -12,7 +13,10 @@ import pandas as pd
 # import os
 # from os.path import join, exists
 import flopy
-#%% Model development
+
+import matplotlib.pyplot as plt
+
+# %% Model development
 
 
 def spd_2_arr(sp_data, sp_col, dis):
@@ -134,3 +138,41 @@ def sfr_load_hds(hdobj, grid_sfr, plt_dates, dt_ref):
         avg_heads[n,:] = np.mean(head[:10, grid_sfr.i, grid_sfr.j], axis=0)
     return(sfr_heads, avg_heads)
 
+
+# %%
+
+def wel_dict_to_array(wel, dis):
+    """
+    Given a flopy well package extract the well dictionary data into 
+    an array format (nper, nrow,ncol) for easier comparison with recharge
+    """
+    # convert pumping to array
+    pump = np.zeros((dis.nper,dis.nrow,dis.ncol))
+    for n in np.arange(0,dis.nper):
+        wel_n = wel.stress_period_data[n]
+        pump[n, wel_n.i, wel_n.j] += wel_n.flux*-1
+    pump_rate = pump/(dis.delr[0]*dis.delc[0])
+    return(pump, pump_rate)
+
+
+def plt_rech_vs_pump(pump_rate, rech):
+    """
+    Given arrays (nper, nrow,ncol) of pumping and recharge
+    plot the domain average rate across time with 
+    the cumulative sum to compare long-term differences
+    """
+    # convert from m/day to m3/day to ft3/day to AF/day to TAF/day
+    af_scale = 200*200/(0.3048**3)/43560/1000
+    # scale into TAF/year
+    af_scale /= pump_rate.shape[0]/365
+    pump_total = pump_rate.sum(axis=(1,2))*af_scale
+    rch_total = rech.sum(axis=(1,2))*af_scale
+    plt.plot(pump_total.cumsum(), label='Pumping')
+    plt.plot(rch_total.cumsum(), label='Recharge')
+    plt.ylabel('Rate (TAF/year)')
+    plt.xlabel('Day of simulation')
+    plt.title('Cumulative Rates')
+    plt.legend()
+    plt.show()
+    return None
+    

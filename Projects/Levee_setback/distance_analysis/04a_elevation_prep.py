@@ -208,6 +208,64 @@ def make_transects(geom, dline = 2000, xs_width = 3305*2):
 geom = linemerge(cr.geometry.unary_union)
 
 # %%
+from shapely.ops import split
+# Combine all lines in gdf_lines_2 into a single geometry (unary_union)
+
+# Function to split each line in gdf_lines_1 by the splitter
+def split_line_by_splitter(line, splitter):
+    if line.intersects(splitter):
+        # Split the line by the splitter
+        split_result = split(line, splitter)
+        # If the result is a MultiLineString, split into separate LineStrings
+        if isinstance(split_result, MultiLineString):
+            return list(split_result.geoms)
+        else:
+            return [split_result]
+    else:
+        return [line]
+
+# Apply the splitting function to all lines in gdf_lines_1
+
+
+
+# %%
+def crop_overlapping_xs(transg):
+    split_xs = transg.copy()
+    
+    # split_xs = gpd.GeoDataFrame()
+    # go from downstream to upstream to prefer the upstream cross-section
+    for n in np.flip(transg.index.values):
+    # for n in [26]:
+        # find xs to split if needed
+        ind_xs = split_xs.loc[[n]].copy()
+        # use the rest of the XS to split
+        # could potentially filter down to the 2 above and 2 below
+        split_xs = split_xs.drop(n).copy()
+    # transg
+    
+        # where the XS overlaps with any other XS then split
+        split_geom = split_line_by_splitter(ind_xs.geometry.iloc[0],  split_xs.unary_union)[0]
+        if isinstance(split_geom, shapely.GeometryCollection):
+            for s, geom in enumerate(split_geom.geoms):
+                # print(geom.length)
+                # scale the geometry ever so slightly to prevent overlap
+                ind_xs.geometry = [geom]
+                ind_xs.geometry = ind_xs.geometry.scale(0.99)
+                ind_xs['xs_split'] = int(s)
+                split_xs = pd.concat((split_xs,ind_xs))
+        else:
+            ind_xs.geometry = [split_geom]
+    
+            split_xs = pd.concat((split_xs,ind_xs))
+    
+    # only keep the split segments that are touching the Cosumnes River
+    split_xs = split_xs.sjoin( cr[['GNIS_Name','geometry']], how='inner')
+    split_xs = split_xs.drop(columns=['xs_split','index_right','GNIS_Name'])
+    split_xs = split_xs.sort_values('line')
+    return(split_xs)
+
+
+# %%
 xs_width = 3305*2 # original w/o adjustment for channel center
 xs_width = 3705*2 # add 400 m to both sides to then cut off later for finding channel center
 
@@ -236,7 +294,14 @@ transg = make_transects(geom = linemerge(cr.geometry.unary_union), dline = 2000,
 # drop transects that are less than 25% in the domain
 transg = transg[gpd.overlay(transg, m_domain).geometry.length > 3300*2*0.25]
 transg['line'] = np.arange(0,len(transg))
+transg.to_file(gis_dir+'/transect_lines_complete_3300.shp')
+
+ax = transg.plot(color='black')
+# save version with clean XS, overlap removed
+transg = crop_overlapping_xs(transg)
 transg.to_file(gis_dir+'/transect_lines_3300.shp')
+
+transg.plot(ax=ax, color='red')
 
 
 # %%
@@ -270,6 +335,10 @@ def transect2pts(transg, dline = 10, xs_width = 3305*2):
     # remove na values
     xs_all = xs_all.dropna(subset=['xs_num'])
     return(xs_all)
+    
+
+
+# %%
 xs_all = transect2pts(transg, dline = 10, xs_width = xs_width)
 
 
@@ -304,6 +373,10 @@ def sample_pts(xs_all, raster_name):
     xs_all.loc[xs_all['z_m'] == src.meta['nodata'], ['z_m']] = np.nan
     xs_all.index = np.arange(0,len(xs_all))
     return(xs_all)
+
+
+
+# %%
 xs_all = sample_pts(xs_all, raster_name)
 
 # %% [markdown]
@@ -345,15 +418,26 @@ min_idx =  xs_all_df[channel_bool].idxmin()
 # min_idx
 
 # %%
+min_idx
+
+# %%
+# xs_all_df[channel_bool].idxmin()
+
+# %%
+# min_idx
+min_idx.loc[24]
+
+# %%
 
 fig,ax = plt.subplots(5,1, figsize=(5,12),sharex=True)
 for ng in np.arange(0,5):
+# for ng in [4]:
     nseg = np.arange(ng*5,5*(ng+1))
     xs_chk = xs_all_df[nseg]
     xs_chk[channel_bool].plot(ax=ax[ng])
-    for n, ns in enumerate(nseg):
-        ax[ng].plot(min_idx.iloc[n], xs_chk.loc[min_idx.iloc[n], ns],marker='x', color='black')
-    
+    for ns in nseg:
+        ax[ng].plot(min_idx.loc[ns], xs_chk.loc[min_idx.loc[ns], ns],marker='x', color='black')
+        # print(n, min_idx.loc[ns], xs_chk.loc[min_idx.loc[ns], ns])
 fig.tight_layout(h_pad=0.1)
 
 

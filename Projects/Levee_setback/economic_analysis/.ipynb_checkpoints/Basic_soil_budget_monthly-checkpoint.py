@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -219,12 +219,14 @@ def get_Kc_dates(Kc_dates_c, Kc_c):
 #
 
 # %%
-def load_soil(crop, crop_in):
+def load_soil(crop, crop_in, field_ids = 'parcel'):
     ''' Imports soil data for all fields and subsets to those for the parcels
     with the current crop
     crop: string specifying the crop
-    crop_in: dataframe with parcel_id, name (crop), pod'''
-    field_ids = 'parcel' # 'ag'
+    crop_in: dataframe with parcel_id, name (crop), pod
+    field_ids: flag to determine which dataset to use
+    '''
+    # field_ids = 'parcel' # 'ag'
     # load cleaned soil data for ag fields
     soil_path = join(uzf_dir,'clean_soil_data')
     # soil data for each ag field

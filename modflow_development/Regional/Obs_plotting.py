@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -88,6 +88,11 @@ from mf_utility import get_dates, clean_hob
 
 
 # %%
+import regional_utilities
+reload(regional_utilities)
+from regional_utilities import clean_wb
+
+# %%
 sfr_dir = gwfm_dir+'/SFR_data/'
 # grid_sfr = gpd.read_file(sfr_dir+'/final_grid_sfr/grid_sfr.shp')
 m_domain = gpd.read_file(gwfm_dir+'/DIS_data/NewModelDomain/GWModelDomain_52_9deg_UTM10N_WGS84.shp')
@@ -107,13 +112,9 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 # model_nam = 'historical_simple_geology'
 model_nam = 'historical_simple_geology_reconnection'
 base_model_ws = join(loadpth, model_nam)
-# model_nam = 'foothill_vani10'
-# model_nam = 'strhc1_scale'
-# model_nam = 'fine_tprogs'
-# # model_nam = 'fine_tprogs_more_rain'
-# model_nam = '3layer'
-# model_nam = 'params_maples_fine'
-model_nam = 'mid_res_tprogs'
+# model_nam = 'historical_geology_cal'
+# model_nam = 'historical_extended'
+model_nam = 'input_write_2000_2022'
 
 model_ws = loadpth+model_nam
 
@@ -205,7 +206,6 @@ plt.plot(rch_total.cumsum(), label='rch')
 plt.plot(pump_total.cumsum(), label='pump')
 plt.legend()
 
-
 # %%
 # plt.imshow(rech.mean(axis=0), vmax=0.001)
 # # plt.imshow(pump_rate.mean(axis=0), vmax=0.005)
@@ -215,32 +215,6 @@ plt.legend()
 
 # %% [markdown]
 # ## Water Budget check
-
-# %%
-def clean_wb(model_ws, dt_ref):
-    # load summary water budget
-    wb = pd.read_csv(model_ws+'/flow_budget.txt', delimiter=r'\s+')
-
-    wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
-    wb = wb.merge(dt_ref, on='kstpkper').set_index('dt')
-
-    # calculate change in storage
-    wb['dSTORAGE'] = wb.STORAGE_OUT - wb.STORAGE_IN
-    # calculate total gw flow, sum GHB, CHD
-    wb['GW_OUT'] = wb.GHB_OUT + wb.CHD_OUT
-    wb['GW_IN'] = wb.GHB_IN + wb.CHD_IN
-    wb = wb.loc[:,~wb.columns.str.contains('GHB|CHD')]
-    
-    wb_cols = wb.columns[wb.columns.str.contains('_IN|_OUT')]
-    wb_cols = wb_cols[~wb_cols.str.contains('STORAGE|IN_OUT')]
-    wb_out_cols= wb_cols[wb_cols.str.contains('_OUT')]
-    wb_in_cols = wb_cols[wb_cols.str.contains('_IN')]
-    # only include columns with values used
-    wb_out_cols = wb_out_cols[np.sum(wb[wb_out_cols]>0, axis=0).astype(bool)]
-    wb_in_cols = wb_in_cols[np.sum(wb[wb_in_cols]>0, axis=0).astype(bool)]
-
-    return(wb, wb_out_cols, wb_in_cols)
-
 
 # %%
 wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
@@ -299,21 +273,10 @@ plt.xlabel('Date')
 
 
 # %%
-def load_hob(model_ws):
-    hobout = pd.read_csv(model_ws+'/MF.hob.out',delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
-                         dtype = {'sim_val':float,'obs_val':float,'obs_nam':object},
-                        na_values=[-9999.])
-    # if only one obs exists correct naming convention
-    one_obs = ~hobout.obs_nam.str.contains('.0')
-    hobout.loc[one_obs,'obs_nam'] = hobout.loc[one_obs,'obs_nam']+'.'+str(1).zfill(5)
-    hobout['obs_site'] = hobout.obs_nam.str.extract(r'(N\d+)')
-
-    return(hobout)
-    
+hobout = clean_hob(model_ws, dt_ref, split_c = '.', obs_id_spd=False).rename(columns={'Sensor':'obs_site'})
 
 
 # %%
-hobout = load_hob(model_ws)
 # temporary add on to drop bad msmts here
 hobout = hobout[hobout.obs_nam.isin(all_obs.obs_nam)]
 
@@ -323,9 +286,16 @@ fig, ax = plt.subplots(1,1,figsize=(5,5))
 hobmax = hobout.loc[:,['sim_val','obs_val']].max().min()
 hobmin = hobout.loc[:,['sim_val','obs_val']].min().max()
 
+hob_lin = np.array([hobmin, hobmax])
+
 # plot observed vs simulated values
 hobout.plot.scatter(x='obs_val', y='sim_val',marker='.',ax=ax)
-ax.plot([hobmin,hobmax],[hobmin,hobmax],'red')
+ax.plot(hob_lin,hob_lin,'red')
+# plot buffer lines with 30 ft, 10 ft limit
+hob_lin_adj = 10*0.3048
+ax.plot([hobmin-hob_lin_adj/2, hobmax-hob_lin_adj/2], [hobmin+hob_lin_adj/2, hobmax+hob_lin_adj/2], 'gray')
+ax.plot([hobmin+hob_lin_adj/2, hobmax+hob_lin_adj/2], [hobmin-hob_lin_adj/2, hobmax-hob_lin_adj/2], 'gray')
+
 ax.set_xlabel('Observed Values (m)')
 ax.set_ylabel('Simulated Values (m)')
 # plt.xlabel('Observed Values (m)')
@@ -412,7 +382,7 @@ from map_cln import plt_cln
 # %%
 def get_top_active_layer(head_ma):
     """ Sample the top active value for a 3d array for each row,column"""
-    if head_ma.mask:
+    if head_ma.mask.any():
         head_loc = pd.DataFrame(np.transpose(np.where(~head_ma.mask)), columns=['k','i','j'])
         head_loc = head_loc.groupby(['i','j']).min().reset_index()
         # top active value for each row,column
@@ -476,8 +446,10 @@ def plt_hob_map(y, s, hob=True, nd_chk=None, rch=False, contour=False, hk=False,
 
 # %%
 # plot plain contours for reference
-# hob_gpd_plt = plt_hob_map(2019, 'fall', hob=False, rch=False, contour=True, hk=False, step=5)
-hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+hob_gpd_plt = plt_hob_map(2019, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+# hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=False, step=5)
+
+# %%
 
 # %%
 # nd_chk = [15343, 16733, 11448, 8437, 15314, 14626] +[3103, 5642, 6112, 10746, 6458]
@@ -487,7 +459,7 @@ hob_gpd_plt = plt_hob_map(2016, 'fall', hob=True, rch=False, contour=True, hk=Fa
 # # nd_chk = [6458, 8437, 9580, 10884, 11448]
 nd_chk = [20055, 16614, 22825] # southeast boundary
 # nd_chk = [10161, 10165, 10383, 11078, 11084] # Oneto-Denier
-hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=True, contour=True)
+hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=False, contour=True)
 
 
 # %%
@@ -496,7 +468,7 @@ hob_gpd_chk = plt_hob_map(2016, 'fall', nd_chk=nd_chk, rch=True, contour=True)
 # df_chk[['sim_val','obs_val','avg_screen_depth', 'hk', 'rech', 'layer','abs_error']]
 
 # %%
-hobout = load_hob(model_ws)
+hobout = clean_hob(model_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'}).drop(columns=['spd'])
 
 hob_gpd, stns = mak_hob_gpd(hobout, all_obs)
 # simplify dataset to time series 
@@ -510,7 +482,7 @@ hob_long = hob_gpd.melt(value_vars=['sim_val','obs_val'], id_vars=['node'], igno
 # %%
 # # ## load simulated output from one alternate scenario for comparison
 # alt_ws = join(loadpth, 'historical_simple_geology_reconnection')
-# hobout_alt = load_hob(alt_ws)
+# hobout_alt = clean_hob(alt_ws, dt_ref, split_c = '.').rename(columns={'Sensor':'obs_site'}).drop(columns=['spd'])
 # hobout_alt = hobout_alt.rename(columns={'sim_val':'sim_alt'}).drop(columns=['obs_val'])
 # hob_gpd_alt = hob_gpd[['sim_val','obs_val', 'obs_nam','node']].reset_index().merge(hobout_alt).set_index('date')
 # hob_long_alt = hob_gpd_alt.melt(value_vars=['sim_val','obs_val', 'sim_alt'], id_vars=['node'], ignore_index=False)
@@ -572,7 +544,7 @@ stn_chk[cols]
 
 # %%
 ghb_dir = join(gwfm_dir, 'GHB_data')
-year = 2019 # 2016
+year = 2010 # 2016
 filename = glob.glob(ghb_dir+'/final_WSEL_arrays/fall'+str(year)+'_kriged_WSEL.tsv')[0]
 # convert from ft to meters
 hd_strt = np.loadtxt(filename)*0.3048
@@ -674,10 +646,6 @@ sfr_arr[reach_data.i, reach_data.j] = reach_data.strhc1
 #     ax.scatter(n[2], n[1], marker='x')
 
 # %%
-# plt.imshow(hk[10])
-model_ws
-
-# %%
 hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
 fig, ax = plt.subplots(figsize=(6.5, 3.5), dpi=300) 
 # plt.aspect=10
@@ -734,6 +702,9 @@ hdobj = flopy.utils.HeadFile(model_ws+'/MF.hds')
 
 # drop routing segments
 sfrdf = sfrdf[~sfrdf.segment.isin(drop_iseg)]
+
+# shouldn't put in function directly as this depends on local units
+sfrdf['Qout_cfs'] = sfrdf.Qout/(86400*0.3048**3)
 
 # %%
 # plt_dates = ['2016-1-1']
@@ -798,20 +769,82 @@ grid_MCC = grid_MCC[['iseg','ireach','strtop','slope','k','i','j','Elev_m_MSL']]
 # grid_MCC.columns
 
 # %%
+# sensors
+
+# %%
 sfrdf_MCC = sfrdf[(sfrdf.segment==grid_MCC.iseg)&(sfrdf.reach==grid_MCC.ireach)]
 
 mcc_flow_plt = mcc_flow[mcc_flow.index.isin(sfrdf_MCC.index)]
 mcc_flow_plt = mcc_flow_plt.reindex(sfrdf_MCC.index)
 
 fig,ax = plt.subplots()
-sfrdf_MCC.Qout.plot(ax=ax, label='Simulated')
-mcc_flow_plt.plot(y='flow_cmd', ax=ax, label='Observed')
+sfrdf_MCC.Qout_cfs.plot(ax=ax, label='Simulated')
+mcc_flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
 plt.legend()
 ax.set_yscale('log')
+
+# %%
+local_sites = pd.read_csv(join(sfr_dir,'flow_obs', 'Stream_monitoring_reference.csv'))
+
+local_sites = gpd.GeoDataFrame(local_sites, geometry=gpd.points_from_xy(local_sites.Longitude, local_sites.Latitude),
+                           crs='epsg:4326').to_crs(grid_sfr.crs)
+grid_local_sites = gpd.sjoin_nearest(grid_sfr, local_sites, how='right')
+# # subset relevant columns to plot flows at MCC
+grid_local_sites = grid_local_sites[['iseg','ireach','strtop','slope','k','i','j','site','Site_name']]
+# local_sites
+
+# %%
+# pull out simulated flow for the stream seg/reach with obs
+sfrdf_sites = sfrdf.reset_index().merge(grid_local_sites).set_index('dt').copy()
+
+# %%
+# sim_flow.plot(y='Qout_cfs')
+# obs_flow.index
+# local_flow = local_flow.groupby('site').resample('D').mean(numeric_only=True)
+
+# local_flow
+
+# %%
+flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
+# flow_plt
+# obs_flow.index, sim_flow.index
+
+# %%
+local_flow = pd.read_csv(join(sfr_dir,'flow_obs', 'stream_flow_cfs_approx.csv'), 
+                         parse_dates=['dt'], index_col='dt')
+local_flow = local_flow.groupby('site').resample('D').mean(numeric_only=True).reset_index('site')
+local_flow['flow_cmd'] =  local_flow.flow_cfs*86400*0.3048**3
+
+site = 'ACR_189'
+def plt_gage_flow(ax, site, local_flow, sfrdf_sites, name=None):
+    obs_flow = local_flow[local_flow.site==site]
+    sim_flow = sfrdf_sites[sfrdf_sites.site==site]
+    
+    flow_plt = obs_flow[obs_flow.index.isin(sim_flow.index)]
+    flow_plt = flow_plt.reindex(sim_flow.index)
+    
+    sim_flow.plot(y='Qout_cfs', ax=ax, label='Simulated')
+    flow_plt.plot(y='flow_cfs', ax=ax, label='Observed')
+    ax.set_xlim(flow_plt.dropna().index.min(), flow_plt.dropna().index.max())
+    plt.legend()
+    if name is not None:
+        ax.set_title(name)
+    ax.set_yscale('log')
+# rooney_flow.plot(x='dt',y='flow_cfs')
+fig,ax = plt.subplots(len(local_sites),1, sharex=True, dpi=300)
+for n, s in enumerate(local_sites.site):
+    plt_gage_flow(ax[n], s, local_flow, sfrdf_sites,
+                  name=s+' - '+local_sites.Site_name.iloc[n])
+
+ax[-1].set_xlabel('Date')
+fig.supylabel('Flow (cfs)')
 
 
 # %% [markdown]
 # It makes sense that flows are below the observed because we don't have Deer Creek in the system.
+# - even with Deer Creek added it still under predicts
+# - 
+# We want to look at flows at Rooney and Mahon as well
 
 # %% [markdown]
 # # Zone budget check

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.15.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -24,6 +24,7 @@
 import h5py
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 import os
 from os.path import join,exists, dirname, basename, expanduser
 
@@ -42,102 +43,372 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 
 # %%
+import sys
+def add_path(fxn_dir):
+    """ Insert fxn directory into first position on path so local functions supercede the global"""
+    if fxn_dir not in sys.path:
+        sys.path.insert(0, fxn_dir)
+
+
+# %%
+add_path(doc_dir+'/GitHub/flopy')
+import flopy 
+
+# %%
+git_dir = join(doc_dir,'GitHub','CosumnesRiverRecharge')
+add_path(join(git_dir,'python_utilities'))
+
+# %%
+from report_cln import base_round
+from mf_utility import get_layer_from_elev
+
+# %%
 from parcelchoicemodelupdate.f_predict_landuse import predict_crops
 
 # %%
-year = 2020
-crop='Corn'
+import functions.Basic_soil_budget_monthly as swb
+reload(swb)
+
+import f_rep_swb_profit_opt
+reload(f_rep_swb_profit_opt)
+from f_rep_swb_profit_opt import load_run_swb
 
 # %%
-# the model will run the irrigation optimizer on specified dates (multiple crops can be done at once or in sequence)
-# the modflow model will be run for the periods between the specified irrigation optimizer dates
-# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Regional/'
-loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Regional/'
+import functions.f_gw_dtw_extract
+reload(functions.f_gw_dtw_extract)
+from functions.f_gw_dtw_extract import sample_dtw, avg_heads
+# from functions.f_gw_dtw_extract import get_dtw
+from functions.f_gw_dtw_extract import calc_simple_dtw
 
-base_model_ws = loadpth + 'crop_soilbudget'
-os.makedirs(base_model_ws, exist_ok=True)
+# %%
+from functions import data_functions
+reload(data_functions)
+from functions.data_functions import read_crop_arr_h5
+
+# %%
+import functions.output_processing
+reload(functions.output_processing)
+from functions.output_processing import get_local_data, out_arr_to_long_df
+from functions.output_processing import get_wb_by_parcel
+
+# %%
+from reference_swb_ag_winter import run_swb_ag_winter
+
+
+# %% [markdown]
+# If we are going to run the crop/swb for a certain period then there should already have been a MODFLOW model run for that same period with estimates of streamflow and precipitation to drive the other boundary conditions.
+
+# %%
+proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
+data_dir = join(proj_dir, 'model_inputs')
+
+# %%
+# load parcel data for reference as needed
+parcels = gpd.read_file(join(proj_dir,'Parcels shapefile/parcels.shp'))
+parcels['area_m2'] = parcels.geometry.area
+
+# load dataframe that assigns each field to cells for recharge
+field_id = 'parcel'
+field_df = pd.read_csv(join(uzf_dir, 'clean_soil_data', field_id+'_field_to_cell.csv'),index_col=0)
+
+# load dataframe with location (row,column) of wells
+well_loc_df = gpd.read_file(join(gwfm_dir, 'WEL_data','parcels_to_wells','parcels_to_wells.shp'))
+well_loc_merge = well_loc_df[['UniqueID','row','column','depth_m']].copy()
+well_loc_merge = well_loc_merge.merge(parcels[['UniqueID', 'area_m2']])
+well_loc_merge.UniqueID = well_loc_merge.UniqueID.astype(int)
+
+# %%
+# should we may the loadpth economic instead of Regional?
+loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+
+# update to different modflow models here, next step is using the 20 year model
+# base_model_ws = loadpth + 'crop_soilbudget'
+m_nam = 'historical_simple_geology_reconnection'
+# m_nam = 'input_write_2000_2022'
+# define modflow model WS to reference for modflow input
+m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
+
+# %%
+load_only=['DIS', 'BAS6']
+m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
+                                exe_name='mf-owhm', version='mfnwt',
+                              load_only = load_only)
+
+# %%
+# save ibound array for when updating bas6 for each run
+ibound = m.bas6.ibound.array
+# bottom array is needed for referencing well layer
+botm = m.dis.botm.array
+
+# %%
+## add domestic pumping
+wel_dir = join(gwfm_dir, 'WEL_data')
+# load prepared daily domestic use data
+dom_use = pd.read_csv(join(wel_dir, 'domestic_water_use.csv'), index_col=0, parse_dates=True)
+# load data of locations of domestic wells
+dom_loc = pd.read_csv(join(wel_dir, 'ag_res_parcel_domestic_wells.csv'), index_col=0)
+# make row,column 0 based
+dom_loc[['row','column']] = (dom_loc[['row','column']]-1).astype(int)
+# aggregate to the cell level, summing area will keep water usage scaling correct
+dom_loc = dom_loc.groupby(['node','row','column', 'CITY']).sum(numeric_only=True).reset_index()
+# get domestic well layers
+dom_wel_bot = (m.dis.top[dom_loc.row, dom_loc.column]- dom_loc.fill_depth_m).values
+dom_loc['layer'] = get_layer_from_elev(dom_wel_bot, botm[:,dom_loc.row, dom_loc.column], m.dis.nlay)
+
+# use either the total area or expected fraction of irrigated area
+dom_loc['pump_scale'] = dom_loc.used_area_acres # avg of 25% less than area_acres (sometimes more though)
+# alternate to avoid over-estimation just stick with 2AF/year
+dom_loc['pump_scale'] = 1 # avg of 25% less than area_acres (sometimes more though)
+
+
+# %%
+# columns are the ntaive land use fields
+pc_df = pd.read_csv( join(proj_dir,'native_parcel_zonalstats', 
+                   'swb_percolation.csv'),index_col=0)
+# long format to join with row,column
+pc_df_long = pc_df.melt(ignore_index=False, 
+                        var_name='UniqueID',
+                       value_name='pc')
+pc_df_long.UniqueID=pc_df_long.UniqueID.astype(int)
+
+
+# %%
+soil_path = join(uzf_dir,'clean_soil_data')
+field_ids = 'native'
+# reference for field to grid cell
+grid_soil = pd.read_csv(join(soil_path, field_ids+'_field_to_cell.csv'), index_col=0)
+
+
+# %%
+field_ids = 'parcel'
+grid_soil_ag = pd.read_csv(join(soil_path, field_ids+'_field_to_cell.csv'), index_col=0)
+
+# %%
+# join field to row,column
+native_pc = pc_df_long.reset_index().merge(grid_soil)
+native_pc = native_pc.rename(columns={'index':'date'})
+# calculate recharge rate by scaling for fraction of cell covered 
+native_pc['rch_rate'] = native_pc.pc*native_pc.field_area/(200*200)
+# update index to datetime
+native_pc = native_pc.set_index('date')
+native_pc.index=pd.to_datetime(native_pc.index)
+
+# %%
+# drop dates and cells with zero recharge as the default recharge is 0
+native_pc = native_pc[native_pc.rch_rate!=0]
+
+# %%
+# quick budget checking
+# native_pc['year'] = native_pc.index.year
+# yr_sum = native_pc.groupby(['year','row','column'])['rch_rate'].sum()
+# yr_sum = yr_sum.reset_index()
+# yr_sum.groupby('year').mean()*3.28*12 # m/yr, 0.67 inches/yr for max year
+# we are underestimating recharge
+
+# %%
+# well_loc_merge.depth_m
+## sample well layer
+# get top elevations to calculate well screen elevation
+well_loc_merge['top_elev'] = m.dis.top.array[well_loc_merge.row-1, well_loc_merge.column-1]
+well_loc_merge['well_elev'] = well_loc_merge.top_elev - well_loc_merge.depth_m
+# make layer 1 based
+well_loc_merge['layer'] = get_layer_from_elev(well_loc_merge.well_elev.values, 
+                    botm[:, well_loc_merge.row-1, well_loc_merge.column-1], m.dis.nlay)+1
+# make 0-based columns
+well_loc_merge[['k','i','j']] = well_loc_merge[['layer','row','column']]-1
+
+# %% [markdown]
+# Specify dates for the entire model period and seasonal dates to start/stop the model.
+
+# %%
+all_strt_date = pd.to_datetime(m.dis.start_datetime)
+all_dates = all_strt_date + (m.dis.perlen.array.cumsum()-1).astype('timedelta64[D]')
+all_end_date = all_dates[-1]
+print(all_strt_date, all_end_date)
+months = pd.date_range(all_strt_date, all_end_date, freq='MS')
+years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
+
+# %%
+
+# load summary excel sheet on irrigation optimization
+# this will specify the date ranges to run and pause
+fn = join(data_dir,'static_model_inputs.xlsx')
+season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
+
+
+model_ws = join(loadpth, 'rep_crop_soilbudget')
+# may want to add a year start/end or put in subfolder of modflow model
+# so we can run different versions
+model_ws = join(loadpth, m_nam)
+swb_ws = join(model_ws, 'rep_crop_soilbudget')
+
+# %%
+# choose crops on first day of year
+# month_crop = pd.Series(1)
+# day_crop = pd.Series(1)
+# month_irr = pd.Series(4)
+# day_irr = pd.Series(1)
+
+# ## specify dates where modflow will start 
+# all_run_dates = pd.DataFrame()
+# # yn = 0
+# # y = years[yn]
+# for y in years:
+#     run_dates = swb.ymd2dt(y, season.month_run, season.day_run, season.start_adj)
+#     run_dates = run_dates.drop_duplicates().sort_values()
+#     run_dates = pd.DataFrame(run_dates).assign(use='irrigation')
+#     crop_date = swb.ymd2dt(y, month_crop, day_crop, season.start_adj)
+#     crop_date = pd.DataFrame(crop_date).assign(use='crop').dropna()
+#     irr_date = swb.ymd2dt(y, month_irr, day_irr, season.start_adj)
+#     irr_date = pd.DataFrame(irr_date).assign(use='irrigation').dropna()
+#     # all_run_dates = pd.concat((all_run_dates, crop_date, run_dates))
+#     all_run_dates = pd.concat((all_run_dates, crop_date, irr_date))
+
+# all_run_dates
+# simple code to set dates for april 1
+all_run_dates = pd.date_range(all_strt_date, all_end_date,freq='AS-Apr')
+all_run_dates = pd.DataFrame(all_run_dates).assign(use='irrigation')
+# add total start and end dates
+all_run_dates = pd.concat((pd.DataFrame([all_strt_date]).assign(use='start'), all_run_dates))
+all_run_dates = pd.concat((pd.DataFrame([all_end_date]).assign(use='end'), all_run_dates))
+all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns={0:'date'})
+
+# %% [markdown]
+# Review season dates, the plan was to change the start of the irrigation date for misc. grain and hay since irrigators don't typically start until summer even though it grows in winter. Simplify to crop choice Jan 1 and Irrig. run Apr 1
+# - also at some point we may have discussed just doing them at the same time? in that case we just need to iterate over years
+
+# %%
+print(all_run_dates)
+
+# %% [markdown]
+# Cameron asked about cross-validation and hind-sight in the model. Maybe look at best way to re-run SWB or modflow after seeing the model run.
+
+# %% [markdown]
+# # Begin yearly iteration here 
+
+# %% [markdown]
+# For the first period we want to run things simply to get started. Thus we won't have output from the irrigation model.
+# - check which soil budget data is available from the pre-existing dataset or if we should set up something simple to run on the hydrology of the current year assuming full irrigation on rain-ETc deficit.
+#     - this should be a question for Yusuke, in the off-season of October to March we are going to assume no irrigation so there will no groundwater pumping. Just dispersed recharge.
+
+# %%
+# # this loop was set to run for the years of interest
+# start at 1 instead of 0 to skip first pre-period
+for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in [2]:
+    m_strt = all_run_dates.iloc[m_per].date
+    m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
+    use = all_run_dates.iloc[m_per].use
+    dates = pd.date_range(m_strt, m_end)
+
+    # %%
+    print(m_strt.date(),'to', m_end.date())
+
+    # %%
+    year = m_strt.year
+    # crop='Corn'
+
+# %% [markdown]
+# # Define groundwater elevation sampling
+
+    # %%
+    model_ws_last = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date()))
+    hdobj = flopy.utils.HeadFile(model_ws_last + '/MF.hds')
+
+    # %%
+    # model output dates
+    m_dates = all_run_dates.loc[m_per-1].date+np.array(hdobj.get_times()).astype('timedelta64[D]')
+    m_dates = pd.DataFrame(m_dates, columns=['dates']).set_index('dates')
+    m_dates['kstpkper'] = hdobj.get_kstpkper()
+    # subset to 1 month of output
+    # determine dates for fall sampling
+    fall_dates = m_dates[m_dates.index.month==10]
+    # determine dates for spring sampling
+    spring_dates = m_dates[m_dates.index.month==3]
+
+
+# %% [markdown]
+# Irrigation decisions are made with spring levels but the crop choice model was developed with fall levels
+
+    # %%
+    # get head value from last 30 days to avoid using extreme single day value
+    fall_heads = avg_heads(fall_dates.kstpkper.values, hdobj, m)
+    
+    # the dtw conversion runs a little slow
+    # get the DTW for the wels in the simulation from the last period
+    well_dtw = sample_dtw(fall_heads, botm)
+    # need to make integer for join with crop choice
+    well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
 # %% [markdown]
 # # Crop choice model
+# Evetnaully this should use the updated DTW from each previous year.
 
-# %%
-crop_choice_dir = 'parcelchoicemodelupdate'
-# Read logit coefficients
-logit_coefs = pd.read_csv(join(crop_choice_dir, 'logit_coefs.csv'))
+    # %%
+    # load Sac Valley WYT
+    wyt = pd.read_csv(join(proj_dir, 'model_inputs', 'sacramento_WY_types.txt'))
+    # whether it is a critical or dry year or not
+    wyt['wy_dc'] = 0
+    # for wet or above normal years the boolean will be 0 
+    wyt.loc[wyt['Yr-type'].isin(['C','D']),'wy_dc'] = 1
 
-# the parcel data needs the dtwfa (avg dtw in feet for the parcel) and wy_dc (pulled from Sac wy type dataset and switched to dry boolean)
-# missing WY type prediction? 
-# Read parcel data
-data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
-data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
+    # %%
+    crop_choice_dir = 'parcelchoicemodelupdate'
+    # Read logit coefficients
+    logit_coefs = pd.read_csv(join(crop_choice_dir, 'logit_coefs.csv'))
+    
+    # the parcel data needs the dtwfa (avg fall dtw in feet for the parcel) and wy_dc (pulled from Sac wy type dataset and switched to dry boolean)
+    # missing WY type prediction? 
+    # Read parcel data
+    data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
+    # still needs to be updated to auto update DTW and WY type
+    # data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
+    data['wy_dc'] = wyt.loc[wyt.WY==year, 'wy_dc'].values[0]
+    # update DTW to use simulated value instead of contoured
+    well_dtw_merge = well_dtw[['UniqueID','dtw_ft']].rename(columns={'dtw_ft':'dtwfa'})
+    data = data.drop(columns=['dtwfa', 'dtwsp'])
+    data = data.merge(well_dtw_merge, left_on='parcel_id',right_on='UniqueID')
+    
+    # Import prior year revenue data by crop
+    rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv"))
 
-# Import prior year revenue data by crop
-rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv"))
+# %% [markdown]
+# Of note is that the simulated DTW for fall is 4x time greater than the observed so we may see a sharp drop in crops because of this.
+# - it leads to an increase in unclassified fallow
 
-# %%
-pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
-pod['pod'] = 'No Point of Diversion on Parcel'
-pod.loc[pod.pod_bool==1, 'pod'] = 'Point of Diversion on Parcel'
+    # %%
+    # expect updated column name for pod
+    # add column to POD that was available in previous dataset
+    pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
+    pod['pod'] = 'No Point of Diversion on Parcel'
+    pod.loc[pod.pod_bool==1, 'pod'] = 'Point of Diversion on Parcel'
 
-# %%
-# crop choice model uses "_" instead of " "
-# the irrigation model set up uses " "
-data_out = predict_crops(data.copy(), rev_prior_yr_df, logit_coefs)
-data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
-data_out.to_csv(join(crop_choice_dir, 'parcel_crop_choice_'+str(year)+'.csv'), index=False)
+
+    # %%
+    # crop choice model uses "_" instead of " "
+    # the irrigation model set up uses " "
+    data_out = predict_crops(data.copy(), rev_prior_yr_df, logit_coefs)
+    data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
+    # update naming of Corn
+    data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
+    
+    data_out.to_csv(join(crop_choice_dir, 'parcel_crop_choice_'+str(year)+'.csv'), index=False)
 
 # %% [markdown]
 # # Load MF output
+# The depth to water function should sample from the previous model run which may be a year or less long.
+#
+# The original get_dtw function was set up assuming a continuous model run which won't be the case.
 
-# %%
-import f_gw_dtw_extract
-reload(f_gw_dtw_extract)
-from f_gw_dtw_extract import get_dtw
-
-# %%
-# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-dtw_model_ws = loadpth+'historical_simple_geology_reconnection'
-# dtw_model_ws = loadpth+'strhc1_scale'
-year = 2020
-dtw_df_in = get_dtw(year, dtw_model_ws)
-dtw_df_in.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year)+'.csv'))
-
-# gw heads sampled from jan 1 to dec 31, heads from previous year can be easily
-# sampled from previous csv
-
-# %%
-# dtw_df
-fp = join(base_model_ws, 'field_SWB', 'dtw_ft_parcels_'+str(year-1)+'.csv')
-if os.path.isfile(fp):
-    dtw_df_previous = pd.read_csv(fp,
-                                 index_col=0, parse_dates=['dt'])
-    dtw_df_previous.columns = dtw_df_previous.columns.astype(int)
-    dtw_df = pd.concat((dtw_df_previous.loc[str(year-1)+'-11-1':], dtw_df_in), axis=0)
-
-# %%
-import matplotlib.pyplot as plt
-
-# %%
-# plt.plot((dtw
-# _df_previous.loc[str(year-1)+'-11-1':].values - dtw_df_in.loc[str(year)+'-11-1':].values));
-
-# %%
-# example depth to water simulation results to show variability in trends
-# this seems to show the model has some extreme locations of drawdown that are unrealistic
-# dtw_df.iloc[:,::205].plot(legend=False);
-# dtw_df_in.iloc[:,::205].plot(legend=False);
-# plt.ylabel('Depth to water (ft)')
-
-# %%
-# the plot makes it seem like there is a sharp discontinuity here
-# maybe its the same values as 2020 on accident, maybe issue with hdobj read in
-# dtw_df.iloc[:,0].plot()
-dtw_df_in.iloc[:,0].plot()
-dtw_df_in.iloc[:,200].plot()
-dtw_df_in.iloc[:,600].plot()
-# dtw_df_in.iloc[:,800].plot()
-dtw_df_in.iloc[:,1200].plot()
-
+    # %%
+    # get head value from last 30 days to avoid using extreme single day value
+    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    
+    # the dtw conversion runs a little slow
+    # get the DTW for the wels in the simulation from the last period
+    well_dtw = sample_dtw(spring_heads, botm)
+    # need to make integer for join with crop choice
+    well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
 # %% [markdown]
 # # Irrigation submodel
@@ -146,137 +417,255 @@ dtw_df_in.iloc[:,1200].plot()
 # The crop choice model didn't predict any corn.
 # - this submodel may need to be in a separate script to run multiprocessing (parallel) as this re-loads the entire active script each time.
 
-# %%
-crop_list = ['Corn','Alfalfa','Pasture','Misc Grain and Hay', 'Grape']
+    # %%
+    crop_list = ['Corn','Alfalfa','Pasture','Misc Grain and Hay', 'Grape']
 
-# crop = 'Corn'
-crop = crop_list[1]
-# year = 2020
-# load_run_swb(crop, year)
 
-# %%
+    # %%
+    #
+    crop_in = data_out.merge(pod)
+    crop_in = crop_in.rename(columns={'Crop_Choice':'name'})
+    crop_in.to_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+    # crop_in[crop_in.name==crop]
+    pred_crops = crop_in.name.unique()
+    print(pred_crops)
+
+    # %%
+    print(crop_in.groupby('name')[['parcel_id']].count())
+    # paper by Snyder, statewide values for pasture or range, ended up using pasture as 
+    # crop coefficients are either 0.9 or 0.95
+
+# %% [markdown]
+# ## Simplified representation of DTW range from min to max.
+# Instead of using the full record of the DTW, the mdoel should just sample the average DTW for the month of interest
+
+    # %%
+    ## simple representative DTW for linear steps from dtw_min to dtw_max
+    ## with a 5 ft decline from June to December based on observed data
+    dtw_simple_df = calc_simple_dtw(well_dtw, year, dtw_step = 10)
+    dtw_simple_df.to_csv(join(swb_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
+
+
+# %% [markdown]
+# ## Iterate over all crops to save the representative profiles
+# The way the irrigation models are set up, they still run for the entire season but they are simulated in spring which means that they can't decide winter water pumping for the first year. In each year following the simulation runs april to april so they can influence pumping in the following year.
+# - just need to note that the first period of 6 months is spin-up in a way.
+
+# %% [markdown]
+# After updating function need to check everything still works.
 #
-crop_in = data_out.merge(pod)
-crop_in = crop_in.rename(columns={'Crop_Choice':'name'})
-crop_in.to_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
-# crop_in[crop_in.name==crop]
-pred_crops = crop_in.name.unique()
-print(pred_crops)
+# - fixed issue hdf5 overwrite
+# - found that Corn, sorghum name match was off
+
+    # %%
+    print(pred_crops)
+    for crop in crop_list:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        # need to account for when crops aren't predicted and skip them
+        # if pred_dict[crop] in pred_crops: 
+        print(crop, ':',pred_dict[crop])
+
+    # %%
+    # initialize HDF5 files for the year
+    from functions.data_functions import init_h5
+    # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
+    # initialize SWB folder
+    os.makedirs(join(swb_ws, 'field_SWB'), exist_ok=True)
+    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+        name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name)
+    
+    # check profit/yield if annual or daily
 
 # %%
-crop_in.groupby('name')[['parcel_id']].count()
+    
+    # for crop in ['Corn']:
+    for crop in crop_list:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        # need to account for when crops aren't predicted and skip them
+        if pred_dict[crop] in pred_crops: 
+            # to equalize the situation we might use a simple DTW profile
+            load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
+                         dtw_simple_df, 
+                         soil_rep=True) 
 
-# %%
-# subset for parcels for the current crop
-
-
-# %%
-import Basic_soil_budget_monthly as swb
-reload(swb)
-# import f_swb_profit_opt
-# reload(f_swb_profit_opt)
-# from f_swb_profit_opt import load_run_swb
-
-import f_rep_swb_profit_opt
-reload(f_rep_swb_profit_opt)
-from f_rep_swb_profit_opt import load_run_swb
+    # %%
+    fn = join(swb_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+    print('Crops with SWB results')
+    with h5py.File(fn) as dset:
+        finished_crops = list(dset['array'].keys())
+        print(finished_crops)
+    # only grape was completed?
 
 # %% [markdown]
-# Alfalfa ran as expected <1 min each. Misc grain and hay is running very slow, some taking up to 20 min with the norm being 3-5 minutes it seems (negative profits confuse function?)
-#
-# - the insane run time makes it seem more reasonable now to simply create a linear relationship between irrigation rate and DTW for each field and water year.
-#     - lets do DTW with 5 ft steps from 0 to 300 ft for 60 iterations
-#     - irrigation dates range from 20-80 per season and within that we need accuracy to the 1 cm and if we have a max irrigation of 150 cm (almonds take ~40 in/yr and 60 inches is about 150 cm) thats 150 steps which would create 150^80 permutations (not accounting for duplicates) or 150!/70! which is equally large and that's before accounting for hydrology so this wouldn't be feasible.
-# - but also it takes almost a minute per soil type for vineyards, for some reason the first one is the fastest at 0.15 min, this means it would take 1,000 min or about 16 hrs which is not reasonable even in parallel
+# 1. Load the representative results and sample for each field by crop type to back calculate the irrigation requirements. use the estimated irrigation as an input to the modflow model for pumping and percolation for recharge.
+#     -   use the DTW id to reference to the irrigation in the full array, need to group by SW, GW or mixed.
+#     -   if we wanted we could re-run the SWB one time with the specified irrigation rates to get the exact recharge rates with field specific values
+# 2. RUn the modflow model to get the resultant DTW profile
+# 3. re-calculate the profit using the irrigation and actual DTW profile on a soil by soil basis (non-optimization) after running the next modflow chunk. Actually the re-run for the true profit could be done if profits aren't needed mid-simulation
+
+    # %%
+    # load the processed dataframe with all datas
+    pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
+                     crop_in, finished_crops, dtw_simple_df, well_dtw)
 
 # %% [markdown]
-# Originally we discussed the farmers assuming a standard increase (winter) and decline (summer) in groundwater based on the fall elevation. If we do this then we can run the optimization for 5-10 groundwater level patterns for each crop which will be more efficient than running for each unique sequence of groundwater levels.
-# - we can validate this by running several example fields then translating back to each field with lookup table (use alfala which has only 7 selected)
-
-# %%
-dtw_crop_mean = dtw_df[data_out[data_out.Crop_Choice==pred_dict[crop]].parcel_id].loc['2020-4-1':].mean().values
-fig,ax=plt.subplots(figsize=(4,1))
-ax.plot(dtw_crop_mean)
-dtw_df.shape
-
-# %%
-crop_in[crop_in.name==pred_dict[crop]]
-
-# %%
-dtw_df_crop_out = dtw_df[crop_in[crop_in.name==pred_dict[crop]].parcel_id.values]
-dtw_df_crop_out.to_csv(join(base_model_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
-
-# %%
-for crop in ['Alfalfa']:
-# for crop in ['Grape']:
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-    # need to account for when crops aren't predicted and skip them
-    if pred_dict[crop] in pred_crops: 
-        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
-
-# %%
-dtw_df.loc[:, crop_in[crop_in.name==pred_dict[crop]].parcel_id].mean()
-
-# %%
+# ## RCH input
+#     print('Beginning MODFLOW input update')
+    # %%
+    # join water budget data to field area for scaling to cell for recharge
+    rch_df = pc_df_all.merge(field_df)
+    # calculate the fraction of a cell covered by the field
+    rch_df['field_scale'] = rch_df.field_area/(200*200)
+    # calculate the recharge rate for each field
+    rch_df['rch_rate'] =  rch_df.rate*rch_df.field_scale
+    # set date as index for sampling
+    rch_df = rch_df.set_index('date')
+    # we only need to assign rch when non-zero
+    rch_df = rch_df[rch_df.rch_rate!=0]
 
 # %% [markdown]
-# Simplified representation of DTW
+# Take the combined dataframe to inform the recharge array with recharge from the irrigation season. The next step is to insert recharge from non-irrigated times and native lands.
 
-# %%
-## simple representative DTW for linear steps 10 ft to 200 ft
-## with a 5 ft decline from June to December based on observed data
-dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
-dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
-# dates where a decline date is specified
-decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
-decline_total = 5
-decline = np.cumsum(np.full(len(decline_dates), decline_total/len(decline_dates)))
-dtw_avg.loc[decline_dates, 'decline'] = decline
-dtw_simple = np.repeat(np.reshape(np.arange(10, 200, 10), (1,-1)), len(dtw_avg), axis=0)
-dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
-dtw_simple_df = pd.DataFrame(dtw_simple, dtw_avg.index)
-# plt.plot(dtw_simple[:,0])
 
-# %%
-dtw_simple_df.to_csv(join(loadpth, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
+    # %%
+    ## add off-season (winter recharge) farmlands recharge 
+    ## need to use the crop-type selected for the year and assume field content at start
+    ## nothing needs to be optimized so the soil water budgets can be run at once
+    ## the only difference is that the ETc might need to be resampled
 
-# %%
-# pd.DataFrame(dtw_simple[:,0], dtw_avg.index).loc['2020-02-12':'2020-10-04'].plot()
-# plt.plot(dtw_simple.mean(axis=0))
-# dtw_simple.shape
+    # function that saves a csv with the output by unique field similar to the native land
+    ag_pc_df = run_swb_ag_winter(year)
 
-# %%
-# to equalize the situation we might use a simple DTW profile
-load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
-             dtw_simple_df, soil_rep=True)
+    # long format to join with row,column
+    ag_pc_df_long = ag_pc_df.melt(ignore_index=False, 
+                            var_name='UniqueID',
+                           value_name='pc')
+    ag_pc_df_long.UniqueID=ag_pc_df_long.UniqueID.astype(int)
 
+    # join field to row,column
+    ag_pc = ag_pc_df_long.reset_index().merge(grid_soil_ag)
+    ag_pc = ag_pc.rename(columns={'index':'date'})
+    # calculate recharge rate by scaling for fraction of cell covered 
+    ag_pc['rch_rate'] = ag_pc.pc*ag_pc.field_area/(200*200)
+    # update index to datetime
+    ag_pc = ag_pc.set_index('date')
+    ag_pc.index=pd.to_datetime(ag_pc.index)
+    # drop dates and cells with zero recharge as the default recharge is 0
+    ag_pc = ag_pc[ag_pc.rch_rate!=0]
+
+    # %%
+    # need to only keep dates with percolation where there is not already data from the optimized swb
+    outer_join = rch_df[['UniqueID']].reset_index().merge(ag_pc[['UniqueID']].reset_index(), how = 'outer', indicator = True)
+    # identify data that is on the right side only (ag winter recharge) 
+    ag_join = outer_join[~(outer_join._merge == 'right_only')].drop('_merge', axis = 1).drop_duplicates()
+    
+    # filter out the ag winter recharge to join to the dataframe
+    ag_pc_include = ag_pc.reset_index().merge(ag_join, how='inner')
+
+    # %%
+    ## add native lands recharge
+    rch_all = pd.concat((rch_df, native_pc, ag_pc_include))
+    # aggregate to the row, column level
+    rch_all = rch_all.groupby(['date','row','column'])[['rch_rate']].sum()
+    rch_all = rch_all.reset_index(['row','column'])
+    # is groupby faster or just adding individual datasets to the array??
+
+
+    # %%
+    # allocate dictionary for recharge
+    rch_dict = dict()
+    for t, d in enumerate(dates):
+        # get data for the stress period
+        rch_arr = np.zeros((m.dis.nrow, m.dis.ncol))
+        if d in rch_df.index:
+            # spd_df = rch_df.loc[d]
+            spd_df = rch_all.loc[d]
+            rch_arr[spd_df.row-1, spd_df.column-1] = spd_df.rch_rate
+        # assign values to recharge dict
+        rch_dict[t] = rch_arr
+    # print to help ID errors
+    print('Finished updating RCH dictionary')
 # %% [markdown]
-# Testing by crop
+# ## WEL input
 
 # %%
-# for crop in crop_list[:2]:
-for crop in ['Misc Grain and Hay']:
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-    # need to account for when crops aren't predicted and skip them
-    if pred_dict[crop] in pred_crops: 
-        load_run_swb(crop, year, crop_in, base_model_ws, dtw_df)
+    
+    # join water budget data to field area for application to cell for well
+    wel_df = irr_gw_df_all.merge(well_loc_merge)
+    # calculate the volumetric flux of the well 
+    wel_df['flux'] = -wel_df.rate*wel_df.area_m2
+    # # set date as index for sampling
+    wel_df = wel_df.set_index('date')
+    # wel_df
 
 # %%
-# # it takes a while to load the matlab engine but onces it's loaded then it can call functions
-# import matlab.engine
-# eng = matlab.engine.start_matlab()
-# tf = eng.isprime(37)
-# print(tf)
+# allocate dictionary for recharge
+# I think the issue here with writing input was indentation was incorrect
+    wel_dict = dict()
+    for t, d in enumerate(dates):
+        # get data for the stress period
+        if d in wel_df.index:
+            spd_df = wel_df.loc[d]
+            wel_arr = spd_df[['k','i','j','flux']].values
+        else:
+            wel_arr = [[0,0,0,0]]
+        # append domestic well pumping to pumping dataset
+        dom_loc['flux'] = - dom_use.loc[d,'flux_m3d']*dom_loc.pump_scale
+        wells_dom = dom_loc[['layer','row','column','flux']].values
+        
+        # assign input to well dictionary
+        wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
+    # print to help ID errors
+    print('Finished updating WEL dictionary')
 
 # %%
-
-# %% [markdown]
-#
+# import matplotlib.pyplot as plt
+# import matplotlib as mpl
+# plt.imshow(rch_dict[100])
+# plt.colorbar(norm = mpl.colors.LogNorm)
 
 # %% [markdown]
 # # Run update modflow
 
+    # %%
+    print('Loading in period MODFLOW model')
+    # load the existing modflow model for the next year
+    mf_ws = join(model_ws, 'crop_modflow/'+str(m_strt.date()))
+    m_month = flopy.modflow.Modflow.load(join(mf_ws,'MF.nam'), model_ws = mf_ws, load_only=['DIS'])
+    # m.model_ws = mf_ws
+    # The model should start in hydraulic connection
+    if m_per > 0:
+        mf_ws_last = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date()))
+        hdobj = flopy.utils.HeadFile(mf_ws_last + '/MF.hds')
+        sp_last = hdobj.get_kstpkper()[-1]
+        strt = hdobj.get_data(sp_last)
+    
+    # for the first period we use dem as starting point
+    # if solver criteria are not met, the model will continue if model percent error is less than stoperror
+    bas_month = flopy.modflow.ModflowBas(model = m_month, ibound=ibound, strt = strt)
+    # write bas input with updated starting heads
+    bas_month.write_file()
+
 # %%
+
+    # update flopy packages with new data
+    wel_month = flopy.modflow.ModflowWel(model=m_month, stress_period_data = wel_dict, ipakcb=55)
+    rch_month = flopy.modflow.ModflowRch(model=m_month, nrchop = 3, rech =  rch_dict, ipakcb=55)
+    
+    wel_month.write_file()
+    rch_month.write_file()
+    print('Finish writing new modflow input')
+    
+
+
+    # %%
+    # need to specify the path of the modflow exe or it defaults to mf2005 and crashes
+    m_month.exe_name = 'mf-owhm.exe'
+    success, buff = m_month.run_model()
+
+# %% [markdown]
+# The MODFLOW run-time for one year was 49 min. This was for the version with 19 layers which we can cut down to 10 or so by removing TPROGs and this could be sped up by reducing the amont of output saved since we may not need to review the CBC output.
 
 # %% [markdown]
 # # Re-run soil water budget to calculate actual profit
