@@ -78,12 +78,12 @@ def sfr_setback(grid_sfr, grid_p, s):
     setback_outer = ma.masked_where(setback_outer==0,setback_outer)
     return(setback_outer)
 
-def arr_plt_label_stream(ax, xy_down=(20,80), xy_up=(180,40)):
+def arr_plt_label_stream(ax, xy_down=(20,80), xy_up=(180,40), xy_arrow = (140,90)):
     ax.annotate(text = 'Downstream', xy=xy_down, xycoords='data',
                   bbox={'facecolor': 'lightgray', 'alpha': 0.9, 'pad': 2})
     ax.annotate(text = 'Upstream', xy=xy_up, xycoords='data',
                   bbox={'facecolor': 'lightgray', 'alpha': 0.9, 'pad': 2})
-    ax.text(140, 90, s='  N  ',rotation=52.9, size=10,
+    ax.text(xy_arrow[0], xy_arrow[1], s='  N  ',rotation=52.9, size=10,
             bbox=dict(boxstyle="rarrow,pad=0.1",
                       fc="lightgray", ec="black", lw=2))
 

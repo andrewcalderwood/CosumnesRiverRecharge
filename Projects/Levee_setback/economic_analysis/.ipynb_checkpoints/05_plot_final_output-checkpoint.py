@@ -187,15 +187,25 @@ df_econ_agg.year = df_econ_agg.year.astype(str)
 # %%
 
 # %%
-# sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
-#            facet_kws={'sharey': False, 'sharex': True})
+# plot the total profit and yield after scaling by acreage
+sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
+           facet_kws={'sharey': False, 'sharex': True})
 
+
+
+# %%
 # plot the average profit and yield (not-weighted by acreage) 
 g=sns.relplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
            facet_kws={'sharey': False, 'sharex': True})
 
 
 # %%
+crop='Grape'
+year=2015
+dtw_arr = pd.read_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0,parse_dates=[0])
+
+# %%
+dtw_arr.mean().mean()
 
 # %% [markdown]
 # # Process water budget

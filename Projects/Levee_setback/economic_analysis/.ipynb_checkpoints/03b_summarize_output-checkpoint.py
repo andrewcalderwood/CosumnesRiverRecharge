@@ -331,6 +331,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # to assume no irrigation or we can sample from the previous year. The actual irrigation estimated is very small in those months so okay for now
 
         # %%
+        # these all need to be converted to depth to water as they are currently head values (usually in negatives and in meters)
         dtw_df = hd_ts_all.set_index('date').copy()
         crop_dtw = dtw_df.loc[:,crop_df['parcel_id'].values]
         dtw_arr = crop_dtw.loc[dates]
