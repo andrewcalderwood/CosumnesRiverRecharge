@@ -67,22 +67,22 @@ from parcelchoicemodelupdate.f_predict_landuse import predict_crops
 
 # %%
 import functions.Basic_soil_budget_monthly as swb
-reload(swb)
+# reload(swb)
 
-import f_rep_swb_profit_opt
-reload(f_rep_swb_profit_opt)
+# import f_rep_swb_profit_opt
+# reload(f_rep_swb_profit_opt)
 from f_rep_swb_profit_opt import load_run_swb
 
 # %%
-import functions.f_gw_dtw_extract
-reload(functions.f_gw_dtw_extract)
+# import functions.f_gw_dtw_extract
+# reload(functions.f_gw_dtw_extract)
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 # from functions.f_gw_dtw_extract import get_dtw
 from functions.f_gw_dtw_extract import calc_simple_dtw
 
 # %%
-from functions import data_functions
-reload(data_functions)
+# from functions import data_functions
+# reload(data_functions)
 from functions.data_functions import read_crop_arr_h5
 
 # %%
@@ -124,6 +124,8 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
 m_nam = 'historical_simple_geology_reconnection'
+m_nam = 'input_write_2014_2020'
+
 # m_nam = 'input_write_2000_2022'
 # define modflow model WS to reference for modflow input
 m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
@@ -236,42 +238,17 @@ fn = join(data_dir,'static_model_inputs.xlsx')
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
 
-model_ws = join(loadpth, 'rep_crop_soilbudget')
+# model_ws = join(loadpth, 'rep_crop_soilbudget')
 # may want to add a year start/end or put in subfolder of modflow model
 # so we can run different versions
 model_ws = join(loadpth, m_nam)
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
-# %%
-# choose crops on first day of year
-# month_crop = pd.Series(1)
-# day_crop = pd.Series(1)
-# month_irr = pd.Series(4)
-# day_irr = pd.Series(1)
 
-# ## specify dates where modflow will start 
-# all_run_dates = pd.DataFrame()
-# # yn = 0
-# # y = years[yn]
-# for y in years:
-#     run_dates = swb.ymd2dt(y, season.month_run, season.day_run, season.start_adj)
-#     run_dates = run_dates.drop_duplicates().sort_values()
-#     run_dates = pd.DataFrame(run_dates).assign(use='irrigation')
-#     crop_date = swb.ymd2dt(y, month_crop, day_crop, season.start_adj)
-#     crop_date = pd.DataFrame(crop_date).assign(use='crop').dropna()
-#     irr_date = swb.ymd2dt(y, month_irr, day_irr, season.start_adj)
-#     irr_date = pd.DataFrame(irr_date).assign(use='irrigation').dropna()
-#     # all_run_dates = pd.concat((all_run_dates, crop_date, run_dates))
-#     all_run_dates = pd.concat((all_run_dates, crop_date, irr_date))
 
 # all_run_dates
 # simple code to set dates for april 1
-all_run_dates = pd.date_range(all_strt_date, all_end_date,freq='AS-Apr')
-all_run_dates = pd.DataFrame(all_run_dates).assign(use='irrigation')
-# add total start and end dates
-all_run_dates = pd.concat((pd.DataFrame([all_strt_date]).assign(use='start'), all_run_dates))
-all_run_dates = pd.concat((pd.DataFrame([all_end_date]).assign(use='end'), all_run_dates))
-all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns={0:'date'})
+all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 
 # %% [markdown]
 # Review season dates, the plan was to change the start of the irrigation date for misc. grain and hay since irrigators don't typically start until summer even though it grows in winter. Simplify to crop choice Jan 1 and Irrig. run Apr 1
@@ -294,8 +271,8 @@ print(all_run_dates)
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [2]:
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+for m_per in [2]:
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
     use = all_run_dates.iloc[m_per].use
@@ -342,7 +319,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
 # %% [markdown]
 # # Crop choice model
-# Evetnaully this should use the updated DTW from each previous year.
+# This uses the updated DTW from each previous year.
 
     # %%
     # load Sac Valley WYT
@@ -409,6 +386,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     well_dtw = sample_dtw(spring_heads, botm)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
+    well_dtw.to_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'))
 
 # %% [markdown]
 # # Irrigation submodel
@@ -460,6 +438,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     print(pred_crops)
     for crop in crop_list:
+    # for crop in ['Alfalfa']:
         var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
@@ -479,13 +458,15 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
 # %%
     
-    # for crop in ['Corn']:
+    # for crop in ['Alfalfa']:
     for crop in crop_list:
+        # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
+        # variables, this would be useful for comparing against baseline while future should use average
         var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops: 
             # to equalize the situation we might use a simple DTW profile
-            load_run_swb(crop, year, crop_in, join(loadpth, 'rep_crop_soilbudget'),
+            load_run_swb(crop, year, crop_in, swb_ws,
                          dtw_simple_df, 
                          soil_rep=True) 
 
@@ -501,13 +482,19 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # 1. Load the representative results and sample for each field by crop type to back calculate the irrigation requirements. use the estimated irrigation as an input to the modflow model for pumping and percolation for recharge.
 #     -   use the DTW id to reference to the irrigation in the full array, need to group by SW, GW or mixed.
 #     -   if we wanted we could re-run the SWB one time with the specified irrigation rates to get the exact recharge rates with field specific values
-# 2. RUn the modflow model to get the resultant DTW profile
+# 2. Run the modflow model to get the resultant DTW profile
 # 3. re-calculate the profit using the irrigation and actual DTW profile on a soil by soil basis (non-optimization) after running the next modflow chunk. Actually the re-run for the true profit could be done if profits aren't needed mid-simulation
+#   - this needs to be done still (active work)
 
     # %%
     # load the processed dataframe with all datas
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
+    # this output with the parcel data needs to be saved as well
+    pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
+    irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
+    irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
+
 
 # %% [markdown]
 # ## RCH input
@@ -578,7 +565,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for t, d in enumerate(dates):
         # get data for the stress period
         rch_arr = np.zeros((m.dis.nrow, m.dis.ncol))
-        if d in rch_df.index:
+        if d in rch_all.index:
             # spd_df = rch_df.loc[d]
             spd_df = rch_all.loc[d]
             rch_arr[spd_df.row-1, spd_df.column-1] = spd_df.rch_rate

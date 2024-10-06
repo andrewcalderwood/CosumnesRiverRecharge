@@ -67,22 +67,22 @@ from parcelchoicemodelupdate.f_predict_landuse import predict_crops
 
 # %%
 import functions.Basic_soil_budget_monthly as swb
-reload(swb)
+# reload(swb)
 
-import f_rep_swb_profit_opt
-reload(f_rep_swb_profit_opt)
+# import f_rep_swb_profit_opt
+# reload(f_rep_swb_profit_opt)
 from f_rep_swb_profit_opt import load_run_swb
 
 # %%
-import functions.f_gw_dtw_extract
-reload(functions.f_gw_dtw_extract)
+# import functions.f_gw_dtw_extract
+# reload(functions.f_gw_dtw_extract)
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 # from functions.f_gw_dtw_extract import get_dtw
 from functions.f_gw_dtw_extract import calc_simple_dtw
 
 # %%
-from functions import data_functions
-reload(data_functions)
+# from functions import data_functions
+# reload(data_functions)
 from functions.data_functions import read_crop_arr_h5
 
 # %%
@@ -271,8 +271,8 @@ print(all_run_dates)
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [2]:
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+for m_per in [2]:
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
     use = all_run_dates.iloc[m_per].use
@@ -438,6 +438,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     print(pred_crops)
     for crop in crop_list:
+    # for crop in ['Alfalfa']:
         var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
@@ -457,7 +458,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
 # %%
     
-    # for crop in ['Corn']:
+    # for crop in ['Alfalfa']:
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average

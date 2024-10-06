@@ -185,6 +185,7 @@ df_econ_agg.year = df_econ_agg.year.astype(str)
 # df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
 
 # %%
+df_econ#[df_econ.value.isna()]
 
 # %%
 # plot the total profit and yield after scaling by acreage
@@ -209,6 +210,9 @@ dtw_arr.mean().mean()
 
 # %% [markdown]
 # # Process water budget
+# At minimum need to start showing irrigation on a sub-annual scale for an average field or average of fields
+#
+# Percolation is really only important to the modflow side of things so probably don't need to plot.
 
 # %%
 df_all = pd.DataFrame()
@@ -250,3 +254,6 @@ for year in [2015]:
 # df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
 # # rename as econ for plotting reference
 # df_econ = df_all.merge(parcels[['UniqueID','area_m2']])
+
+# %%
+# need to plot 

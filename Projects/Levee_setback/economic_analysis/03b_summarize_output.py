@@ -134,11 +134,10 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 
 
 # %% [markdown]
-# Iteration starts here by year and crop
+# Iteration starts here by year and crop lower down
 
 # %%
 
-# crop='Grape'
 for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # for m_per in [1]:
     m_strt = all_run_dates.iloc[m_per].date
@@ -206,6 +205,47 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
     # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
 
+# %% [markdown]
+# There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
+# The model input shows only 182 periods but the get_ts has 183 times, is this because it includes the initial heads?
+
+    # %%
+    # well locations to sample for head
+    wells_idx = list(zip(year_wells.layer-1, year_wells.row-1, year_wells.column-1))
+
+    # the head data loaded here can be generic across all crops then filtered down
+    print('Loading previously simulated heads')
+    hd_ts_all = pd.DataFrame()
+    # iterate over previous and current year to get complete time series (Nov (-1 year) -Dec)
+    for n in [-1,0]:
+        model_ws_year = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per+n].date.date()))
+        hdobj_year = flopy.utils.HeadFile(model_ws_year + '/MF.hds')
+    
+        # model output dates
+        times = hdobj_year.get_times()
+        difftime = np.diff(np.append([0],times) )
+        m_dates_year = all_run_dates.loc[m_per+n].date+np.array(times - difftime).astype('timedelta64[D]')
+        m_dates_year = pd.DataFrame(m_dates_year, columns=['dates']).set_index('dates')
+        m_dates_year['kstpkper'] = hdobj_year.get_kstpkper()
+    
+        # get head time series for the wells across the year
+        # doesn't take too long
+        hd_ts = hdobj_year.get_ts(wells_idx)
+        # convert to dataframe for use in load_run_swb
+        hd_ts_df = pd.DataFrame(hd_ts)
+        # update columns to represent uniqueID
+        hd_ts_df.columns = ['date']+year_wells.UniqueID.tolist()
+        hd_ts_df['date'] = m_dates_year.index
+        hd_ts_all = pd.concat((hd_ts_all, hd_ts_df))
+
+
+    # %%
+    # these all need to be converted to depth to water as they are currently head values (usually in negatives and in meters)
+    dtw_df = hd_ts_all.set_index('date').copy()
+    # calculate the depth to water as dtw_ft = (DEM (m) - WSE (m))/0.3048
+    dtw_df = dtw_df.multiply(-1).add(year_wells.dem.values, axis=1).multiply(1/0.3048)
+    # the function (SWB) expects the head values to be provided for all fields then filters by crop_in for the crop
+
     # %%
     for crop in finished_crops:
     # for crop in ['Alfalfa']:
@@ -261,93 +301,25 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # and I guess set a check to use last years head data or backward fill
     # irr_gw_crop_dates.transpose().plot()
 
-# %%
-# dtw_simple_df
-# row for each date in the simulation
-# column for each parcel
-
-# load_run_swb then indexes for the UniqueIDs of the current crop
-# then it indexes for all dates being simulated
-
-# so it would be easiest to simply sample the modflow heads for all dates as time series
-# this might be really slow but it will be needed
-# we can filter parcel_wells by the crops that are simulated
-
-        # %%
-        # well locations to sample for head
-        wells_idx = list(zip(year_wells.layer-1, year_wells.row-1, year_wells.column-1))
-
-# %% [markdown]
-# There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
-# The model input shows only 182 periods but the get_ts has 183 times, is this because it includes the initial heads?
-
-        # %%
-        print('Loading previously simulated heads')
-        hd_ts_all = pd.DataFrame()
-        # iterate over previous and current year to get complete time series (Nov (-1 year) -Dec)
-        for n in [-1,0]:
-            model_ws_year = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per+n].date.date()))
-            hdobj_year = flopy.utils.HeadFile(model_ws_year + '/MF.hds')
-        
-            # model output dates
-            times = hdobj_year.get_times()
-            difftime = np.diff(np.append([0],times) )
-            m_dates_year = all_run_dates.loc[m_per+n].date+np.array(times - difftime).astype('timedelta64[D]')
-            m_dates_year = pd.DataFrame(m_dates_year, columns=['dates']).set_index('dates')
-            m_dates_year['kstpkper'] = hdobj_year.get_kstpkper()
-        
-            # get head time series for the wells across the year
-            # doesn't take too long
-            hd_ts = hdobj_year.get_ts(wells_idx)
-            # convert to dataframe for use in load_run_swb
-            hd_ts_df = pd.DataFrame(hd_ts)
-            # update columns to represent uniqueID
-            hd_ts_df.columns = ['date']+year_wells.UniqueID.tolist()
-            hd_ts_df['date'] = m_dates_year.index
-            hd_ts_all = pd.concat((hd_ts_all, hd_ts_df))
-
-
-# %%
-# # we also need to sample DTW for each month to represent the cost during the irrigation dates 
-# irr_m_dates = m_dates.loc[irr_dates[irr_dates.isin(m_dates.index)]].kstpkper
-# irr_heads = avg_heads(irr_m_dates.values, hdobj, m)
-
-# # filter well locations to the crop
-# crop_wells = parcel_wells[parcel_wells.UniqueID.isin(crop_df.parcel_id)]
-
-
-# irr_dtw_all = pd.DataFrame()
-# # # hdobj.get_data(irr_m_dates.values[0])?
-# for h in np.arange(0,len(irr_m_dates)):
-#     irr_dtw = crop_wells.copy()
-#     h_arr = hdobj.get_data(irr_m_dates.values[h])
-#     # sample the heads to get dtw for the parcels during the irrigation period
-#     irr_dtw['dtw_m'] = irr_dtw.dem - h_arr[irr_dtw.layer-1, irr_dtw.row-1,irr_dtw.column-1]
-#     irr_dtw['date'] = irr_m_dates.index[h]
-#     irr_dtw_all = pd.concat((irr_dtw_all, irr_dtw))
-
 # %% [markdown]
 # TODO: alfalfa has two irrigation dates that occur before the new modflow run, in theory we shouldn't need DTW in that time as we were going
 # to assume no irrigation or we can sample from the previous year. The actual irrigation estimated is very small in those months so okay for now
 
         # %%
-        # these all need to be converted to depth to water as they are currently head values (usually in negatives and in meters)
-        dtw_df = hd_ts_all.set_index('date').copy()
+        # # filter well locations to the crop
+        # crop_wells = year_wells[year_wells.UniqueID.isin(crop_df.parcel_id)]
+        # save dtw for each crop uniquely for plotting later
         crop_dtw = dtw_df.loc[:,crop_df['parcel_id'].values]
-        dtw_arr = crop_dtw.loc[dates]
-        # dtw_arr.index.drop_duplicates()
-
-        # %%
-        # save output to reference
+        dtw_arr = crop_dtw.loc[dates]# save output to reference
+        # re-index and forward fill to account for the last year of simulation which will end on 9/30 
+        # but crops like alfalfa need data until 10/4
+        dtw_arr = crop_dtw.reindex(dates).ffill() # save output to reference
         dtw_arr.to_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'))
-
-# %%
-# dtw_df.drop_duplicates().loc[dates].shape
 
         # %%
         print('Running soil water budget with irrigation and updated DTW to re-calculate yield, profit, and percolation')
         # in theory the best function to use if it works
-        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), hd_ts_all.set_index('date'), soil_rep = False,
+        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
 
 # %% [markdown]
