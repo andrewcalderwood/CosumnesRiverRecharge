@@ -163,7 +163,7 @@ for n,ft in enumerate(ft_in):
     d_ft_6[n] = np.loadtxt(join(fig_dir, 'to_Helen','Figure06', 'flood_depth_m_array_Type'+str(ft)+'_'+str(s*200)+'m.txt'))
     s=6
     d_ft_12[n] = np.loadtxt(join(fig_dir, 'to_Helen','Figure06', 'flood_depth_m_array_Type'+str(ft)+'_'+str(s*200)+'m.txt'))
-    
+
 
 # %%
 def cbaxes_label(ax_n, label, im_arr, frame=False):
@@ -193,11 +193,14 @@ def cbaxes_label(ax_n, label, im_arr, frame=False):
 import matplotlib.patches as patches
 
 # %%
-fig,ax = plt.subplots(ny, nx, figsize=(2.3*nx*ax_l, ny*ax_l), dpi=300, layout='constrained')
-ax_n = ax[0,0]
-im_K = ax_n.imshow(soil_K, norm= mpl.colors.LogNorm(),cmap='viridis', alpha=0.7)
+# nx,ny = (2,5)
+# ax_l=2
 
-cbaxes = cbaxes_label(ax_n, 'Vertical hydraulic\nconductivity (m/d)', im_K, frame=True)
+# fig,ax = plt.subplots(ny, nx, figsize=(2.3*nx*ax_l, ny*ax_l), dpi=300, layout='constrained')
+# ax_n = ax[0,0]
+# im_K = ax_n.imshow(soil_K, norm= mpl.colors.LogNorm(),cmap='viridis', alpha=0.7)
+
+# cbaxes = cbaxes_label(ax_n, 'Vertical hydraulic\nconductivity (m/d)', im_K, frame=True)
 # bbox = cbaxes.get_position()
 # rect = patches.Rectangle((20, 180), 30, 50, facecolor='white', edgecolor='black',alpha=0.9, zorder=4)
 # ax[0,0].add_patch(rect)
@@ -213,16 +216,23 @@ shrink=0.6
 ax_l=2
 nx,ny = (2,5)
 # the plots should have a width 2.3 times width based on number of cells
-fig,ax = plt.subplots(ny, nx, figsize=(2.3*nx*ax_l, ny*ax_l), dpi=300, layout='constrained')
-print('figsize:',2.3*2*l, 6*l)
+fig,ax = plt.subplots(ny, nx, figsize=(2.3*nx*ax_l, ny*ax_l), dpi=280, layout='constrained')
+print('figsize:',2.3*2*ax_l, 6*ax_l)
 # ax.set_axis_off()
 plt.setp(ax, xticks=[], yticks=[])
 ## map hydraulic conductivity
 ax_n = ax[0,0]
-im_K = ax_n.imshow(soil_K, norm= mpl.colors.LogNorm(),cmap='viridis', alpha=0.7)
+soil_plt = np.copy(soil_K)
+# hot fix to remove colorfrom behind colorbar
+# soil_plt[
+im_K = ax_n.imshow(soil_plt, norm= mpl.colors.LogNorm(),cmap='viridis', alpha=0.7)
 
 cbaxes_label(ax_n, 'Vertical hydraulic\nconductivity (m/d)', im_K, frame=True)
 ax_n.plot(grid_sfr.column-1, grid_sfr.row-1, color='blue', linewidth=0.5, linestyle='-')
+# Create a Rectangle patch
+rect = patches.Rectangle((185, 20), 40, 30, linewidth=1, edgecolor='white', facecolor='white', alpha=0.9)
+# Add the patch to the Axes
+ax_n.add_patch(rect)
 
 ## line plot of inundated fraction
 # need to create an inset axis within the main axis
