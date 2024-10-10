@@ -201,9 +201,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # # this output with the parcel data needs to be saved as well
-    # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
-    # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
-    # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
+    # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'),index_col=0)
+    # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0)
+    # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0)
 
 # %% [markdown]
 # There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
@@ -294,7 +294,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         irr_sw_crop_dates = irr_sw_crop_dates.reset_index().pivot_table(columns='date', values='rate',index='UniqueID')
     
         # specify irr_all input
-        irr_all = np.hstack((irr_gw_crop_dates.values,irr_sw_crop_dates.values))
+        # irr_gw goes first then irr_sw
+        irr_all = np.hstack((irr_sw_crop_dates.values,irr_gw_crop_dates.values))
 
 # %%
 # the simulation results show that naturally there is little to no irrigation before april so hold off for now
@@ -310,7 +311,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         # crop_wells = year_wells[year_wells.UniqueID.isin(crop_df.parcel_id)]
         # save dtw for each crop uniquely for plotting later
         crop_dtw = dtw_df.loc[:,crop_df['parcel_id'].values]
-        dtw_arr = crop_dtw.loc[dates]# save output to reference
+        # dtw_arr = crop_dtw.loc[dates]# save output to reference
         # re-index and forward fill to account for the last year of simulation which will end on 9/30 
         # but crops like alfalfa need data until 10/4
         dtw_arr = crop_dtw.reindex(dates).ffill() # save output to reference

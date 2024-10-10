@@ -147,23 +147,23 @@ for year in run_years:
         with h5py.File(name) as dset:
             finished_crops = list(dset['array'].keys())
             print(finished_crops, end='.')
-            for crop in finished_crops:
-            # for crop in finished_crops[2]:
-                # need dates for time series water budget output
-                var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-                yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
-                yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
-                # get the total extent of the irrigation season (calculation period)
-                strt_date = yield_start.min()
-                end_date = yield_end.max()
-                dates = pd.date_range(strt_date, end_date, freq='D')
-                # extract output and convert to dataframe with ID columns
-                arr = read_crop_arr_h5(crop, name)
-                df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
-                # add parcel information back
-                df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
+        for crop in finished_crops:
+        # for crop in finished_crops[2]:
+            # need dates for time series water budget output
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # get the total extent of the irrigation season (calculation period)
+            strt_date = yield_start.min()
+            end_date = yield_end.max()
+            dates = pd.date_range(strt_date, end_date, freq='D')
+            # extract output and convert to dataframe with ID columns
+            arr = read_crop_arr_h5(crop, name)
+            df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
+            # add parcel information back
+            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
 
-                df_all = pd.concat((df_all, df))
+            df_all = pd.concat((df_all, df))
 
 # correct profit from negative to positive
 df_all.loc[df_all['var']=='profit','value'] *= -1
@@ -185,28 +185,48 @@ df_econ_agg.year = df_econ_agg.year.astype(str)
 # df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
 
 # %%
-df_econ#[df_econ.value.isna()]
-
-# %%
 # plot the total profit and yield after scaling by acreage
-sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
-           facet_kws={'sharey': False, 'sharex': True})
+# sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
+#            facet_kws={'sharey': False, 'sharex': True})
 
-
+sns.catplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
+            kind='bar', color='tab:blue',
+            sharey=False
+           # facet_kws={'sharey': False, 'sharex': True}
+)
 
 # %%
 # plot the average profit and yield (not-weighted by acreage) 
-g=sns.relplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
-           facet_kws={'sharey': False, 'sharex': True})
+# g=sns.relplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
+#            facet_kws={'sharey': False, 'sharex': True})
+
+sns.catplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
+            kind='bar', color='tab:blue',
+            sharey=False
+           # facet_kws={'sharey': False, 'sharex': True}
+)
 
 
 # %%
-crop='Grape'
+finished_crops
+
+# %%
+crop='Misc Grain and Hay'
 year=2015
-dtw_arr = pd.read_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0,parse_dates=[0])
+fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained')
 
-# %%
-dtw_arr.mean().mean()
+for n,year in enumerate(run_years[:-1]):
+
+    dtw_arr = pd.read_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0,parse_dates=[0])
+    #
+    ax_n = ax[n]
+    dtw_arr.mean().hist(ax=ax_n)
+    ax_n.set_title(year)
+    
+fig.suptitle(crop)
+    
+ax[0].set_ylabel('Number of fields')
+fig.supxlabel('Mean depth to water ft)')
 
 # %% [markdown]
 # # Process water budget
@@ -216,8 +236,8 @@ dtw_arr.mean().mean()
 
 # %%
 df_all = pd.DataFrame()
-# for year in run_years:
-for year in [2015]:
+for year in run_years:
+# for year in [2015]:
     # load SWB folder
     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
     print('\n', year, end=' - ')
@@ -227,26 +247,26 @@ for year in [2015]:
         with h5py.File(name) as dset:
             finished_crops = list(dset['array'].keys())
             print(finished_crops, end='.')
-            for crop in finished_crops:
-            # for crop in finished_crops[2]:
-                # need dates for time series water budget output
-                var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-                yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
-                yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
-                # get the total extent of the irrigation season (calculation period)
-                strt_date = yield_start.min()
-                end_date = yield_end.max()
-                dates = pd.date_range(strt_date, end_date, freq='D')
-                # extract output and convert to dataframe with ID columns
-                arr = read_crop_arr_h5(crop, name)
-                df = pd.DataFrame(arr, columns=dates)
-                # add parcel information back
-                df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
-                # melt to long format for easier appending
-                df = df.melt(var_name='date', id_vars=crop_in.columns)
-                df = df.assign(crop=crop, year=year, var=var)
-                # concat to existing data
-                df_all = pd.concat((df_all, df))
+        for crop in finished_crops:
+        # for crop in finished_crops[2]:
+            # need dates for time series water budget output
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # get the total extent of the irrigation season (calculation period)
+            strt_date = yield_start.min()
+            end_date = yield_end.max()
+            dates = pd.date_range(strt_date, end_date, freq='D')
+            # extract output and convert to dataframe with ID columns
+            arr = read_crop_arr_h5(crop, name)
+            df = pd.DataFrame(arr, columns=dates)
+            # add parcel information back
+            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
+            # melt to long format for easier appending
+            df = df.melt(var_name='date', id_vars=crop_in.columns)
+            df = df.assign(crop=crop, year=year, var=var)
+            # concat to existing data
+            df_all = pd.concat((df_all, df))
 
 # # correct profit from negative to positive
 # df_all.loc[df_all['var']=='profit','values'] *= -1
@@ -257,3 +277,38 @@ for year in [2015]:
 
 # %%
 # need to plot 
+
+# %%
+df_all
+
+# %%
+# this runs pretty slowly because there is daily data which in theory can be dropped since 
+# we really only care about when there is action (irrigation events)
+crop = 'Alfalfa'
+# subset to specific crop and variable of interest for consistent axes/numbers
+plt_df = df_all[(df_all.crop==crop)&(df_all['var']=='percolation')].copy()
+plt_df = df_all[(df_all['var']=='GW_applied_water')].copy()
+
+sns.relplot(plt_df, x='date',y='value', col='year', row='crop',
+           facet_kws={'sharey': True, 'sharex': 'col'}, 
+            kind='line', err_style="bars"
+           )
+# plt_df
+
+
+
+# %% [markdown]
+#
+# ### applied water
+# - for grape we have only SW applied which shows that something is wrong because realistically most vineyards use groundwater
+# - alfalfa shows no groundwater used either
+# - corn is also only surface water
+# - misc grain and hay is only surface water
+#
+# **When going back to 03b_summarize_output.py there should only be gw applied water and no sw so they got mixed up**
+#
+# ### percolation
+# - misc grain and hay has very little percolation except 2017
+# - grape shows a bunch in 2015 then little in the rest except 2017
+# - corn looks good with just a few late season irrigation event causing recharge
+# - alfalfa has recharge in late irrigation events
