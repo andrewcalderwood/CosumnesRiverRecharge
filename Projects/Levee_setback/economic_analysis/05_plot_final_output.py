@@ -102,6 +102,9 @@ model_ws = join(loadpth, m_nam)
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 # os.makedirs(join(swb_ws, 'output'), exist_ok=True)
 
+out_dir = join(model_ws, 'output_clean')
+os.makedirs(out_dir, exist_ok=True)
+
 
 # %%
 # load parcel data for reference as needed
@@ -185,15 +188,22 @@ df_econ_agg.year = df_econ_agg.year.astype(str)
 # df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
 
 # %%
+# save data for Yusuke
+df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+
+# convert to wide format so Yusuke can plot easier
+df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
+df_econ_agg_wide.to_csv(join(out_dir, 'annual_profit_yield_wide.csv'))
+
+# %%
 # plot the total profit and yield after scaling by acreage
 # sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
 #            facet_kws={'sharey': False, 'sharex': True})
 
-sns.catplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
-            kind='bar', color='tab:blue',
-            sharey=False
-           # facet_kws={'sharey': False, 'sharex': True}
-)
+# sns.catplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
+#             kind='bar', color='tab:blue',
+#             sharey=False
+# )
 
 # %%
 # plot the average profit and yield (not-weighted by acreage) 
@@ -208,25 +218,62 @@ sns.catplot(df_econ_agg,x='year',y='value', col='crop', row='var',
 
 
 # %%
-finished_crops
+
+
+
 
 # %%
-crop='Misc Grain and Hay'
-year=2015
-fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained')
+var = 'profit'
+df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
+crops = df_plt.crop.unique()
+fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
+
+for n,crop in enumerate(crops):
+    ax_n = ax[n]
+    df_plt[df_plt.crop==crop].plot(x='year',y='value', ax=ax_n, kind='bar',legend=False)
+    ax_n.set_title(crop)
+    ax_n.set_xlabel('Year')
+
+fig.supylabel(var.capitalize())
+plt.savefig(join(out_dir, var+'_field_avg.png'), bbox_inches='tight')
+
+# %%
+crop='Alfalfa'
+crops = df_econ_agg.crop.unique()
+dtw_mean_all = pd.DataFrame()
+for crop in crops:
+    fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained', dpi=300)
+    
+    for n,year in enumerate(run_years[:-1]):
+        name = join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv')
+        if exists(name):
+            dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
+            ax_n = ax[n]
+            dtw_arr_mean = dtw_arr.mean()
+            dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean).assign(year=year)))
+            dtw_arr_mean.hist(ax=ax_n)
+            ax_n.set_title(year)
+        
+    fig.suptitle(crop)
+    ax[0].set_ylabel('Number of fields')
+    fig.supxlabel('Mean depth to water (ft)')
+    plt.savefig(join(out_dir, 'dtw_ft_histogram_'+crop+'.png'))
+    plt.close()
+
+# %%
+# dtw_mean_all
+
+# %%
+fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained', dpi=300)
 
 for n,year in enumerate(run_years[:-1]):
-
-    dtw_arr = pd.read_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0,parse_dates=[0])
-    #
-    ax_n = ax[n]
-    dtw_arr.mean().hist(ax=ax_n)
-    ax_n.set_title(year)
-    
-fig.suptitle(crop)
-    
+    dtw_mean_all.loc[dtw_mean_all.year==year,0].hist(ax=ax[n])
+    ax[n].set_title(year)
+ 
 ax[0].set_ylabel('Number of fields')
-fig.supxlabel('Mean depth to water ft)')
+fig.supxlabel('Mean depth to water (ft)')
+plt.savefig(join(out_dir, 'dtw_ft_histogram_all.png'))
+plt.close()
 
 # %% [markdown]
 # # Process water budget
@@ -276,10 +323,21 @@ for year in run_years:
 # df_econ = df_all.merge(parcels[['UniqueID','area_m2']])
 
 # %%
-# need to plot 
+# rename as econ for plotting reference
+df_all = df_all.rename(columns={'parcel_id':'UniqueID'}).merge(parcels[['UniqueID','acres']])
+# scale value rates (1/acre) into totals 
+df_all['total_value'] = df_all['value']*df_all.acres
 
 # %%
-df_all
+df_all_out = df_all.copy().drop(columns=['pod_bool','pod'])
+
+df_all_out = df_all_out.groupby(['name','date','var'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
+# save data for Yusuke
+df_all_out.to_csv(join(out_dir, 'daily_WB_long.csv'))
+
+# convert to wide format so Yusuke can plot easier
+df_all_out_wide = df_all_out.pivot_table(index=['name','date'], values=['total_value','value'], columns=['var'])
+df_all_out_wide.to_csv(join(out_dir, 'daily_WB_wide.csv'))
 
 # %%
 # this runs pretty slowly because there is daily data which in theory can be dropped since 
@@ -289,13 +347,43 @@ crop = 'Alfalfa'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']=='percolation')].copy()
 plt_df = df_all[(df_all['var']=='GW_applied_water')].copy()
 
-sns.relplot(plt_df, x='date',y='value', col='year', row='crop',
-           facet_kws={'sharey': True, 'sharex': 'col'}, 
-            kind='line', err_style="bars"
-           )
+# sns.relplot(plt_df, x='date',y='value', col='year', row='crop',
+#            facet_kws={'sharey': True, 'sharex': 'col'}, 
+#             kind='line', err_style="bars"
+#            )
 # plt_df
 
 
+
+# %%
+
+var = 'GW_applied_water'
+crops = df_econ_agg.crop.unique()
+for crop in crops:
+    # 1, len(run_years)-1,
+    fig,ax = plt.subplots( sharey=True, figsize=(12,3), layout='constrained', dpi=300)
+    plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
+
+    # add in NA values to prevent line connection in dry season
+    plt_df_na = plt_df.loc[plt_df.date.diff().dt.days>1].copy()
+    plt_df_na.date -= pd.DateOffset(days=1)
+    plt_df_na[['value','total_value']] = np.nan
+    plt_df = pd.concat((plt_df, plt_df_na))
+
+    plt_df.plot(x='date',y='value', ax=ax, legend=False)
+    # sns to include standard deviation lines
+    # sns.lineplot(plt_df, x='date',y='value', errorbar = ("sd",1), ax=ax)
+    # for n,year in enumerate(run_years[:-1]):
+    #         ax_n = ax[n]
+    #         plt_df[plt_df.year==year].plot(x='date',y='value',ax=ax_n,legend=False)
+    #         ax_n.set_title(year)
+        
+    fig.suptitle(crop)
+    fig.supylabel(var.replace('_',' ')+'(m)')
+    plt.xlabel(None)
+    fig.supxlabel('Date')
+    plt.savefig(join(out_dir, var+'_'+crop+'.png'))
+    plt.close()
 
 # %% [markdown]
 #
