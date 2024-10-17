@@ -5,3 +5,5 @@ Projects/Levee_setback/levee_setback_distance_analysis/.ipynb_checkpoints/03_Set
 Projects/Levee_setback/levee_setback_distance_analysis/.ipynb_checkpoints/08_connec3d-checkpoint.ipynb
 Projects/Levee_setback/levee_setback_distance_analysis/03_Setback flow result plotting.ipynb
 Projects/Levee_setback/levee_setback_distance_analysis/06_Muskingum_recharge.ipynb
+.ipynb_checkpoints
+*checkpoints.py
