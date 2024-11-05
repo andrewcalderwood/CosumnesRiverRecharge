@@ -25,6 +25,10 @@ The final connected model was set up with a variety of pre-processed inputs and 
 - from functions.output_processing import get_local_data, out_arr_to_long_df, get_wb_by_parcel to load the output from the optimized soil water budget to input to RCH/WEL
 - from reference_swb_ag_winter import run_swb_ag_winter to run the soil water budget model in the winter to estimate deep percolation for ag fields with the crops for the current year
 
+Scenario analysis:
+- the best way to run a MAR scenario is to create an additional dataframe that is loaded similar to the native_land_use_recharge and appended to the recharge data before summing by cell
+- for levee setback scenarios we could add a lake or RIV cells or use a simple RCH approach
+
 # Post-processing
 03b_summarize_output takes the saved irrigation rates and the simulated DTW after the fact to calculate the actual profit and yield on a parcel basis. This code could be integrated into 03_model_connect if interested in getting year by year updates in profit to inform decision making. This would also help provide better estimates of percolation.
 

@@ -142,6 +142,13 @@ ibound = m.bas6.ibound.array
 # bottom array is needed for referencing well layer
 botm = m.dis.botm.array
 
+# %% [markdown]
+# ## General model input
+# Data that is not impacted by crop choice or irrigation decisions
+# - Well data for pumping
+# - Native land use recharge
+# - recharge scenarios (requires use of a different model_ws)
+
 # %%
 ## add domestic pumping
 wel_dir = join(gwfm_dir, 'WEL_data')
@@ -230,6 +237,23 @@ print(all_strt_date, all_end_date)
 months = pd.date_range(all_strt_date, all_end_date, freq='MS')
 years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
 
+# %% [markdown]
+# ## Scenarios
+# Need to start thinking of the best way to save different model scenarios with the high level model_ws change
+
+# %%
+# load in the MAR scenario of interest
+# this will need to be coded to be flexible and to change the model_ws
+mar_grid = pd.read_csv(join(proj_dir, 'scenarios', 'R1_MAR_max_diversion_for_available_flow.csv'))
+# eventually need to code scenarios into a spreadsheet/dictionary
+scenario = 'R1'
+# add underscore for appending
+scenario = '_'+scenario
+
+# # baseline scenario is no extra recharge
+# mar_grid = pd.DataFrame()
+# scenario = ''
+
 # %%
 
 # load summary excel sheet on irrigation optimization
@@ -237,16 +261,11 @@ years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
 fn = join(data_dir,'static_model_inputs.xlsx')
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
-
-# model_ws = join(loadpth, 'rep_crop_soilbudget')
 # may want to add a year start/end or put in subfolder of modflow model
 # so we can run different versions
-model_ws = join(loadpth, m_nam)
+model_ws = join(loadpth, m_nam+scenario)
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
-
-
-# all_run_dates
 # simple code to set dates for april 1
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 
@@ -498,7 +517,10 @@ for m_per in [2]:
 
 # %% [markdown]
 # ## RCH input
-#     print('Beginning MODFLOW input update')
+#
+    # %%
+    print('Beginning MODFLOW input update')
+
     # %%
     # join water budget data to field area for scaling to cell for recharge
     rch_df = pc_df_all.merge(field_df)
@@ -553,6 +575,11 @@ for m_per in [2]:
     # %%
     ## add native lands recharge
     rch_all = pd.concat((rch_df, native_pc, ag_pc_include))
+
+    ## add recharge due to MAR
+    # have dataframe with recharge rates for cells
+
+
     # aggregate to the row, column level
     rch_all = rch_all.groupby(['date','row','column'])[['rch_rate']].sum()
     rch_all = rch_all.reset_index(['row','column'])

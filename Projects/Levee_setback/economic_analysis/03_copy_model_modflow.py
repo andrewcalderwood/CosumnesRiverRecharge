@@ -40,16 +40,16 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 # standard geospatial python utilities
-import pyproj # for converting proj4string
-import shapely
+# import pyproj # for converting proj4string
+# import shapely
 import geopandas as gpd
-import rasterio
+# import rasterio
 
-# mapping utilities
-import contextily as ctx
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-import matplotlib.font_manager as fm
+# # mapping utilities
+# import contextily as ctx
+# from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+# from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+# import matplotlib.font_manager as fm
 
 # %%
 doc_dir = os.getcwd()
@@ -341,9 +341,6 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     print('Done with:', str(m_strt.date()))
 
 # %%
-sfr_month.tabfiles_dict
-
-# %%
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date
@@ -382,9 +379,6 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     model_ws = join(m.model_ws, str(m_strt.date()))
     for f in files_copy:
         shutil.copy(join(base_model_ws,f), join(model_ws,f))
-
-# %%
-model_ws
 
 # %%
 # name file had HOB manually removed
