@@ -19,6 +19,8 @@
 # 2. Run the soil water budget optimization
 # 3. Update WEL/RCH packages then run MF
 # 4. Start the next year
+#
+# And run different management and/or recharge scenarios.
 
 # %%
 import h5py
@@ -92,6 +94,8 @@ from functions.output_processing import get_local_data, out_arr_to_long_df
 from functions.output_processing import get_wb_by_parcel
 
 # %%
+# import reference_swb_ag_winter 
+# reload( reference_swb_ag_winter )
 from reference_swb_ag_winter import run_swb_ag_winter
 
 
@@ -339,6 +343,8 @@ for m_per in [2]:
 # %% [markdown]
 # # Crop choice model
 # This uses the updated DTW from each previous year.
+#
+# Some of the file load in of the crop choice could be moved external of the loop (e.g., WY types and logit_coefs)
 
     # %%
     # load Sac Valley WYT
@@ -537,6 +543,9 @@ for m_per in [2]:
 # Take the combined dataframe to inform the recharge array with recharge from the irrigation season. The next step is to insert recharge from non-irrigated times and native lands.
 
 
+# %% [markdown]
+# run_swb_ag_winter seems to crash after renaming file paths to run model in m_nam subdirectory
+
     # %%
     ## add off-season (winter recharge) farmlands recharge 
     ## need to use the crop-type selected for the year and assume field content at start
@@ -576,9 +585,9 @@ for m_per in [2]:
     ## add native lands recharge
     rch_all = pd.concat((rch_df, native_pc, ag_pc_include))
 
-    ## add recharge due to MAR
-    # have dataframe with recharge rates for cells
-
+    ## add recharge due to MAR or other scenario
+    # have dataframe with recharge rates for cells and row,column
+    rch_all = pd.concat((rch_all, mar_grid))
 
     # aggregate to the row, column level
     rch_all = rch_all.groupby(['date','row','column'])[['rch_rate']].sum()

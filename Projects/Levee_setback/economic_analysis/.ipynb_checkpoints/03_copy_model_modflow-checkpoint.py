@@ -16,7 +16,7 @@
 # Version to use for running the connected model code with modflow split up into years as needed
 #
 # - This script copy and pastes input files that do not change into each year's run folder
-# - The script updates inputs that have minor changes such as SFR/GHB/CHD
+# - The script updates inputs that have minor changes such as SFR/GHB/CHD/EVT
 # - The script pre-processes additional inputs for WEL/RCh which will be read by the connection script when determining the recharge and pumping from each year
 
 # %%
@@ -127,12 +127,13 @@ m.model_ws = join(loadpth, model_nam, 'crop_modflow')
 # doesn't change between realizations
 gel.write_file()
 # test to see if model will run with longer itemp, owhm might auto correct
-m.chd.write_file()
-m.ghb.write_file()
+# it will but it wastes lots of storage space
+# m.chd.write_file()
+# m.ghb.write_file()
 m.nwt.write_file()
 
-m.sfr.write_file()
-m.lak.write_file()
+# m.sfr.write_file()
+# m.lak.write_file()
 
 # %%
 # Load model grid as geopandas object
@@ -176,7 +177,7 @@ wel_dir = join(gwfm_dir, 'WEL_data')
 uzf_dir = join(gwfm_dir, 'UZF_data')
 
 # %% [markdown]
-# Write static modflow files into the main directory including LPF, GHB, CHD. LPF (21 MB) with LAK (10 MB) and SFR (40 KB) will not need to be written as there is no dependence on stress periods. GHB, CHD, LAK, and SFR (20 MB) will need to be overwritten or saved multiple times as they have a change due to stress periods with ITMP. Pre-processing and writing output for each of these will save runtime later, but take up about 1.5 GB of storage.
+# Write static modflow files into the main directory including LPF, GHB, CHD. LPF (21 MB) with LAK (10 MB) and SFR (40 KB) will not need to be written as there is no dependence on stress periods. GHB, CHD, EVT, LAK, and SFR (20 MB) will need to be overwritten or saved multiple times as they have a change due to stress periods with ITMP. Pre-processing and writing output for each of these will save runtime later, but take up about 1.5 GB of storage.
 #
 #
 # The RCH package is 492 MB and well package is 1.59 GB but these file sizes will be subdivided for each period so won't take up much more storage than before.
@@ -252,6 +253,16 @@ all_run_dates.to_csv(join(m.model_ws, 'all_run_dates.csv'), index=False)
 
 
 # %%
+
+# %%
+# pull out parts of EVT package assumed constant
+nevtop =  m.evt.nevtop
+ievt = m.evt.ievt
+# original model assumed static across time
+ex_dp = m.evt.exdp.array[0,0]
+evtr_arr = m.evt.evtr.array[:,0]
+
+# %%
 ##############################################################################################
 ## write out the irrigation independent inputs (GHB, CHD, UPW, OC, NWT, DIS)
 print('Writing static input files')
@@ -297,16 +308,22 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     # overwrite files that change
     ghb_spd = dict()
     chd_spd = dict()
+    et_spd = dict()
     # this code would break if the ghb/chd weren't explicit
     # for a stress period
     for n, t in enumerate(spd):
         ghb_spd[n] = m.ghb.stress_period_data[t]
         chd_spd[n] = m.chd.stress_period_data[t]
+        et_spd[n] = evtr_arr[t]
 
     ghb_month = flopy.modflow.ModflowGhb(model=m_month, stress_period_data = ghb_spd, ipakcb=55)
     chd_month = flopy.modflow.ModflowChd(model=m_month,stress_period_data =  chd_spd)
+    evt_month = flopy.modflow.ModflowEvt(model=m_month, nevtop = nevtop, ievt = ievt, 
+                               evtr = et_spd, exdp = ex_dp,  
+                               surf = dem_data, ipakcb=55)
 
     # For later model runs when all the data is needed to be saved
+    # Do we really need cbc data though? We mostly look at domain zone budget?
     oc_spd = {}
     oc_spd = { (j,0): ['save head', 'save budget'] for j in np.arange(0,nper,1)}
     oc_spd[0,0] = ['save head', 'save budget','print budget']
@@ -335,6 +352,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     dis.write_file()
     ghb_month.write_file()
     chd_month.write_file()
+    evt_month.write_file()
     sfr_month.write_file()
     oc.write_file()
     
@@ -371,8 +389,8 @@ m_strt+pd.DateOffset(days=nper)
 # for files that don't need updates
 # they can be diretcly copied to save file formatting write time
 # # copy over basic package to enable flopy to read in the model, will update start heads later
-
-files_copy = ['MF.lak','MF.bath','MF.evt', 'MF.gage', 'MF.upw','MF.nwt', 'MF.bas']
+# ,'MF.evt',
+files_copy = ['MF.lak','MF.bath' 'MF.gage', 'MF.upw','MF.nwt', 'MF.bas']
 
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date

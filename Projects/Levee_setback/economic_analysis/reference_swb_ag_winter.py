@@ -37,7 +37,7 @@ import geopandas as gpd
 # year = 2015
 
 # %%
-def run_swb_ag_winter(year):
+def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
     ''' 
     function to run the SWB for the agricultural fields in the winter
     needs some updates to better represent initial conditions (sample
@@ -110,7 +110,6 @@ def run_swb_ag_winter(year):
     # %%
     loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
     
-    m_nam = 'historical_simple_geology_reconnection'
     
     model_ws = join(loadpth, m_nam)
     

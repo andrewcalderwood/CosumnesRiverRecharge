@@ -187,4 +187,7 @@ mar_grid = mar[['rch_rate']].assign(id=0).reset_index().merge(vineyards_grid.ass
 mar_grid_out = mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
 mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R1_MAR_max_diversion_for_available_flow.csv'),index=False)
 
-# %%
+# %% [markdown]
+# After creating a scenario you need to:
+# 1. Make sure new model workspace and modflow run files are available
+# 2. Run model_connect and make sure everything runs
