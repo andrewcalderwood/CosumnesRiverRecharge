@@ -94,6 +94,10 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # base_model_ws = loadpth + 'crop_soilbudget'
 m_nam = 'historical_simple_geology_reconnection'
 m_nam = 'input_write_2014_2020'
+m_nam = 'input_write_2014_2020_R1'
+m_nam = 'input_write_2014_2020_R3'
+m_nam = 'input_write_2000_2022'
+
 model_ws = join(loadpth, m_nam)
 
 
@@ -118,6 +122,10 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 # years to sample output
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year
 
+# %%
+# temp for while model is still running
+run_years = np.arange(2001, 2018)
+
 # %% [markdown]
 # # Review data available
 
@@ -135,6 +143,16 @@ for year in [2015]:
 
 # %% [markdown]
 # # Process economic indicators
+
+# %%
+# general limits for plotting
+ncol_max = 5
+# subtract 1 from run_years since last doesn't cover full period
+nyears = len(run_years)-1
+ncol = np.min((ncol_max, nyears))
+nrow = int(np.ceil(nyears/ncol_max))
+
+figsize= (4*ncol, 3*nrow)
 
 # %%
 df_all = pd.DataFrame()
@@ -218,59 +236,57 @@ sns.catplot(df_econ_agg,x='year',y='value', col='crop', row='var',
 
 
 # %%
-
-
-
-
-# %%
-var = 'profit'
-df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
-crops = df_plt.crop.unique()
-fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
-
-for n,crop in enumerate(crops):
-    ax_n = ax[n]
-    df_plt[df_plt.crop==crop].plot(x='year',y='value', ax=ax_n, kind='bar',legend=False)
-    ax_n.set_title(crop)
-    ax_n.set_xlabel('Year')
-
-fig.supylabel(var.capitalize())
-plt.savefig(join(out_dir, var+'_field_avg.png'), bbox_inches='tight')
+# var = 'profit'
+for var in ['profit', 'yield']:
+# for var in ['profit']:
+    df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
+    crops = df_plt.crop.unique()
+    fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
+    
+    for n,crop in enumerate(crops):
+        ax_n = ax[n]
+        df_plt[df_plt.crop==crop].plot(x='year',y='value', ax=ax_n, kind='bar',legend=False)
+        ax_n.set_title(crop)
+        ax_n.set_xlabel('Year')
+    
+    fig.supylabel(var.capitalize())
+    plt.savefig(join(out_dir, var+'_field_avg.png'), bbox_inches='tight')
+    plt.close()
 
 # %%
 crop='Alfalfa'
 crops = df_econ_agg.crop.unique()
 dtw_mean_all = pd.DataFrame()
+
 for crop in crops:
-    fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained', dpi=300)
+    fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
     for n,year in enumerate(run_years[:-1]):
         name = join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv')
         if exists(name):
             dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
-            ax_n = ax[n]
+            ax_n = ax[int(n/ncol), int(n%ncol)]
             dtw_arr_mean = dtw_arr.mean()
             dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean).assign(year=year)))
             dtw_arr_mean.hist(ax=ax_n)
             ax_n.set_title(year)
         
     fig.suptitle(crop)
-    ax[0].set_ylabel('Number of fields')
+    fig.supylabel('Number of fields')
     fig.supxlabel('Mean depth to water (ft)')
     plt.savefig(join(out_dir, 'dtw_ft_histogram_'+crop+'.png'))
     plt.close()
 
 # %%
-# dtw_mean_all
 
-# %%
-fig,ax = plt.subplots(1, len(run_years)-1, sharey=True, figsize=(12,3), layout='constrained', dpi=300)
+fig,ax = plt.subplots(nrow,ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
 
 for n,year in enumerate(run_years[:-1]):
-    dtw_mean_all.loc[dtw_mean_all.year==year,0].hist(ax=ax[n])
-    ax[n].set_title(year)
+    ax_n = ax[int(n/ncol), int(n%ncol)]
+    dtw_mean_all.loc[dtw_mean_all.year==year,0].hist(ax=ax_n)
+    ax_n.set_title(year)
  
-ax[0].set_ylabel('Number of fields')
+fig.supylabel('Number of fields')
 fig.supxlabel('Mean depth to water (ft)')
 plt.savefig(join(out_dir, 'dtw_ft_histogram_all.png'))
 plt.close()
@@ -358,32 +374,35 @@ plt_df = df_all[(df_all['var']=='GW_applied_water')].copy()
 # %%
 
 var = 'GW_applied_water'
-crops = df_econ_agg.crop.unique()
-for crop in crops:
-    # 1, len(run_years)-1,
-    fig,ax = plt.subplots( sharey=True, figsize=(12,3), layout='constrained', dpi=300)
-    plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
+# for var in ['GW_applied_water']:
+for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 
-    # add in NA values to prevent line connection in dry season
-    plt_df_na = plt_df.loc[plt_df.date.diff().dt.days>1].copy()
-    plt_df_na.date -= pd.DateOffset(days=1)
-    plt_df_na[['value','total_value']] = np.nan
-    plt_df = pd.concat((plt_df, plt_df_na))
-
-    plt_df.plot(x='date',y='value', ax=ax, legend=False)
-    # sns to include standard deviation lines
-    # sns.lineplot(plt_df, x='date',y='value', errorbar = ("sd",1), ax=ax)
-    # for n,year in enumerate(run_years[:-1]):
-    #         ax_n = ax[n]
-    #         plt_df[plt_df.year==year].plot(x='date',y='value',ax=ax_n,legend=False)
-    #         ax_n.set_title(year)
-        
-    fig.suptitle(crop)
-    fig.supylabel(var.replace('_',' ')+'(m)')
-    plt.xlabel(None)
-    fig.supxlabel('Date')
-    plt.savefig(join(out_dir, var+'_'+crop+'.png'))
-    plt.close()
+    crops = df_econ_agg.crop.unique()
+    for crop in crops:
+        # 1, len(run_years)-1,
+        fig,ax = plt.subplots( sharey=True, figsize=(12,3), layout='constrained', dpi=300)
+        plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
+    
+        # add in NA values to prevent line connection in dry season
+        plt_df_na = plt_df.loc[plt_df.date.diff().dt.days>1].copy()
+        plt_df_na.date -= pd.DateOffset(days=1)
+        plt_df_na[['value','total_value']] = np.nan
+        plt_df = pd.concat((plt_df, plt_df_na))
+    
+        plt_df.plot(x='date',y='value', ax=ax, legend=False)
+        # sns to include standard deviation lines
+        # sns.lineplot(plt_df, x='date',y='value', errorbar = ("sd",1), ax=ax)
+        # for n,year in enumerate(run_years[:-1]):
+        #         ax_n = ax[n]
+        #         plt_df[plt_df.year==year].plot(x='date',y='value',ax=ax_n,legend=False)
+        #         ax_n.set_title(year)
+            
+        fig.suptitle(crop)
+        fig.supylabel(var.replace('_',' ')+'(m)')
+        plt.xlabel(None)
+        fig.supxlabel('Date')
+        plt.savefig(join(out_dir, var+'_'+crop+'.png'))
+        plt.close()
 
 # %% [markdown]
 #
@@ -400,3 +419,5 @@ for crop in crops:
 # - grape shows a bunch in 2015 then little in the rest except 2017
 # - corn looks good with just a few late season irrigation event causing recharge
 # - alfalfa has recharge in late irrigation events
+
+# %%

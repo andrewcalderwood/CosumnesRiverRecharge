@@ -23,15 +23,25 @@
 # And run different management and/or recharge scenarios.
 
 # %%
+import sys
+import os
+from os.path import join,exists, dirname, basename, expanduser
+import time 
+
 import h5py
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-import os
-from os.path import join,exists, dirname, basename, expanduser
+
+from importlib import reload
 
 # %%
-from importlib import reload
+# for batch file case we want to ignore the consant h5py deprecation warning
+import warnings
+
+warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
 
 # %%
 usr_dir = expanduser('~')
@@ -45,7 +55,30 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 
 # %%
-import sys
+# updated version specifies concept_name and copy_files here so it can be easily
+# seen as these are the main update to make in a script
+
+m_nam = sys.argv[1]
+scenario_name = sys.argv[2]
+
+# m_nam = 'input_write_2000_2022'
+# scenario_name='R3_MAR_6x_diversion_for_available_flow'
+
+
+print('sys.argv[1] (m_nam) is...')
+print(m_nam)
+
+
+print('sys.argv[2] (scenario_name) is...')
+print(scenario_name)
+print('\n\n')
+
+t_start = time.time()
+
+
+# %%
+
+# %%
 def add_path(fxn_dir):
     """ Insert fxn directory into first position on path so local functions supercede the global"""
     if fxn_dir not in sys.path:
@@ -127,10 +160,10 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
-m_nam = 'historical_simple_geology_reconnection'
+# m_nam = 'historical_simple_geology_reconnection'
 m_nam = 'input_write_2014_2020'
 
-# m_nam = 'input_write_2000_2022'
+m_nam = 'input_write_2000_2022'
 # define modflow model WS to reference for modflow input
 m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
 
@@ -246,17 +279,28 @@ years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
 # Need to start thinking of the best way to save different model scenarios with the high level model_ws change
 
 # %%
-# load in the MAR scenario of interest
-# this will need to be coded to be flexible and to change the model_ws
-mar_grid = pd.read_csv(join(proj_dir, 'scenarios', 'R1_MAR_max_diversion_for_available_flow.csv'))
-# eventually need to code scenarios into a spreadsheet/dictionary
-scenario = 'R1'
-# add underscore for appending
-scenario = '_'+scenario
+import re
 
-# # baseline scenario is no extra recharge
-# mar_grid = pd.DataFrame()
-# scenario = ''
+
+# %%
+# load in the MAR scenario of interest
+# scenario_name = 'R1_MAR_max_diversion_for_available_flow'
+# # scenario_name = 'R2_MAR_3x_diversion_for_available_flow'
+# scenario_name = 'R3_MAR_6x_diversion_for_available_flow'
+if scenario_name=='none':
+    # # baseline scenario is no extra recharge
+    mar_grid = pd.DataFrame()
+    scenario=''
+else:
+    # # this will need to be coded to be flexible and to change the model_ws
+    mar_grid = pd.read_csv(join(proj_dir, 'scenarios', scenario_name+'.csv'))
+    # # eventually need to code scenarios into a spreadsheet/dictionary
+    scenario = re.findall('R\d{1,2}',scenario_name)[0]
+    # scenario = 'R1'
+    # # add underscore for appending
+    scenario = '_'+scenario
+
+
 
 # %%
 
@@ -268,6 +312,12 @@ season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 # may want to add a year start/end or put in subfolder of modflow model
 # so we can run different versions
 model_ws = join(loadpth, m_nam+scenario)
+
+sys.stdout = open(join(model_ws, 'model_connect_log.txt'), 'w')
+
+
+print(model_ws)
+print('\n\n')
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
 # simple code to set dates for april 1
@@ -279,6 +329,10 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 
 # %%
 print(all_run_dates)
+print('\n\n')
+print('Starting yearly iterations')
+print('\n\n')
+sys.stdout.flush()
 
 # %% [markdown]
 # Cameron asked about cross-validation and hind-sight in the model. Maybe look at best way to re-run SWB or modflow after seeing the model run.
@@ -294,8 +348,8 @@ print(all_run_dates)
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-# for m_per in np.arange(1, all_run_dates.shape[0]-1):
-for m_per in [2]:
+for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in [1]:
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
     use = all_run_dates.iloc[m_per].use
@@ -494,6 +548,7 @@ for m_per in [2]:
             load_run_swb(crop, year, crop_in, swb_ws,
                          dtw_simple_df, 
                          soil_rep=True) 
+        sys.stdout.flush()
 
     # %%
     fn = join(swb_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
@@ -545,6 +600,7 @@ for m_per in [2]:
 
 # %% [markdown]
 # run_swb_ag_winter seems to crash after renaming file paths to run model in m_nam subdirectory
+# - it might have been because it was trying to use the old model_ws instead of updated
 
     # %%
     ## add off-season (winter recharge) farmlands recharge 
@@ -553,7 +609,7 @@ for m_per in [2]:
     ## the only difference is that the ETc might need to be resampled
 
     # function that saves a csv with the output by unique field similar to the native land
-    ag_pc_df = run_swb_ag_winter(year)
+    ag_pc_df = run_swb_ag_winter(year, m_nam = m_nam)
 
     # long format to join with row,column
     ag_pc_df_long = ag_pc_df.melt(ignore_index=False, 
@@ -622,9 +678,9 @@ for m_per in [2]:
     wel_df = wel_df.set_index('date')
     # wel_df
 
-# %%
-# allocate dictionary for recharge
-# I think the issue here with writing input was indentation was incorrect
+    # %%
+    # allocate dictionary for recharge
+    # I think the issue here with writing input was indentation was incorrect
     wel_dict = dict()
     for t, d in enumerate(dates):
         # get data for the stress period
@@ -686,6 +742,13 @@ for m_per in [2]:
     # need to specify the path of the modflow exe or it defaults to mf2005 and crashes
     m_month.exe_name = 'mf-owhm.exe'
     success, buff = m_month.run_model()
+
+    # %%
+    sys.stdout.flush()
+
+# %%
+t_final = time.time()
+print('Total time was %.2f hours' %((t_final-t_start)/3600))
 
 # %% [markdown]
 # The MODFLOW run-time for one year was 49 min. This was for the version with 19 layers which we can cut down to 10 or so by removing TPROGs and this could be sped up by reducing the amont of output saved since we may not need to review the CBC output.

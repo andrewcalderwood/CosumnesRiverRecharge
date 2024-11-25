@@ -116,8 +116,8 @@ grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
 
 
 # %%
-dem_data = np.copy(m.dis.top.array)
-botm = np.copy(m.dis.botm.array)
+# dem_data = np.copy(m.dis.top.array)
+# botm = np.copy(m.dis.botm.array)
 
 # %%
 # For the tab files the left column is time (in model units) and the right column is flow (model units)
@@ -128,7 +128,7 @@ inflow = pd.read_csv(join(gwfm_dir, 'SFR_data', 'MB_daily_flow_cfs.csv'), index_
 inflow['flow_cmd'] = inflow.flow_cfs * (86400/(3.28**3))
 
 # save tabfiles dict to variable for reference
-tabfiles_dict = m.sfr.tabfiles_dict
+# tabfiles_dict = m.sfr.tabfiles_dict
 
 # %%
 # deer creek doesn't flow in dry-season
@@ -186,6 +186,42 @@ mar['rch_rate'] = mar.rch/vineyards_grid.geometry.area.sum()
 mar_grid = mar[['rch_rate']].assign(id=0).reset_index().merge(vineyards_grid.assign(id=0)).drop(columns=['id'])
 mar_grid_out = mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
 mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R1_MAR_max_diversion_for_available_flow.csv'),index=False)
+
+# %%
+# increase the rch_rate by the new maximum proposed rate, approx 3x greater (~38 cfs)
+mar_grid_out_max = mar_grid_out.copy()
+mar_grid_out_max.rch_rate *= (6000/2444)
+mar_grid_out_max.to_csv(join(proj_dir, 'scenarios', 'R2_MAR_3x_diversion_for_available_flow.csv'),index=False)
+
+# increase the rch_rate by the new maximum proposed rate, to 6x greater (~93.6 cfs
+mar_grid_out_max = mar_grid_out.copy()
+mar_grid_out_max.rch_rate *= (6)
+mar_grid_out_max.to_csv(join(proj_dir, 'scenarios', 'R3_MAR_6x_diversion_for_available_flow.csv'),index=False)
+
+
+# %%
+def plt_rch(mar):
+    fig,ax = plt.subplots(3,1, figsize=(8,8), sharex=True, dpi=300)
+    mar.plot(y='flow_cfs', ax=ax[0], legend=False)
+    ax[0].set_ylabel('Streamflow (cfs)')
+    ax[0].set_yscale('log')
+    mar.plot(y='rch_cfs', ax=ax[1], legend=False)
+    ax[1].set_ylabel('Diversion \nrate (cfs)')
+    
+    mar.resample('AS-Oct')['rch_rate'].sum().plot(ax=ax[2])
+    ax[2].set_ylabel('Recharge annual \nsum (m)')
+    
+    ax3a = ax[2].twinx()  # instantiate a second Axes that shares the same x-axis
+    mar.resample('AS-Oct')['rch_cfs'].sum().multiply(86400/43560).plot(ax=ax3a)
+    ax3a.set_ylabel('acre-feet')
+    
+    plt.xlim('2014-10-1','2020-9-30')
+    plt.xlabel('Date')
+    # mar
+
+
+# %%
+plt_rch(mar)
 
 # %% [markdown]
 # After creating a scenario you need to:

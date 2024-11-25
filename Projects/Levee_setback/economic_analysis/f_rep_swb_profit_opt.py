@@ -162,7 +162,8 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
-                run_opt=True, irr_all=None, field_id = 'parcels'):
+                run_opt=True, irr_all=None, field_id = 'parcels', 
+                sw_con=100, gw_con=100):
     ''' 
     Function to import variables related to soil water budget function
     to then run the function in a profit optimizer before saving the results in hdf5 format
@@ -361,8 +362,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
             soil_df_out = pd.concat((soil_df_out, field_soil_df),axis=0)
             
             # reset irrigation constraints to a high value
-            sw_con = 100
-            gw_con = 100
+            # sw_con = 100
+            # gw_con = 100
             # if no POD then no SW irrig
             if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel':
                 # irr_lvl[:n_irr] = 0
@@ -392,11 +393,12 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
             # linear constraint that keeps only the non-zero constraint
             linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con, sw_con = sw_con) 
             # for the linear dtw the start tol (0.01) was too coarse
+            # with representative case it makes to use 0.001 tolerance for all and not force positive values
             tol = 0.01  
             # continue optimizing until profit is positive
             # this step may no longer be necessary as several crops are
             # expected to have negative profits
-            while p_all[ns] >0 :
+            while p_all[ns] >-1000 :
                 # the minimization with 'trust-constr' and no constraints doesn't solve and has increasing WB error
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
                                method='trust-constr',
@@ -406,7 +408,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                                tol = tol
                         )
                 # decrease tolerance and reset starting irrigation to help solving
-                if out.fun >0:
+                if out.fun >-1000:
                     tol /=10
                     irr_lvl[:] = np.copy(irr_lvl_base)
                 if tol < 1E-4:
@@ -425,10 +427,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         t1 = time.time()
         print('Total time was %.2f min' %((t1-t0)/60), 'for', ns+1,'parcels')
 
-
-# %%
-# irr_all[1], 
-# sw_con, gw_con
 
 # %%
 
@@ -497,7 +495,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 # p_true[0]
 # irr_true[0]
 
-    # %%
+# %%
 
     # break down irrigation into groundwater and surface water time series
     irr_sw_out = np.zeros((nfield_crop, gen.nper))

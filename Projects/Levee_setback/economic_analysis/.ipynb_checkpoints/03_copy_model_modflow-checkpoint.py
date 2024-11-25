@@ -95,6 +95,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 
 model_nam = 'historical_simple_geology_reconnection'
 model_nam = 'input_write_2014_2020'
+model_nam = 'input_write_2000_2022'
 
 base_model_ws = loadpth+model_nam
 
@@ -132,7 +133,7 @@ gel.write_file()
 # m.ghb.write_file()
 m.nwt.write_file()
 
-# m.sfr.write_file()
+m.sfr.write_file()
 # m.lak.write_file()
 
 # %%
@@ -362,6 +363,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date
+    model_ws = join(m.model_ws,str(m_strt.date()))
 
     # update SFR tab file for Michigan Bar
     # filter out data between the stress period dates
@@ -381,6 +383,8 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     np.savetxt(join(model_ws,'MF.dc.tab'), time_flow, delimiter = '\t')
 
 # %%
+
+# %%
 m_strt, m_end, nper, spd.shape
 m_strt+pd.DateOffset(days=nper)
 
@@ -390,7 +394,7 @@ m_strt+pd.DateOffset(days=nper)
 # they can be diretcly copied to save file formatting write time
 # # copy over basic package to enable flopy to read in the model, will update start heads later
 # ,'MF.evt',
-files_copy = ['MF.lak','MF.bath' 'MF.gage', 'MF.upw','MF.nwt', 'MF.bas']
+files_copy = ['MF.lak','MF.bath', 'MF.gage', 'MF.upw','MF.nwt', 'MF.bas']
 
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
@@ -423,6 +427,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 m_per = 0
 m_strt = all_run_dates.iloc[m_per].date
 m_end = all_run_dates.iloc[m_per+1].date
+# identify stress periods from the model that fall in the first period
 spd = np.where((all_dates>=m_strt)&(all_dates<m_end))[0]
 
 model_ws = join(m.model_ws, str(m_strt.date()))
@@ -437,10 +442,11 @@ wel_spd = dict()
 rech_spd = dict()
 # the first model period is October to April where we will assume pumping is 0
 # for Ag
+# but should keep constant at original unless we adjust recharge
 for n, t in enumerate(spd):
-    wel_spd[n] = np.array([[0,0,0,0]]) # m.wel.stress_period_data[t]
+    wel_spd[n] = m.wel.stress_period_data[t]
     # wel_spd[n] = np.array([[int(nlay/2), int(nrow/2),int(ncol/2),0]] )
-    rech_spd[n] = m.rch.rech.array[t,0]
+    rech_spd[n] = m.rch.rech[t].array
 
 wel_month = flopy.modflow.ModflowWel(model=m_month, stress_period_data = wel_spd, ipakcb=55)
 rch_month = flopy.modflow.ModflowRch(model=m_month, nrchop = 3, rech =  rech_spd, ipakcb=55)

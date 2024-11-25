@@ -89,8 +89,15 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
-m_nam = 'historical_simple_geology_reconnection'
+# m_nam = 'historical_simple_geology_reconnection'
+m_nam_base = 'input_write_2014_2020'
+m_nam_base = 'input_write_2000_2022'
+
 m_nam = 'input_write_2014_2020'
+m_nam = 'input_write_2014_2020_R1'
+m_nam = 'input_write_2014_2020_R3'
+m_nam = 'input_write_2000_2022'
+
 model_ws = join(loadpth, m_nam)
 
 
@@ -101,7 +108,7 @@ os.makedirs(join(swb_ws, 'output'), exist_ok=True)
 
 # %%
 # define modflow model WS to reference for modflow input
-m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
+m_model_ws = join(dirname(loadpth), 'Regional', m_nam_base)
 
 load_only=['DIS', 'BAS6']
 

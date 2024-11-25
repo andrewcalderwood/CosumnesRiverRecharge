@@ -34,7 +34,11 @@ import shapely
 import geopandas as gpd
 
 
-# year = 2015
+
+
+# %%
+# year = 2016
+# m_nam = 'input_write_2014_2020'
 
 # %%
 def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
