@@ -278,11 +278,11 @@ title2 = ['F','G','H','I','J']
 
 for n in np.arange(0, len(title)):
     ax_n = ax[n,0]
-    ax_n.annotate(text = title[n], xy=(0.025,0.9), xycoords='axes fraction',
+    ax_n.annotate(text = title[n], xy=(0.025,0.9), xycoords='axes fraction', weight='bold',
                   # bbox={'facecolor': 'lightgray', 'alpha': 0.9, 'pad': 2}
                  )
     ax_n = ax[n,1]
-    ax_n.annotate(text = title2[n], xy=(0.025,0.9), xycoords='axes fraction',
+    ax_n.annotate(text = title2[n], xy=(0.025,0.9), xycoords='axes fraction', weight='bold',
                   # bbox={'facecolor': 'lightgray', 'alpha': 0.9, 'pad': 2}
                  )
 
