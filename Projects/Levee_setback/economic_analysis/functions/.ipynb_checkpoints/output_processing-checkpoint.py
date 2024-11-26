@@ -105,6 +105,7 @@ def get_wb_by_parcel(model_ws, year,
     """ 
     Complete function to take representative soil budget output
     and translate it to each parcel by crop type
+    Need to also have a function to include yield and profit
     INPUT:
     
     OUTPUT:

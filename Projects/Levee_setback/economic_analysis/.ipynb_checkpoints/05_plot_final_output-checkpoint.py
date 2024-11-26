@@ -91,12 +91,12 @@ def read_crop_arr_h5(crop, h5_fn):
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
-# base_model_ws = loadpth + 'crop_soilbudget'
-m_nam = 'historical_simple_geology_reconnection'
 m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2020_R1'
 m_nam = 'input_write_2014_2020_R3'
 m_nam = 'input_write_2000_2022'
+
+# m_nam = 'input_write_2000_2022_R3'
 
 model_ws = join(loadpth, m_nam)
 
@@ -123,14 +123,20 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year
 
 # %%
+# all_run_dates
+
+# %%
 # temp for while model is still running
-run_years = np.arange(2001, 2018)
+run_years = np.arange(2001, 2011)
+run_years = np.arange(2001, 2020)
+
+# %%
 
 # %% [markdown]
 # # Review data available
 
 # %%
-for year in [2015]:
+for year in [run_years[-1]]:
     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
     # crop_in[crop_in.name=='Vineyards']
     # load SWB folder

@@ -88,6 +88,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 
 model_nam = 'historical_simple_geology_reconnection'
 model_nam = 'input_write_2014_2020'
+model_nam = 'input_write_2000_2022'
 
 base_model_ws = loadpth+model_nam
 
@@ -95,6 +96,7 @@ base_model_ws = loadpth+model_nam
 # %%
 loadpth = run_dir +'/Cosumnes/Economic/'
 model_nam = 'input_write_2014_2020'
+model_nam = 'input_write_2000_2022'
 
 model_ws = join(loadpth, model_nam, 'crop_modflow')
 
@@ -166,6 +168,8 @@ nruns = all_run_dates.shape[0]-1
 # %%
 model_nam = 'input_write_2014_2020'
 model_nam = 'input_write_2014_2020_R1'
+model_nam = 'input_write_2000_2022_R3'
+model_nam = 'input_write_2000_2022'
 
 model_ws = join(loadpth, model_nam, 'crop_modflow')
 
@@ -181,7 +185,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
 
     m_model_ws = join(model_ws,str(m_strt.date()))
-
+    print(m_model_ws)
     # switch to modflow nwt to enable option bloack for use in owhm
     m_month = flopy.modflow.Modflow.load(join(m_model_ws,'MF.nam'),
                                         load_only=load_only,
@@ -194,7 +198,7 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 
 
 # %%
-plt_temp = rech_sum.sum(axis=(1,2))[1:]
+# plt_temp = rech_sum.sum(axis=(1,2))[1:]
 
 # %%
 
@@ -206,10 +210,17 @@ for n in np.arange(0,ny):
     plt.colorbar(im, shrink=0.8)
 
 # %%
-area = 200*200
+rech_sum
 
-plt.plot(plt_temp/area, label='Baseline')
-plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Scenario')
+# %%
+area = 200*200
+plt.plot(plt_temp/area, label='Scenario')
+plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Baseline')
+# plt.plot(plt_temp/area, label='Baseline')
+# plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Scenario')
 plt.legend()
-plt.xticks(np.arange(0, len(plt_temp)), all_run_dates.date.dt.year[1:-1]);
+dx=4
+plt.xticks(np.arange(0, len(plt_temp))[::dx], all_run_dates.date.dt.year[1:-1][::dx]);
 plt.ylabel('Average recharge rate (m/day)')
+
+# %%

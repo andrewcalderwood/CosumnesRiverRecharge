@@ -96,7 +96,9 @@ m_nam_base = 'input_write_2000_2022'
 m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2020_R1'
 m_nam = 'input_write_2014_2020_R3'
+
 m_nam = 'input_write_2000_2022'
+m_nam = 'input_write_2000_2022_R3'
 
 model_ws = join(loadpth, m_nam)
 
