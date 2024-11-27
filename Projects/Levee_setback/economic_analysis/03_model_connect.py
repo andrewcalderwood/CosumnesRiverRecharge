@@ -447,8 +447,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
     # update naming of Corn
     data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
-    
-    data_out.to_csv(join(crop_choice_dir, 'parcel_crop_choice_'+str(year)+'.csv'), index=False)
+    # save output with only parcel and crop choice
+    data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
 # %% [markdown]
 # # Load MF output
