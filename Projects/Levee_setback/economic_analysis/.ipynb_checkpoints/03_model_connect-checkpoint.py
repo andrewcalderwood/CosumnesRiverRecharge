@@ -61,7 +61,7 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 m_nam = sys.argv[1]
 scenario_name = sys.argv[2]
 
-# m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022_R3'
 # scenario_name='R3_MAR_6x_diversion_for_available_flow'
 
 
@@ -73,10 +73,9 @@ print('sys.argv[2] (scenario_name) is...')
 print(scenario_name)
 print('\n\n')
 
+
 t_start = time.time()
 
-
-# %%
 
 # %%
 def add_path(fxn_dir):
@@ -140,6 +139,22 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
 # %%
+# loda model scenario reference sheet
+scenario_summary = pd.read_excel(join(data_dir, 'scenario_summary.xlsx'))
+# select the current model run scenario based on model and scenario name from batch file
+scenario_info = scenario_summary[(scenario_summary.m_nam==m_nam )& (scenario_summary.scenario_name==scenario_name)]
+# create series to make easier data sampling
+scenario_info = scenario_info.iloc[0]
+sw_con = (scenario_info.sw_con).astype(float)
+gw_con = (scenario_info.gw_con).astype(float)
+base_m_nam = scenario_info.base_m_nam
+
+# print out additional summary info
+print('SW Constraint %.2f' %sw_con, 'inches')
+print('GW Constraint %.2f' %gw_con, 'inches')
+
+
+# %%
 # load parcel data for reference as needed
 parcels = gpd.read_file(join(proj_dir,'Parcels shapefile/parcels.shp'))
 parcels['area_m2'] = parcels.geometry.area
@@ -161,11 +176,11 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
 # m_nam = 'historical_simple_geology_reconnection'
-m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020'
 
-m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022'
 # define modflow model WS to reference for modflow input
-m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
+m_model_ws = join(dirname(loadpth), 'Regional', base_m_nam)
 
 # %%
 load_only=['DIS', 'BAS6']
@@ -295,10 +310,13 @@ else:
     # # this will need to be coded to be flexible and to change the model_ws
     mar_grid = pd.read_csv(join(proj_dir, 'scenarios', scenario_name+'.csv'))
     # # eventually need to code scenarios into a spreadsheet/dictionary
-    scenario = re.findall('R\d{1,2}',scenario_name)[0]
-    # scenario = 'R1'
-    # # add underscore for appending
-    scenario = '_'+scenario
+    # coded to allow scenarios of 1-2 digits
+    # scenario = re.findall('R\d{1,2}',scenario_name)[0]
+    # # scenario = 'R1'
+    # # # add underscore for appending
+    # scenario = '_'+scenario
+    # in new version we specify m_nam as is
+    scenario=''
 
 
 
@@ -317,7 +335,14 @@ sys.stdout = open(join(model_ws, 'model_connect_log.txt'), 'w')
 
 
 print(model_ws)
+print(scenario_name)
 print('\n\n')
+
+# print out additional summary info
+print('SW Constraint %.2f' %sw_con, 'inches')
+print('GW Constraint %.2f' %gw_con, 'inches')
+print('\n')
+
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
 # simple code to set dates for april 1
@@ -447,8 +472,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
     # update naming of Corn
     data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
-    
-    data_out.to_csv(join(crop_choice_dir, 'parcel_crop_choice_'+str(year)+'.csv'), index=False)
+    # save output with only parcel and crop choice
+    data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
 # %% [markdown]
 # # Load MF output
@@ -547,7 +572,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
             # to equalize the situation we might use a simple DTW profile
             load_run_swb(crop, year, crop_in, swb_ws,
                          dtw_simple_df, 
-                         soil_rep=True) 
+                         soil_rep=True,
+                         sw_con=sw_con, gw_con=gw_con,
+                         ) 
         sys.stdout.flush()
 
     # %%
@@ -693,6 +720,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         dom_loc['flux'] = - dom_use.loc[d,'flux_m3d']*dom_loc.pump_scale
         wells_dom = dom_loc[['layer','row','column','flux']].values
         
+        # got error that says wel_arr is 1D when wells_dom is 2D
+
         # assign input to well dictionary
         wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
     # print to help ID errors

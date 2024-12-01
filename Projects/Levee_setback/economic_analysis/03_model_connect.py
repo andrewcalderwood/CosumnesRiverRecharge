@@ -61,7 +61,7 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 m_nam = sys.argv[1]
 scenario_name = sys.argv[2]
 
-# m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022_R3'
 # scenario_name='R3_MAR_6x_diversion_for_available_flow'
 
 
@@ -76,8 +76,6 @@ print('\n\n')
 
 t_start = time.time()
 
-
-# %%
 
 # %%
 def add_path(fxn_dir):
@@ -155,9 +153,6 @@ base_m_nam = scenario_info.base_m_nam
 print('SW Constraint %.2f' %sw_con, 'inches')
 print('GW Constraint %.2f' %gw_con, 'inches')
 
-# set surface water and groundwater irrigation constraints (inches)
-# sw_con = 100
-# gw_con = 100
 
 # %%
 # load parcel data for reference as needed
@@ -316,10 +311,12 @@ else:
     mar_grid = pd.read_csv(join(proj_dir, 'scenarios', scenario_name+'.csv'))
     # # eventually need to code scenarios into a spreadsheet/dictionary
     # coded to allow scenarios of 1-2 digits
-    scenario = re.findall('R\d{1,2}',scenario_name)[0]
-    # scenario = 'R1'
-    # # add underscore for appending
-    scenario = '_'+scenario
+    # scenario = re.findall('R\d{1,2}',scenario_name)[0]
+    # # scenario = 'R1'
+    # # # add underscore for appending
+    # scenario = '_'+scenario
+    # in new version we specify m_nam as is
+    scenario=''
 
 
 
@@ -376,8 +373,10 @@ sys.stdout.flush()
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # for m_per in [1]:
+for m_per in [4]:
+
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
     use = all_run_dates.iloc[m_per].use
@@ -723,6 +722,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         dom_loc['flux'] = - dom_use.loc[d,'flux_m3d']*dom_loc.pump_scale
         wells_dom = dom_loc[['layer','row','column','flux']].values
         
+        # got error that says wel_arr is 1D when wells_dom is 2D
+
         # assign input to well dictionary
         wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
     # print to help ID errors

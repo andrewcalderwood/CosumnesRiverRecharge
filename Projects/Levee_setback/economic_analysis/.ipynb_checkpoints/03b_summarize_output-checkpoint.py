@@ -47,6 +47,8 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
 # %%
+import functions.output_processing
+reload(functions.output_processing)
 from functions.output_processing import get_wb_by_parcel
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 import functions.Basic_soil_budget_monthly as swb
@@ -99,6 +101,7 @@ m_nam = 'input_write_2014_2020_R3'
 
 m_nam = 'input_write_2000_2022'
 m_nam = 'input_write_2000_2022_R3'
+# m_nam = 'input_write_2000_2022_R20'
 
 model_ws = join(loadpth, m_nam)
 
@@ -203,10 +206,18 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         finished_crops = list(dset['array'].keys())
         print(finished_crops)
 
+# %%
+# import functions.output_processing
+# reload(functions.output_processing)
+# from functions.output_processing import get_wb_by_parcel
+
     # %%
     # load the processed dataframe with all datas
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
+
+# %%
+irr_gw_df_all
 
     # %%
     # # this output with the parcel data needs to be saved as well

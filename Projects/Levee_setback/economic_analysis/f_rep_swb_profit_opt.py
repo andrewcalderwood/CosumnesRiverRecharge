@@ -86,22 +86,6 @@ from functions.data_functions import init_h5, crop_arr_to_h5
 
 
 # %%
-# def init_h5(h5_fn):
-#         """ Initiate hdf5 files for the given year before appending data for each crop"""
-#         with h5py.File(h5_fn, "w") as f:
-#             grp = f.require_group('array') # makes sure group exists
-#             # grp.attrs['units'] = 'meters/day'
-#             grp.attrs['description'] = 'Rows represent the soil units and columns represent the days in the season'
-
-# # these hdf5 files are written at the start so they can be appended to for each year and crop
-# def crop_arr_to_h5(arr, crop, h5_fn, units='meters/day'):
-#     # convert arrays of annual rates to hdf5 files individually
-#     with h5py.File(h5_fn, "a") as f:
-#         grp = f.require_group('array') # makes sure group exists
-#         grp.attrs['units'] = units
-#         # grp.attrs['description'] = 'Each layer of the array is a day in the water year'
-#         dset = grp.require_dataset(crop, arr.shape, dtype='f', compression="gzip", compression_opts=4)
-#         dset[:] = arr
 
 # so if you have a dictionary d and want to access (read) its values with the syntax x.foo instead of the clumsier d['foo'], just do
 # convert a dictionary to an object with object style referencing
@@ -125,19 +109,24 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # crop = 'Misc Grain and Hay'
 
 # %%
-# # # # testing
-# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Regional/'
-# base_model_ws = loadpth + 'crop_soilbudget'
-# crop_in = pd.read_csv(join(base_model_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+# # # # # testing
+# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# m_nam = 'input_write_2014_2020'
+# base_model_ws = join(loadpth, m_nam )
+# swb_ws = join(base_model_ws, 'crop_soilbudget')
+# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
 # # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
 # #                      index_col=0, parse_dates=['dt'])
-# dtw_df = pd.read_csv(join(loadpth, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+# dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
 #                     index_col=0, parse_dates=['date'])
-# # dtw_df.columns = dtw_df.columns.astype(int)
+# dtw_df.columns = dtw_df.columns.astype(int)
 
 # soil_rep = True # True is for the complex dtw_df case
-# run_opt=False
+# run_opt=True
 # field_id = 'parcels'
+
+# sw_con=100
+# gw_con=36
 
 # %%
 # ## simple representative DTW for linear steps 10 ft to 200 ft
@@ -163,7 +152,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 run_opt=True, irr_all=None, field_id = 'parcels', 
-                sw_con=100, gw_con=100):
+                sw_con=1000, gw_con=1000):
     ''' 
     Function to import variables related to soil water budget function
     to then run the function in a profit optimizer before saving the results in hdf5 format
@@ -193,8 +182,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     print('Start', strt_date.date(), ', End', end_date.date(),', No. days', nper)
     # not use, base_model_ws is better since all files have the year attached
     # model_ws = join(base_model_ws, crop+'_'+str(strt_date.date()))
-
-# %%
 
     # %%
     Kc, Kc_dates = swb.load_Kc(year)
@@ -328,15 +315,17 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     # the function could be updated to here to skip the optimization
     # when not needed, in that case we need to specify the irrigation
     # to use in the SWB calculation (irr_all substitute)
-# %%
-# run_opt=True
+    # %%
+    # run_opt=True
+    min_profit=1000
 
     # %%
     if run_opt:
         t0 = time.time()
         # save irrigation, function, time
         irr_all =np.zeros((nfield_crop,2*n_irr))
-        p_all = np.ones(nfield_crop) # make initial profit negative
+        p_all = np.ones(nfield_crop) # make initial profit negative (positive p_all)
+        p_all[:] = min_profit + 1
         t_all = np.zeros(nfield_crop)
         
         for ns in np.arange(0,nfield_crop):
@@ -395,10 +384,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
             # for the linear dtw the start tol (0.01) was too coarse
             # with representative case it makes to use 0.001 tolerance for all and not force positive values
             tol = 0.01  
-            # continue optimizing until profit is positive
+            # continue optimizing until profit is positive (p is negative and means positive profit)
             # this step may no longer be necessary as several crops are
-            # expected to have negative profits
-            while p_all[ns] >-1000 :
+            # expected to have negative profits (200-400 dollar losses)
+            while p_all[ns] > min_profit:
                 # the minimization with 'trust-constr' and no constraints doesn't solve and has increasing WB error
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
                                method='trust-constr',
@@ -408,7 +397,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                                tol = tol
                         )
                 # decrease tolerance and reset starting irrigation to help solving
-                if out.fun >-1000:
+                if out.fun > min_profit:
                     tol /=10
                     irr_lvl[:] = np.copy(irr_lvl_base)
                 if tol < 1E-4:
@@ -427,6 +416,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         t1 = time.time()
         print('Total time was %.2f min' %((t1-t0)/60), 'for', ns+1,'parcels')
 
+
+# %%
+# import matplotlib.pyplot as plt
+# plt.plot(irr_all[0, n_irr:])
+# irr_all[1,n_irr:].sum()*12*3.28
 
 # %%
 

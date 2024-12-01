@@ -94,9 +94,10 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2020_R1'
 m_nam = 'input_write_2014_2020_R3'
-m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022_R20'
 
-# m_nam = 'input_write_2000_2022_R3'
+m_nam = 'input_write_2000_2022_R3'
 
 model_ws = join(loadpth, m_nam)
 
@@ -120,23 +121,21 @@ parcels.UniqueID = parcels.UniqueID.astype(int)
 # %%
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 # years to sample output
-run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year
+run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 
 # %%
 # all_run_dates
 
 # %%
 # temp for while model is still running
-run_years = np.arange(2001, 2011)
-run_years = np.arange(2001, 2020)
-
-# %%
+# run_years = np.arange(2001, 2011)
+# run_years = np.arange(2001, 2020)
 
 # %% [markdown]
 # # Review data available
 
 # %%
-for year in [run_years[-1]]:
+for year in [run_years[-3]]:
     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
     # crop_in[crop_in.name=='Vineyards']
     # load SWB folder
@@ -409,6 +408,21 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
         fig.supxlabel('Date')
         plt.savefig(join(out_dir, var+'_'+crop+'.png'))
         plt.close()
+
+# %%
+# check the average budget that it meets constraints
+var = 'GW_applied_water'
+# df_all_plt = df_all['var']==var
+df_annual_sum = df_all.groupby(['crop','year','name','UniqueID','var','pod']).sum(numeric_only=True).reset_index()
+df_annual_sum = df_annual_sum.groupby(['crop','name','year','var']).mean(numeric_only=True).reset_index()
+
+# sns.relplot(df_annual_sum, x='year',y='value', col='crop',kind='c')
+
+sns.catplot(df_annual_sum,x='year',y='value', col='crop', row='var', 
+            kind='bar', color='tab:blue',
+            sharey=False
+           # facet_kws={'sharey': False, 'sharex': True}
+)
 
 # %% [markdown]
 #
