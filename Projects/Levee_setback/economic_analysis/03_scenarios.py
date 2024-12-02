@@ -39,6 +39,9 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 # import rasterio
 
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
+
 
 # %%
 doc_dir = os.getcwd()
@@ -227,3 +230,147 @@ plt_rch(mar)
 # After creating a scenario you need to:
 # 1. Make sure new model workspace and modflow run files are available
 # 2. Run model_connect and make sure everything runs
+
+# %% [markdown]
+# ## plot climate
+
+# %%
+strt_date = '2000-10-1'
+end_date = '2022-9-30'
+
+# %%
+uzf_dir = join(gwfm_dir, 'UZF_data')
+## Potential ETo spatial interpolation from CIMIS
+fn = glob.glob(join(uzf_dir,'CIMIS', 'Cosumnes_dailyET_precip*.csv'))
+daily_data = pd.DataFrame()
+for file in fn:
+    new_data = pd.read_csv(file, index_col = ['Date'], parse_dates = True)
+    daily_data = pd.concat((daily_data, new_data))
+# units of mm
+data_in = daily_data[daily_data['Stn Name']=='Fair Oaks']
+# clean up data so columns are by location, units of Precip are in mm
+rain_in = data_in.pivot_table(index = 'Date', columns = 'Stn Name', values = 'Precip (mm)')
+rain_m = rain_in/1000
+# subset to model and reindex to match streamflow dates
+rain_plt = rain_m['Fair Oaks'].loc[strt_date:end_date]
+rain_plt = rain_plt.reindex(inflow.index)
+
+
+
+# %%
+data_in.resample('AS-Oct').sum(numeric_only=True)
+
+# %%
+rain_plt_ft = rain_plt/0.3048
+
+# %%
+flw_lgd =  [
+    # Patch(facecolor='none', edgecolor='black', linestyle = '--', alpha=1., label='Watershed Extent'),
+    Line2D([0], [0],color='tab:blue', alpha=0.6, label='Rainfall'),
+    Line2D([0], [0], color='brown', alpha=0.6,label='Streamflow'),
+    # Line2D([0], [0], linestyle='-.', color='black', label='23 cms'),
+    # Line2D([0], [0],  linestyle='--', color='black', label='71.6 cms'),
+]
+
+# %%
+from map_cln import gdf_bnds, pnt_2_tup, lab_pnt, plt_cln, arr_lab, xy_lab, make_multi_scale, dir_arrow, plt_arrow
+
+
+# %%
+fig, ax = plt.subplots(figsize=(10,5))
+
+dt = inflow.index.values
+ax.plot(dt, inflow['flow_cfs'], color='brown', alpha=0.6)
+# Create second axes, in order to get the bars from the top you can multiply by -1
+ax2 = ax.twinx()
+# ax2.bar(dt, -rain_plt.values, 0.9)
+ax2.plot(dt, -rain_plt_ft, alpha=0.6)# regular line plot does better than a bar plot
+# Now need to fix the axis labels
+max_pre = np.max(rain_plt_ft)+0.01
+# max_pre = 0.12
+max_pre = 0.12/0.3048
+# y2_ticks = np.arange(0, max_pre, 0.02)
+y2_ticks = np.arange(0, max_pre, 0.06)
+y2_ticklabels = [str(i) for i in y2_ticks]
+ax2.set_yticks(-1 * y2_ticks)
+ax2.set_yticklabels(y2_ticklabels)
+
+ax2.set_ylabel('Rainfall (ft)')
+ax.set_ylabel('Streamflow ($ft^3/s$)')
+# ax.ticklabel_format(style='plain', axis='y') 
+ax.set_yscale('log')
+ax.set_ylim(1,1E5)
+ax.set_xlabel('Date')
+
+fig.legend(handles=flw_lgd, loc='outside upper center',ncol=2, bbox_to_anchor=(0.5, 1.0)) # with flow thresholds (0.5, 1.05)
+# arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+# def flow_threshold_lines(ax):
+#     ax.axhline(y=23, color='black', linestyle='--')
+#     ax.axhline(y=71.6, color='black', linestyle='-.')
+#     xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
+#     xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
+# flow_threshold_lines(ax=ax)
+
+# fig.savefig(join(fig_dir, 'streamflow_hydrograph_with_rain.png'), bbox_inches='tight')
+# plt.show()
+
+
+# %% [markdown]
+# # precip only
+
+# %%
+wyt_sac = pd.read_csv(join(gwfm_dir, 'GHB_data', 'sacramento_WY_types.txt'))
+color_dict = {'C':'tab:purple','D':'tab:red','BN':'tab:orange','AN':'yellow','W':'tab:green'}
+name_dict = {'C':'Critical','D':'Dry', 'BN':'Below Normal', 'AN':'Above Normal','W':'Wet'}
+wyt_sac['color'] = [color_dict[yt] for yt in wyt_sac['Yr-type']]
+wyt_sac['name'] = [name_dict[yt] for yt in wyt_sac['Yr-type']]
+
+# %%
+
+# %%
+# wyt for plotting
+# wy = dt_ref.wy.unique()
+wy = inflow.index.year.unique()[1:]
+wyt = wyt_sac[wyt_sac.WY.isin(wy)].copy()
+wyt['plt_date'] = wyt.WY.astype(str)+'-1-1'
+wyt = wyt.set_index('WY')
+
+# %%
+annual_rain = rain_m['Fair Oaks'].resample('AS-Oct').sum()
+# look at data from last 20 years
+annual_rain = annual_rain[annual_rain.index.year>annual_rain.index.year.max()-20]
+# # summarize typical rainfall and devication
+print('Avg rain %.3f m' %annual_rain.mean())
+annual_rain[annual_rain.index.year.isin([2016,2018])] - annual_rain.mean()
+
+# %%
+np.where(rain_mon.index==wyt.loc[n, 'plt_date'])
+n
+# wyt.loc[2001]
+rain_mon.index
+ # rain_mon.quantile(0.95))
+# wyt
+wyt.loc[n, 'plt_date']
+
+# %%
+plt_strt = '2000-10-1'
+plt_end = '2022-9-30'
+fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
+rain_mon = rain_plt.resample('MS').sum()
+rain_mon = rain_plt.resample('AS-Oct').sum()
+rain_mon = rain_mon.loc[plt_strt:plt_end]
+
+ax.bar(np.arange(0, len(rain_mon)), rain_mon.values)
+# ax.set_xticks(np.arange(0, len(rain_mon))[3::12], rain_mon.index[3::12].year);
+ax.set_xticks(np.arange(0, len(rain_mon))[::3], rain_mon.index[::3].year+1);
+for n in wy:
+    xy_lab((wyt.loc[n, 'plt_date'], rain_mon.quantile(0.95)),
+    # xy_lab((np.where(rain_mon.index==wyt.loc[n, 'plt_date'])[0][0], rain_mon.quantile(0.95)),
+           wyt.loc[n, 'name'].replace(' ','\n'), ax=ax, offset = (0,2), fontsize=10, bbox=True)
+
+ax.set_ylabel('Annual Rainfall Total (m)');
+# ax.set_ylabel('Monthly Rainfall Total (m)');
+# ax.set_xlabel('Date');
+ax.set_xlabel('WY');
+# plt.savefig(join(fig_dir, 'monthly_rainfall.png'), bbox_inches='tight')
+# plt.close()

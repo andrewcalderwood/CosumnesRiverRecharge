@@ -21,6 +21,8 @@ import os
 from os.path import join, exists, dirname, basename, expanduser
 import glob
 import sys
+import re
+
 import time
 from importlib import reload
 import h5py
@@ -45,6 +47,35 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
+
+# %%
+# for batch file case we want to ignore the consant h5py deprecation warning
+import warnings
+
+warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
+# %%
+# updated version specifies concept_name and copy_files here so it can be easily
+# seen as these are the main update to make in a script
+
+m_nam = sys.argv[1]
+# scenario_name = sys.argv[2]
+
+# m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022_R3'
+# m_nam = 'input_write_2000_2022_R20'
+
+print('sys.argv[1] (m_nam) is...')
+print(m_nam)
+
+
+# print('sys.argv[2] (scenario_name) is...')
+# print(scenario_name)
+print('\n\n')
+
+
+t_start = time.time()
 
 # %%
 import functions.output_processing
@@ -89,21 +120,22 @@ def read_crop_arr_h5(crop, h5_fn):
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
-# update to different modflow models here, next step is using the 20 year model
-# base_model_ws = loadpth + 'crop_soilbudget'
-# m_nam = 'historical_simple_geology_reconnection'
-m_nam_base = 'input_write_2014_2020'
-m_nam_base = 'input_write_2000_2022'
+# m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020_R1'
+# m_nam = 'input_write_2014_2020_R3'
 
-m_nam = 'input_write_2014_2020'
-m_nam = 'input_write_2014_2020_R1'
-m_nam = 'input_write_2014_2020_R3'
-
-m_nam = 'input_write_2000_2022'
-m_nam = 'input_write_2000_2022_R3'
+# m_nam = 'input_write_2000_2022'
+# m_nam = 'input_write_2000_2022_R3'
 # m_nam = 'input_write_2000_2022_R20'
 
 model_ws = join(loadpth, m_nam)
+
+# simpler way to get base model workspace is remove R\d{1,2} since all should follow this format
+m_nam_base = re.sub(r'_R\d{1,2}', '', m_nam)
+
+
+# %%
+sys.stdout = open(join(model_ws, 'log', 'summarize_output_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
 
 # %%
@@ -152,6 +184,7 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 
 for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # for m_per in [1]:
+# for m_per in [4]:
     m_strt = all_run_dates.iloc[m_per].date
     year = m_strt.year
     print(year)
@@ -187,7 +220,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
     # %%
-    # well_dtw = pd.read_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'))
+    # get head value from last 30 days to avoid using extreme single day value
+    # now the csv and code to load produce the same results it seems
+    # well_dtw = pd.read_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'), index_col=0)
+    # need to make integer for join with crop choice
+    # well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
 
     # %%
@@ -215,9 +252,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # load the processed dataframe with all datas
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
-
-# %%
-irr_gw_df_all
 
     # %%
     # # this output with the parcel data needs to be saved as well
@@ -342,6 +376,11 @@ irr_gw_df_all
         # in theory the best function to use if it works
         load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
+        sys.stdout.flush()
+
+# %%
+t_final = time.time()
+print('Total time was %.2f hours' %((t_final-t_start)/3600))
 
 # %% [markdown]
 # # Comparison of output

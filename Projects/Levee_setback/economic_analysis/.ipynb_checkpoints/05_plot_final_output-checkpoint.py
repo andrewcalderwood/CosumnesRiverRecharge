@@ -94,9 +94,9 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2020_R1'
 m_nam = 'input_write_2014_2020_R3'
-# m_nam = 'input_write_2000_2022'
-# m_nam = 'input_write_2000_2022_R20'
 
+m_nam = 'input_write_2000_2022'
+m_nam = 'input_write_2000_2022_R20'
 m_nam = 'input_write_2000_2022_R3'
 
 model_ws = join(loadpth, m_nam)
@@ -129,7 +129,7 @@ run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 # %%
 # temp for while model is still running
 # run_years = np.arange(2001, 2011)
-# run_years = np.arange(2001, 2020)
+run_years = np.arange(2001, 2020)
 
 # %% [markdown]
 # # Review data available
@@ -418,7 +418,13 @@ df_annual_sum = df_annual_sum.groupby(['crop','name','year','var']).mean(numeric
 
 # sns.relplot(df_annual_sum, x='year',y='value', col='crop',kind='c')
 
-sns.catplot(df_annual_sum,x='year',y='value', col='crop', row='var', 
+# sns.catplot(df_annual_sum,x='year',y='value', col='crop', row='var', 
+#             kind='bar', color='tab:blue',
+#             sharey=False
+#            # facet_kws={'sharey': False, 'sharex': True}
+# )
+
+sns.catplot(df_annual_sum[df_annual_sum['var']==var],x='year',y='value', col='crop',  
             kind='bar', color='tab:blue',
             sharey=False
            # facet_kws={'sharey': False, 'sharex': True}

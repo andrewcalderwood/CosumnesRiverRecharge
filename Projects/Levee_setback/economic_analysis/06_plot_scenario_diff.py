@@ -62,16 +62,16 @@ import flopy
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
-# update to different modflow models here, next step is using the 20 year model
-
-
 
 # %%
 m_nam = 'input_write_2014_2020'
 s_nam = 'input_write_2014_2020_R1'
 # s_nam = 'input_write_2014_2020_R3'
+
+
 m_nam = 'input_write_2000_2022'
 s_nam = 'input_write_2000_2022_R3'
+s_nam = 'input_write_2000_2022_R20'
 
 model_ws = join(loadpth, m_nam)
 scenario_ws = join(loadpth, s_nam)
@@ -105,7 +105,12 @@ diff_econ = df_econ.merge(df_econ_s, on=['crop','name','var','year'], suffixes=(
 
 
 # %%
+# df_crop = df_plt[df_plt.crop==crop]
+# df_crop.set_index('year').reindex(df_plt.year.unique())
+
+# %%
 var = 'yield'
+# var='profit'
 # df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
 df_plt = diff_econ[diff_econ['var']==var].copy()
 crops = df_plt.crop.unique()
@@ -116,6 +121,11 @@ for n,crop in enumerate(crops):
     df_plt[df_plt.crop==crop].plot(x='year',y=['value_m','value_s'], ax=ax_n, kind='bar',legend=False)
     ax_n.set_title(crop)
     ax_n.set_xlabel('Year')
+    # ax_n.set_xticks(df_plt.year.unique().astype(str))
+
+
+# df_crop = df_plt[df_plt.crop==crop]
+# df_crop.set_index('year').reindex(df_plt.year.unique()).reset_index()
 df_plt[df_plt.crop==crop].plot(x='year',y=['value_m','value_s'], ax=ax_n, kind='bar',legend=True)
 plt.legend(['Baseline','Scenario'])
 fig.supylabel(var.capitalize())
@@ -140,10 +150,7 @@ diff_wb = df_all.merge(df_all_s, on=['name','date','var'], suffixes=('_m','_s'))
 # diff_wb
 
 # %%
-# df_all.name.unique()
-
-# %%
-crops
+df_all.name.unique()
 
 # %%
 
@@ -154,7 +161,7 @@ var = 'GW_applied_water'
 crops = df_all.name.unique()
 # for crop in crops:
 for crop in ['Corn, sorghum or Sudan']:
-# for crop in ['Vineyards']:
+# for crop in ['Alfalfa and alfalfa mixtures']:
     fig,ax = plt.subplots( sharey=True, figsize=(12,3), layout='constrained', dpi=300)
     # plt_df = df_all[(df_all.name==crop)&(df_all['var']==var)]
     plt_df = diff_wb[(diff_wb.name==crop)&(diff_wb['var']==var)]

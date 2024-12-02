@@ -26,12 +26,21 @@ from functions.data_functions import read_crop_arr_h5
 # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # m_nam='input_write_2000_2022'
 # model_ws = join(loadpth, m_nam)
-# year=2010
+# year=2004
 # # testing
 # swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
 # dtw_simple_df = pd.read_csv(join(swb_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'), index_col='date')
-# crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+# crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
+
+# well_dtw = pd.read_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'), index_col=0)
+
+
+
+# %%
+# crop = 'Grape'
+# var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+# crop_ref = crop_in[crop_in.name==pred_dict[crop]]
 
 
 # %%
@@ -59,7 +68,9 @@ def out_arr_to_long_df(pc_all, out_lin, strt_date, end_date, out_summary):
     # linearly interpolate expected rate assuming linearity between every 10 ft dtw
     pc_df = pc_df.interpolate(method='linear')
     # now index using updated index before converting back to array
-    pc_df = pc_df.loc[out_lin.dtw_id]
+    # drop index to allow for out_lin variables to be directly assigned since they should have the same indexing
+    # could be better to do merge?
+    pc_df = pc_df.loc[out_lin.dtw_id].reset_index(drop=True)
     # convert pc data to a dataframe with dates
     pc_df.columns = pd.date_range(strt_date, end_date)
 
@@ -70,11 +81,6 @@ def out_arr_to_long_df(pc_all, out_lin, strt_date, end_date, out_summary):
     # create long format dataframe to append all date to
     pc_df_long = pc_df.melt(id_vars=['UniqueID','dtw_id'], var_name='date',value_name='rate')
     return(pc_df_long)
-
-# %%
-# crop = 'Grape'
-# var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-# crop_ref = crop_in[crop_in.name==pred_dict[crop]]
 
 
 # %%
@@ -115,7 +121,8 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
     """
     Using the representative soil budget output
     transfer the irrigation and percolation rates to individual fields
-
+    INPUT:
+    actually only uses 'dtw_id','dtw_mean_ft', 'pod_bool'
     OUTPUT:
     out_lin: dataframe that identifies the dtw_id for each UniqueID (parcel)
     out_summary: reference of dtw_id to to dtw_mean_ft
@@ -131,6 +138,7 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
         pod_bool = 0
         
     # # summary output from hdf5 into csv
+    # 'dtw_id','dtw_mean_ft', 'pod_bool' are only used so irr_gw_m, irr_sw_m, pc_m are just for reference
     out_summary = pd.DataFrame(np.transpose((irr_gw.sum(axis=1), irr_sw.sum(axis=1), pc_all.sum(axis=1), dtw_df_mean)), 
                  columns=['irr_gw_m','irr_sw_m','pc_m', 'dtw_mean_ft'])
     # # actually need to reference the array data directly rather than the sum
@@ -179,22 +187,22 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
 
     return(out_lin, out_summary)
 
-# %%
-
+    # %%
     # dtw_df_mean = dtw_simple_df.mean().values
     # # if fields constains both with and without pod then double to account alternate run
     # # if (crop_ref.pod_bool==1).any()&(crop_ref.pod_bool==0).any():
     # dtw_df_mean = np.hstack([dtw_df_mean]*2)
+
+    # irr_gw = np.ones(dtw_df_mean.shape)
+    # irr_sw = np.zeros(dtw_df_mean.shape)
+    # pc_all = np.ones(dtw_df_mean.shape)*0.6
+
     # pod_bool = np.repeat([0, 1], int(len(irr_gw)/2))
     # # elif (crop_ref.pod_bool==1).all():
     # #     pod_bool = 1
     # # else:
     # # pod_bool = 0
-
-    # irr_gw = np.ones(dtw_df_mean.shape)
-    # irr_sw = np.zeros(dtw_df_mean.shape)
-    # pc_all = np.ones(dtw_df_mean.shape)*0.6
-        
+      
     # # # summary output from hdf5 into csv
     # out_summary = pd.DataFrame(np.transpose((irr_gw, irr_sw, pc_all, dtw_df_mean)), 
     #              columns=['irr_gw_m','irr_sw_m','pc_m', 'dtw_mean_ft'])
@@ -204,18 +212,22 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
     # out_summary['dtw_id'] = np.arange(0, len(out_summary))
     # # specify whether the representative profile is for with or without a POD
     # out_summary['pod_bool'] = pod_bool
+
+    # # a simple way would be to reindex based on dtw_mean_ft and infill with a linear range
+    # out_summary = downscale_dtw_summary(out_summary)
     
-    # # take the mean dtw for each field
+    
+    # # # take the mean dtw for each field
     # # dtw_id_mean = dtw_df.mean() # old version continuous
-    # # dtw_id_mean = well_dtw.set_index('UniqueID').dtw_ft # new version ending level at each well
-    # # # sample the dtw for the field simulated for that crop
-    # # dtw_id_mean = pd.DataFrame(dtw_id_mean.loc[crop_ref.parcel_id.values])
-    # # # rename column to match previous coding
-    # # dtw_id_mean = dtw_id_mean.rename(columns={'dtw_ft':'dtw_mean_ft'})
-    # # # want to join dtw info with pod info
-    # # dtw_id_mean = crop_ref.join(dtw_id_mean, on='parcel_id')
-    # # # # add ID to identify which parcel is selected in a simpler id than parcel_id
-    # # dtw_id_mean['id'] = np.arange(0, len(dtw_id_mean))
+    # dtw_id_mean = well_dtw.set_index('UniqueID').dtw_ft # new version ending level at each well
+    # # sample the dtw for the field simulated for that crop
+    # dtw_id_mean = pd.DataFrame(dtw_id_mean.loc[crop_ref.parcel_id.values])
+    # # rename column to match previous coding
+    # dtw_id_mean = dtw_id_mean.rename(columns={'dtw_ft':'dtw_mean_ft'})
+    # # want to join dtw info with pod info
+    # dtw_id_mean = crop_ref.join(dtw_id_mean, on='parcel_id')
+    # # # add ID to identify which parcel is selected in a simpler id than parcel_id
+    # dtw_id_mean['id'] = np.arange(0, len(dtw_id_mean))
     
     
     # out_summary_dtw = out_summary[['dtw_id','dtw_mean_ft', 'pod_bool']].sort_values('dtw_mean_ft')
@@ -224,18 +236,18 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
     # # identifies the nearest dtw value, should correct with a linear interpolation
     # # using the slope in irr/recharge at each point scaled by difference in 
     # # need to do separately for pod/no pod
-    # # out_lin0 = pd.merge_asof( 
-    # #     dtw_id_mean[dtw_id_mean.pod_bool==0].sort_values('dtw_mean_ft'),
-    # #     out_summary_dtw[out_summary_dtw.pod_bool==0].drop(columns='pod_bool'),
-    # #                         on='dtw_mean_ft', direction='nearest')
-    # # out_lin1 = pd.merge_asof(
-    # #     dtw_id_mean[dtw_id_mean.pod_bool==1].sort_values('dtw_mean_ft'), 
-    # #     out_summary_dtw[out_summary_dtw.pod_bool==1].drop(columns='pod_bool'),
-    # #                         on='dtw_mean_ft', direction='nearest')
-    # # # rejoin complete table of pod and no pod
-    # # out_lin = pd.concat((out_lin0, out_lin1))
-    # # # sort values for plotting and add back the interpoalted DTW
-    # # out_lin = out_lin.rename(columns={'dtw_mean_ft':'dtw_mean_ft_sim'}).merge( out_summary_dtw)
+    # out_lin0 = pd.merge_asof( 
+    #     dtw_id_mean[dtw_id_mean.pod_bool==0].sort_values('dtw_mean_ft'),
+    #     out_summary_dtw[out_summary_dtw.pod_bool==0].drop(columns='pod_bool'),
+    #                         on='dtw_mean_ft', direction='nearest')
+    # out_lin1 = pd.merge_asof(
+    #     dtw_id_mean[dtw_id_mean.pod_bool==1].sort_values('dtw_mean_ft'), 
+    #     out_summary_dtw[out_summary_dtw.pod_bool==1].drop(columns='pod_bool'),
+    #                         on='dtw_mean_ft', direction='nearest')
+    # # rejoin complete table of pod and no pod
+    # out_lin = pd.concat((out_lin0, out_lin1))
+    # # sort values for plotting and add back the interpoalted DTW
+    # out_lin = out_lin.rename(columns={'dtw_mean_ft':'dtw_mean_ft_sim'}).merge( out_summary_dtw)
 
 
 # %%
@@ -297,21 +309,19 @@ def get_wb_by_parcel(model_ws, year,
         irr_sw_df_all =  pd.concat((irr_sw_df_all, irr_sw_df_long))
     return(pc_df_all, irr_gw_df_all, irr_sw_df_all)
 
+
     # %%
-    # pc_df_all = pd.DataFrame()
+    pc_df_all = pd.DataFrame()
 
 
-    # # for crop in crop_list:
-    # for crop in ['Grape']:
-    #     print('Adding', crop,' to the parcel output dataframe')
-    #     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    # for crop in crop_list:
+    for crop in ['Grape']:
+        print('Adding', crop,' to the parcel output dataframe')
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
 
-    #     # need separte hdf5 for each year because total is 300MB, group by crop in array
-    #     fn = join(model_ws, 'rep_crop_soilbudget','field_SWB', "percolation_WY"+str(year)+".hdf5")
-    #     pc_all = read_crop_arr_h5(crop, fn)
-
-# %%
-# out_summary
+        # need separte hdf5 for each year because total is 300MB, group by crop in array
+        fn = join(model_ws, 'rep_crop_soilbudget','field_SWB', "percolation_WY"+str(year)+".hdf5")
+        pc_all = read_crop_arr_h5(crop, fn)
 
 # %%
 # # out_summary_down = downscale_dtw_summary(out_summary)
@@ -323,16 +333,22 @@ def get_wb_by_parcel(model_ws, year,
 # pc_df = pd.DataFrame(pc_all)
 # # # reindex based on the infilled out_summary
 # pc_df = pc_df.reindex(out_summary.dtw_id)
+# # pc_df = pc_df.reindex(out_summary_down.dtw_id)
+
 # # # linearly interpolate expected rate assuming linearity between every 10 ft dtw
 # pc_df = pc_df.interpolate(method='linear')
 # # now index using updated index before converting back to array
-# pc_df.sum().sum()
+# # pc_df.sum().sum()
 # # # dtw_id goes uniquely from 0-n_irr or n_irr*2 if pod==0|1
 # # out_summary
 # # (out_summary.pod_bool==0).any()&(out_summary.pod_bool==1).any()
+# # # now index using updated index before converting back to array
+# pc_df = pc_df.loc[out_lin.dtw_id].reset_index(drop=True)
+# # # convert pc data to a dataframe with dates
+# # pc_df.columns = pd.date_range(strt_date, end_date)
 
-# # add reference ID columns
-# pc_df['UniqueID'] = out_summary.parcel_id
+# # # add reference ID columns
+# pc_df['UniqueID'] = out_lin.parcel_id
 # pc_df['dtw_id'] = out_lin.dtw_id
-# # create long format dataframe to append all date to
+# # # create long format dataframe to append all date to
 # pc_df_long = pc_df.melt(id_vars=['UniqueID','dtw_id'], var_name='date',value_name='rate')

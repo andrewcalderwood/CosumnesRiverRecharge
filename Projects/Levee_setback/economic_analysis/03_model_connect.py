@@ -331,7 +331,9 @@ season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 # so we can run different versions
 model_ws = join(loadpth, m_nam+scenario)
 
-sys.stdout = open(join(model_ws, 'model_connect_log.txt'), 'w')
+# save log by date so we can see old versions
+os.makedirs(join(model_ws, 'log'), exist_ok=True)
+sys.stdout = open(join(model_ws, 'log', 'model_connect_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
 
 print(model_ws)
@@ -373,9 +375,9 @@ sys.stdout.flush()
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # for m_per in [1]:
-for m_per in [4]:
+# for m_per in [4]:
 
     m_strt = all_run_dates.iloc[m_per].date
     m_end = all_run_dates.iloc[m_per+1].date-pd.DateOffset(days=1)
@@ -605,6 +607,9 @@ for m_per in [4]:
     irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
 
 
+# %%
+# pc_df_all
+
 # %% [markdown]
 # ## RCH input
 #
@@ -714,7 +719,9 @@ for m_per in [4]:
     for t, d in enumerate(dates):
         # get data for the stress period
         if d in wel_df.index:
-            spd_df = wel_df.loc[d]
+            # spd_df = wel_df.loc[d]
+            # need to use boolean to avoid ending up with single value (series instead of dataframe)
+            spd_df = wel_df.loc[wel_df.index==d]
             wel_arr = spd_df[['k','i','j','flux']].values
         else:
             wel_arr = [[0,0,0,0]]
@@ -723,7 +730,8 @@ for m_per in [4]:
         wells_dom = dom_loc[['layer','row','column','flux']].values
         
         # got error that says wel_arr is 1D when wells_dom is 2D
-
+        # when manually running the code this is because there is a date where there is only one well pumping
+        # and it becomes a 1D array
         # assign input to well dictionary
         wel_dict[t] = np.append(wel_arr, wells_dom, axis=0)
     # print to help ID errors

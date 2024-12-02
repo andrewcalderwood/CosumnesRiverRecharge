@@ -166,12 +166,15 @@ nrow,ncol = grid_p.row.max(), grid_p.column.max()
 nruns = all_run_dates.shape[0]-1
 
 # %%
-model_nam = 'input_write_2014_2020'
-model_nam = 'input_write_2014_2020_R1'
-model_nam = 'input_write_2000_2022_R3'
+# model_nam = 'input_write_2014_2020'
+# model_nam = 'input_write_2014_2020_R1'
 model_nam = 'input_write_2000_2022'
 
 model_ws = join(loadpth, model_nam, 'crop_modflow')
+
+scen_nam = 'input_write_2000_2022_R3'
+
+scen_ws = join(loadpth, scen_nam, 'crop_modflow')
 
 
 # %%
@@ -180,12 +183,13 @@ model_ws = join(loadpth, model_nam, 'crop_modflow')
 print('Reading  input files')
 rech_all = np.full((0, nrow,ncol),np.nan)
 rech_sum = np.full((nruns, nrow,ncol),np.nan)
+
 # for m_per in [0]:
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
 
     m_model_ws = join(model_ws,str(m_strt.date()))
-    print(m_model_ws)
+    print(basename(m_model_ws), end=',\t')
     # switch to modflow nwt to enable option bloack for use in owhm
     m_month = flopy.modflow.Modflow.load(join(m_model_ws,'MF.nam'),
                                         load_only=load_only,
@@ -196,6 +200,22 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     rech_sum[m_per] = rech.sum(axis=0)
 
 
+# %%
+rech_all_s = np.full((0, nrow,ncol),np.nan)
+rech_sum_s = np.full((nruns, nrow,ncol),np.nan)
+
+for m_per in np.arange(0, all_run_dates.shape[0]-1):
+    m_strt = all_run_dates.iloc[m_per].date
+
+    m_model_ws = join(scen_ws,str(m_strt.date()))
+    # switch to modflow nwt to enable option bloack for use in owhm
+    m_month_s = flopy.modflow.Modflow.load(join(m_model_ws,'MF.nam'),
+                                        load_only=load_only,
+                                        )
+
+    rech = m_month_s.rch.rech.array[:,0]
+    rech_all_s = np.vstack((rech_all_s, rech))
+    rech_sum_s[m_per] = rech.sum(axis=0)
 
 # %%
 # plt_temp = rech_sum.sum(axis=(1,2))[1:]
@@ -203,24 +223,33 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 # %%
 
 # %%
-ny=3
-fig,ax = plt.subplots(ny,1, figsize=(4,4), sharex=True, dpi=300)
-for n in np.arange(0,ny):
-    im = ax[n].imshow(rech_sum[n])
-    plt.colorbar(im, shrink=0.8)
+# ny=3
+# fig,ax = plt.subplots(ny,1, figsize=(4,4), sharex=True, dpi=300)
+# for n in np.arange(0,ny):
+#     im = ax[n].imshow(rech_sum[n])
+#     plt.colorbar(im, shrink=0.8)
 
 # %%
-rech_sum
+rech_sum.sum(axis=(1,2))
+# rech_sum_s.sum(axis=(1,2))
 
 # %%
-area = 200*200
-plt.plot(plt_temp/area, label='Scenario')
-plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Baseline')
+m_
+
+# %%
+# scale by number of cells to get distributed recharge
+area = 100*230
+# scale=
+rech_plt_s = rech_sum_s.sum(axis=(1,2))[1:]/area
+plt.plot(rech_plt_s, label='Scenario')
+
+rech_plt = rech_sum.sum(axis=(1,2))[1:]/area
+plt.plot(rech_plt, label='Baseline')
 # plt.plot(plt_temp/area, label='Baseline')
 # plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Scenario')
 plt.legend()
 dx=4
 plt.xticks(np.arange(0, len(plt_temp))[::dx], all_run_dates.date.dt.year[1:-1][::dx]);
-plt.ylabel('Average recharge rate (m/day)')
+plt.ylabel('Annual total recharge rate (m)')
 
 # %%
