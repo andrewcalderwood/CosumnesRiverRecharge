@@ -27,6 +27,7 @@ import sys
 import os
 from os.path import join,exists, dirname, basename, expanduser
 import time 
+import re
 
 import h5py
 import numpy as np
@@ -55,23 +56,20 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 
 # %%
+# reset stdout
+# sys.stdout = sys.__stdout__
+# sys.stdout
+
+# %%
 # updated version specifies concept_name and copy_files here so it can be easily
 # seen as these are the main update to make in a script
 
 m_nam = sys.argv[1]
-scenario_name = sys.argv[2]
 
-# m_nam = 'input_write_2000_2022_R3'
-# scenario_name='R3_MAR_6x_diversion_for_available_flow'
-
+# m_nam = 'input_write_2014_2022_R3'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
-
-
-print('sys.argv[2] (scenario_name) is...')
-print(scenario_name)
-print('\n\n')
 
 
 t_start = time.time()
@@ -142,16 +140,23 @@ data_dir = join(proj_dir, 'model_inputs')
 # loda model scenario reference sheet
 scenario_summary = pd.read_excel(join(data_dir, 'scenario_summary.xlsx'))
 # select the current model run scenario based on model and scenario name from batch file
-scenario_info = scenario_summary[(scenario_summary.m_nam==m_nam )& (scenario_summary.scenario_name==scenario_name)]
+scenario_info = scenario_summary[(scenario_summary.m_nam==m_nam )& (scenario_summary.m_nam==m_nam)]
 # create series to make easier data sampling
 scenario_info = scenario_info.iloc[0]
+# create into variables for easier referencing
 sw_con = (scenario_info.sw_con).astype(float)
 gw_con = (scenario_info.gw_con).astype(float)
+scenario_name = scenario_info.scenario_name
 base_m_nam = scenario_info.base_m_nam
 
 # print out additional summary info
 print('SW Constraint %.2f' %sw_con, 'inches')
 print('GW Constraint %.2f' %gw_con, 'inches')
+
+print('scenario_name is...')
+print(scenario_name)
+print('\n\n')
+# scenario_info
 
 
 # %%
@@ -294,29 +299,14 @@ years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
 # Need to start thinking of the best way to save different model scenarios with the high level model_ws change
 
 # %%
-import re
 
-
-# %%
-# load in the MAR scenario of interest
-# scenario_name = 'R1_MAR_max_diversion_for_available_flow'
-# # scenario_name = 'R2_MAR_3x_diversion_for_available_flow'
-# scenario_name = 'R3_MAR_6x_diversion_for_available_flow'
 if scenario_name=='none':
     # # baseline scenario is no extra recharge
     mar_grid = pd.DataFrame()
-    scenario=''
 else:
     # # this will need to be coded to be flexible and to change the model_ws
-    mar_grid = pd.read_csv(join(proj_dir, 'scenarios', scenario_name+'.csv'))
-    # # eventually need to code scenarios into a spreadsheet/dictionary
-    # coded to allow scenarios of 1-2 digits
-    # scenario = re.findall('R\d{1,2}',scenario_name)[0]
-    # # scenario = 'R1'
-    # # # add underscore for appending
-    # scenario = '_'+scenario
-    # in new version we specify m_nam as is
-    scenario=''
+    mar_grid = pd.read_csv(join(proj_dir, 'scenarios', scenario_name+'.csv'), index_col='date', parse_dates=['date'])
+    print('Using mar_grid for', scenario_name)
 
 
 
@@ -329,7 +319,7 @@ season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
 # may want to add a year start/end or put in subfolder of modflow model
 # so we can run different versions
-model_ws = join(loadpth, m_nam+scenario)
+model_ws = join(loadpth, m_nam)
 
 # save log by date so we can see old versions
 os.makedirs(join(model_ws, 'log'), exist_ok=True)
@@ -662,6 +652,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # drop dates and cells with zero recharge as the default recharge is 0
     ag_pc = ag_pc[ag_pc.rch_rate!=0]
 
+
     # %%
     # need to only keep dates with percolation where there is not already data from the optimized swb
     outer_join = rch_df[['UniqueID']].reset_index().merge(ag_pc[['UniqueID']].reset_index(), how = 'outer', indicator = True)
@@ -670,6 +661,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     
     # filter out the ag winter recharge to join to the dataframe
     ag_pc_include = ag_pc.reset_index().merge(ag_join, how='inner')
+    # make index the date
+    ag_pc_include = ag_pc_include.set_index('date')
 
     # %%
     ## add native lands recharge
@@ -677,7 +670,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     ## add recharge due to MAR or other scenario
     # have dataframe with recharge rates for cells and row,column
-    rch_all = pd.concat((rch_all, mar_grid))
+    mar_grid_join = mar_grid[mar_grid.index.isin(dates)]
+    rch_all = pd.concat((rch_all, mar_grid_join))
 
     # aggregate to the row, column level
     rch_all = rch_all.groupby(['date','row','column'])[['rch_rate']].sum()

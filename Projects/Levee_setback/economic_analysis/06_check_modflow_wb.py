@@ -88,7 +88,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 
 model_nam = 'historical_simple_geology_reconnection'
 model_nam = 'input_write_2014_2020'
-model_nam = 'input_write_2000_2022'
+model_nam = 'input_write_2014_2022'
 
 base_model_ws = loadpth+model_nam
 
@@ -96,9 +96,13 @@ base_model_ws = loadpth+model_nam
 # %%
 loadpth = run_dir +'/Cosumnes/Economic/'
 model_nam = 'input_write_2014_2020'
-model_nam = 'input_write_2000_2022'
+model_nam = 'input_write_2014_2022'
 
 model_ws = join(loadpth, model_nam, 'crop_modflow')
+
+
+scen_nam = 'input_write_2014_2022_R3'
+scen_ws = join(loadpth, scen_nam, 'crop_modflow')
 
 
 # %%
@@ -166,18 +170,6 @@ nrow,ncol = grid_p.row.max(), grid_p.column.max()
 nruns = all_run_dates.shape[0]-1
 
 # %%
-# model_nam = 'input_write_2014_2020'
-# model_nam = 'input_write_2014_2020_R1'
-model_nam = 'input_write_2000_2022'
-
-model_ws = join(loadpth, model_nam, 'crop_modflow')
-
-scen_nam = 'input_write_2000_2022_R3'
-
-scen_ws = join(loadpth, scen_nam, 'crop_modflow')
-
-
-# %%
 ##############################################################################################
 ## write out the irrigation independent inputs (GHB, CHD, UPW, OC, NWT, DIS)
 print('Reading  input files')
@@ -231,15 +223,12 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 
 # %%
 rech_sum.sum(axis=(1,2))
-# rech_sum_s.sum(axis=(1,2))
-
-# %%
-m_
+rech_sum_s.sum(axis=(1,2))
 
 # %%
 # scale by number of cells to get distributed recharge
 area = 100*230
-# scale=
+# scale=v
 rech_plt_s = rech_sum_s.sum(axis=(1,2))[1:]/area
 plt.plot(rech_plt_s, label='Scenario')
 
@@ -248,8 +237,8 @@ plt.plot(rech_plt, label='Baseline')
 # plt.plot(plt_temp/area, label='Baseline')
 # plt.plot(rech_sum.sum(axis=(1,2))[1:]/area, label='Scenario')
 plt.legend()
-dx=4
-plt.xticks(np.arange(0, len(plt_temp))[::dx], all_run_dates.date.dt.year[1:-1][::dx]);
+# dx=4
+# plt.xticks(np.arange(0, len(plt_temp))[::dx], all_run_dates.date.dt.year[1:-1][::dx]);
 plt.ylabel('Annual total recharge rate (m)')
 
 # %%

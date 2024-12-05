@@ -91,16 +91,20 @@ def read_crop_arr_h5(crop, h5_fn):
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
-m_nam = 'input_write_2014_2020'
-m_nam = 'input_write_2014_2020_R1'
-m_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020_R1'
+# m_nam = 'input_write_2014_2020_R3'
 
-m_nam = 'input_write_2000_2022'
-m_nam = 'input_write_2000_2022_R20'
-m_nam = 'input_write_2000_2022_R3'
+m_nam = 'input_write_2014_2022'
+# m_nam = 'input_write_2014_2022_R20'
+# m_nam = 'input_write_2014_2022_R3'
+# m_nam = 'input_write_2014_2022_R4'
 
 model_ws = join(loadpth, m_nam)
 
+
+# %%
+# m_nam
 
 # %%
 # provide representative soil water budget folder
@@ -122,6 +126,7 @@ parcels.UniqueID = parcels.UniqueID.astype(int)
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 # years to sample output
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
+run_years = run_years[:-1]
 
 # %%
 # all_run_dates
@@ -129,7 +134,7 @@ run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 # %%
 # temp for while model is still running
 # run_years = np.arange(2001, 2011)
-run_years = np.arange(2001, 2020)
+# run_years = np.arange(2001, 2020)
 
 # %% [markdown]
 # # Review data available
@@ -151,7 +156,7 @@ for year in [run_years[-3]]:
 
 # %%
 # general limits for plotting
-ncol_max = 5
+ncol_max = 4
 # subtract 1 from run_years since last doesn't cover full period
 nyears = len(run_years)-1
 ncol = np.min((ncol_max, nyears))
@@ -271,8 +276,9 @@ for crop in crops:
         if exists(name):
             dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
             ax_n = ax[int(n/ncol), int(n%ncol)]
+            # keeps column of unique ID as index
             dtw_arr_mean = dtw_arr.mean()
-            dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean).assign(year=year)))
+            dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean, columns=['dtw_ft']).assign(year=year, crop=crop)))
             dtw_arr_mean.hist(ax=ax_n)
             ax_n.set_title(year)
         
@@ -283,12 +289,15 @@ for crop in crops:
     plt.close()
 
 # %%
+dtw_mean_all.to_csv(join(out_dir, 'dtw_ft_mean_all.csv'))
+
+# %%
 
 fig,ax = plt.subplots(nrow,ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
 
 for n,year in enumerate(run_years[:-1]):
     ax_n = ax[int(n/ncol), int(n%ncol)]
-    dtw_mean_all.loc[dtw_mean_all.year==year,0].hist(ax=ax_n)
+    dtw_mean_all.loc[dtw_mean_all.year==year,'dtw_ft'].hist(ax=ax_n)
     ax_n.set_title(year)
  
 fig.supylabel('Number of fields')
@@ -429,6 +438,9 @@ sns.catplot(df_annual_sum[df_annual_sum['var']==var],x='year',y='value', col='cr
             sharey=False
            # facet_kws={'sharey': False, 'sharex': True}
 )
+
+plt.savefig(join(out_dir, var+'_annual_total_m.png'))
+
 
 # %% [markdown]
 #

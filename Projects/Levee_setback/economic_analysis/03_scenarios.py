@@ -92,8 +92,12 @@ base_model_ws = loadpth+model_nam
 
 
 # %%
+load_only=['DIS','UPW','BAS6']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws= base_model_ws, 
-                                exe_name='mf-owhm', version='mfnwt')
+                                exe_name='mf-owhm', version='mfnwt',
+                              load_only=load_only,
+                              )
+
 
 nrow,ncol,nlay,delr,delc = (m.dis.nrow, m.dis.ncol, m.dis.nlay, m.dis.delr, m.dis.delc)
 
@@ -172,6 +176,14 @@ mar.loc[~mar.index.month.isin(np.arange(1,4)),'rch_cfs'] = 0
 mar['rch'] = mar.rch_cfs*86400*0.3048**3
 # need to assign recharge to cells
 
+# %% [markdown]
+# After creating a scenario you need to:
+# 1. Make sure new model workspace and modflow run files are available
+# 2. Run model_connect and make sure everything runs
+
+# %% [markdown]
+# ## vineyard recharge
+
 # %%
 # load kautz vineyards to assign to cells
 teichert = gpd.read_file(join(gwfm_dir,'Mapping','Kautz_shapefiles', 'Kautz Property.shp'))
@@ -180,6 +192,8 @@ vineyards = pd.concat((teichert, rooney)).to_crs(grid_p.crs)
 vineyards_grid = gpd.overlay(grid_p, vineyards).drop(columns=['Id','Name','Area'])
 vineyards_grid = vineyards_grid[vineyards_grid.geometry.area>(200*200*0.5)]
 
+
+# %%
 
 # %%
 # scale the total recharge flux by the area to get the average rate
@@ -227,9 +241,49 @@ def plt_rch(mar):
 plt_rch(mar)
 
 # %% [markdown]
-# After creating a scenario you need to:
-# 1. Make sure new model workspace and modflow run files are available
-# 2. Run model_connect and make sure everything runs
+# ## floodplain recharge
+
+# %%
+deer_ck = gpd.read_file(join(gwfm_dir, 'SFR_data','final_grid_sfr','Deer_Creek_sfr.shp'))
+deer_ck['name'] = 'Deer Creek'
+cosumnes_r = gpd.read_file(join(gwfm_dir, 'SFR_data','final_grid_sfr','Cosumnes_River_sfr.shp'))
+cosumnes_r['name'] = 'Cosumnes River'
+
+river = pd.concat((deer_ck, cosumnes_r))
+
+# %%
+buf=1E3
+deer_ck_buf = deer_ck.copy()
+deer_ck_buf.geometry = deer_ck.buffer(buf)
+
+cr_buf = cosumnes_r.copy()
+cr_buf.geometry = cr_buf.buffer(buf)
+
+floodplain = gpd.sjoin(cr_buf[['reach','geometry']], deer_ck_buf[['geometry']], predicate='intersects')
+# simplify to one geometry
+floodplain = gpd.GeoDataFrame([0], geometry = [floodplain.unary_union], crs=floodplain.crs)
+floodplain_grid = gpd.overlay(grid_p, floodplain)
+floodplain_grid = floodplain_grid.drop(columns=0)
+
+# %%
+# for floodplain
+fp_mar = mar.copy()
+# when flows exceed 5E3 cfs allow 90% flow then allow 20% diversion
+flow_90 = fp_mar.flow_cfs.quantile([0.9]).values[0]
+fp_mar.loc[fp_mar.flow_cfs>flow_90, 'rch_cfs'] = fp_mar.loc[fp_mar.flow_cfs>flow_90, 'flow_cfs']*0.2
+# calculate recharge recharge rate in m3/day
+fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
+
+# scale the total recharge flux by the area to get the average rate
+fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
+
+# %%
+
+# convert mar to grid level
+# need date as index, row, column, rch_rate (m/day)
+fp_mar_grid = fp_mar[['rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
+fp_mar_grid_out = fp_mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
+fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
 
 # %% [markdown]
 # ## plot climate

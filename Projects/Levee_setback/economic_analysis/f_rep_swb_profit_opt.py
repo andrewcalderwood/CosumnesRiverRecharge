@@ -168,7 +168,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     irr_all: irrigation for each field to be specified if run_opt=False
     '''
     # %%
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    # need to specify year to get specify year values or nearest available
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop, year=year)
 
     # %%
     #  get the dates for each yield cycle
@@ -245,6 +246,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     irr_eff_mult = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
     gen_dict['irr_eff_mult'] = 100/avg_irr_eff.loc[crop_dict[crop]].Avg_eff
     print(pred_dict[crop], ':',crop)
+    print('Irr eff mult', irr_eff_mult)
+    print('Eff GW con ', gw_con/irr_eff_mult,' and eff SW con', sw_con/irr_eff_mult)
 
     soil_crop = swb.load_soil(pred_dict[crop], crop_in)
     if soil_rep:
@@ -380,7 +383,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
             # simple linear keeps both SW/GW
             # linear_constraint = mak_irr_con(n_irr, gw_con = gw_con, sw_con = sw_con) 
             # linear constraint that keeps only the non-zero constraint
-            linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con, sw_con = sw_con) 
+            # the constraint should be divided by the irrigation efficiency multiplier
+            # to limit based on the actual water that will be applied
+            linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con/gen.irr_eff_mult, sw_con = sw_con/gen.irr_eff_mult) 
             # for the linear dtw the start tol (0.01) was too coarse
             # with representative case it makes to use 0.001 tolerance for all and not force positive values
             tol = 0.01  
@@ -389,6 +394,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
             # expected to have negative profits (200-400 dollar losses)
             while p_all[ns] > min_profit:
                 # the minimization with 'trust-constr' and no constraints doesn't solve and has increasing WB error
+                # should look at adding irrigation effiency into cost calculation but not irrigation or else the optimizer would simply scale
+                # means we should also adjust the linear constraint for each efficiency
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
                                method='trust-constr',
                         constraints = [linear_constraint],

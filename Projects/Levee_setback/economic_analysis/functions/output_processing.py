@@ -26,7 +26,7 @@ from functions.data_functions import read_crop_arr_h5
 # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # m_nam='input_write_2000_2022'
 # model_ws = join(loadpth, m_nam)
-# year=2004
+# year=2005
 # # testing
 # swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
@@ -309,19 +309,21 @@ def get_wb_by_parcel(model_ws, year,
         irr_sw_df_all =  pd.concat((irr_sw_df_all, irr_sw_df_long))
     return(pc_df_all, irr_gw_df_all, irr_sw_df_all)
 
+# %%
 
-    # %%
-    pc_df_all = pd.DataFrame()
+    # # for crop in crop_list:
+    # # for crop in ['Grape']:
+    # for crop in ['Alfalfa']:
+    #     print('Adding', crop,' to the parcel output dataframe')
+    #     var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
 
+    #     # need separte hdf5 for each year because total is 300MB, group by crop in array
+    #     fn = join(model_ws, 'rep_crop_soilbudget','field_SWB', "percolation_WY"+str(year)+".hdf5")
+    #     pc_all = read_crop_arr_h5(crop, fn)
 
-    # for crop in crop_list:
-    for crop in ['Grape']:
-        print('Adding', crop,' to the parcel output dataframe')
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-
-        # need separte hdf5 for each year because total is 300MB, group by crop in array
-        fn = join(model_ws, 'rep_crop_soilbudget','field_SWB', "percolation_WY"+str(year)+".hdf5")
-        pc_all = read_crop_arr_h5(crop, fn)
+    #     # # applied water (GW and SW are separate)
+    #     fn = join(model_ws, 'rep_crop_soilbudget','field_SWB', "GW_applied_water_WY"+str(year)+".hdf5")
+    #     irr_gw = read_crop_arr_h5(crop, fn)
 
 # %%
 # # out_summary_down = downscale_dtw_summary(out_summary)

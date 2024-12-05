@@ -155,13 +155,14 @@ def calc_yield(ETc, K_S, gen):
 # %%
 
        
-def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
+def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     """
     Y_A : actual yield (tons)
     dtw_arr : depth to water (ft)
     irr_gw : groundwater irrigation (m)
     irr_sw : surface water irrigation (m)
     gen : dictionary with cost variables
+    arrays: when False says that the optimization is being run so irrigation efficiency should be used to scale gw cost
     """
     # set up local variables
     p_c = gen.p_c
@@ -169,10 +170,17 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
     p_o = gen.p_o # operating cost, $/acre
     p_sw = gen.p_sw # surface water cost, $/acre-in
     phi = gen.phi # energy req to raise unit of water per unit length, kWh/acre-in/ft
+    # when optimizing cost, the irrigation efficiency should increase cost as the farmer expects this
+    # but not in irr for the soil water budget or else it will scale out
+    if not arrays:
+        irr_eff_mult = gen.irr_eff_mult     # irrigation efficiency multiplier
+    else:
+        irr_eff_mult = 1
+    
 
     in_2_m = (1/12)*0.3048 # convert from inches to meters
-    c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0])/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
-    c_swtot = np.multiply(p_sw, irr_sw[:,0])/in_2_m # Calcualte total surface water costs for the season ($/acre)
+    c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0]*irr_eff_mult)/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
+    c_swtot = np.multiply(p_sw, irr_sw[:,0]*irr_eff_mult)/in_2_m # Calcualte total surface water costs for the season ($/acre)
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
     # return as a negative for minimization
@@ -446,7 +454,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     ## profit simplified to a function
     # the profit from calc_profit is made negative for minimization
     # pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o)  
-    pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen)  
+    pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen, arrays)  
     if wb_sum.sum(axis=1).mean() > 1E-6:
         print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
 

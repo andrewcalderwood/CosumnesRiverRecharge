@@ -80,18 +80,24 @@ def get_var_year(df, year):
 
     # find variables that change by year
     df_year = df[~df.year.isna()]
+    # if no year is supplied then use the average of the data
+    df_year = df_year.dropna(axis=1, how='all') # can't group by columns of all NAs
+    grp_cols = df_year.columns[~df_year.columns.isin(['year','value'])].tolist()
     if year is not None:
         # find the year closest to the simulated year
-        df_year = df_year.loc[[(df_year.year-year).abs().idxmin()]]
+        # df_year = df_year.loc[[(df_year.year-year).abs().idxmin()]]
+        df_year['year_diff'] = (df_year.year-year).abs()
+        # groupby variable before finding lowest difference in year
+        df_year = df_year.loc[df_year.groupby(grp_cols)['year_diff'].idxmin().values]
+        df_year = df_year.drop(columns='year_diff')
     else:
-        # if no year is supplied then use the average of the data
-        df_year = df_year.dropna(axis=1, how='all') # can't group by columns of all NAs
-        grp_cols = df_year.columns[~df_year.columns.isin(['year','value'])].tolist()
+
         df_year = df_year.groupby(grp_cols).mean(numeric_only=True).reset_index()
     # add year data back to the static data
     df = pd.concat((df[df.year.isna()], df_year))
-    # since the season exists for Alfalfa/Pasture sort to make sure the variables are applied correctly
-    df = df.sort_values(['variable', 'season'])
+    if 'season' in df.columns:
+        # since the season exists for Alfalfa/Pasture sort to make sure the variables are applied correctly
+        df = df.sort_values(['variable', 'season'])
     return df
 
 # year = None
@@ -103,6 +109,7 @@ def load_var(crop, year=None):
     # crop = 'Alfalfa'
     fn = join(data_dir,'static_model_inputs.xlsx')
     var_gen = pd.read_excel(fn, sheet_name='General', comment='#')
+    var_gen = get_var_year(var_gen, year)
     var_gen = var_gen.set_index('variable')['value'] # adjust for quick pulling of variables
 
     # new version has prices by year
@@ -122,6 +129,7 @@ def load_var(crop, year=None):
     var_crops = var_crops_all[var_crops_all.crop==crop]
     var_crops = get_var_year(var_crops, year)
     var_crops = var_crops.set_index('variable')['value'] # adjust for quick pulling of variables
+    
     var_yield = var_yields_all[var_yields_all.crop==crop]
     
     season = season_all[season_all.crop==crop].sort_values(['crop','season'])
