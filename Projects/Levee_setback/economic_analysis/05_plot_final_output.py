@@ -97,8 +97,8 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 m_nam = 'input_write_2014_2022'
 m_nam = 'input_write_2014_2022_R20'
-# m_nam = 'input_write_2014_2022_R3'
-# m_nam = 'input_write_2014_2022_R4'
+m_nam = 'input_write_2014_2022_R3'
+m_nam = 'input_write_2014_2022_R4'
 
 model_ws = join(loadpth, m_nam)
 
