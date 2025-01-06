@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.4
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -89,6 +89,7 @@ def read_crop_arr_h5(crop, h5_fn):
 
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # m_nam = 'input_write_2014_2020'
@@ -96,9 +97,9 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # m_nam = 'input_write_2014_2020_R3'
 
 m_nam = 'input_write_2014_2022'
-# m_nam = 'input_write_2014_2022_R20'
-# m_nam = 'input_write_2014_2022_R3'
-# m_nam = 'input_write_2014_2022_R4'
+m_nam = 'input_write_2014_2022_R20'
+m_nam = 'input_write_2014_2022_R3'
+m_nam = 'input_write_2014_2022_R4'
 
 model_ws = join(loadpth, m_nam)
 

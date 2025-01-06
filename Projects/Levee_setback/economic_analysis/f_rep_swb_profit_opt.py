@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -28,7 +28,6 @@ import glob
 import sys
 import time
 from importlib import reload
-import h5py
 
 import pandas as pd
 import numpy as np
@@ -36,6 +35,9 @@ import numpy as np
 # standard geospatial python utilities
 import shapely
 import geopandas as gpd
+
+import h5py
+
 
 # %%
 from scipy.optimize import minimize
@@ -71,7 +73,7 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 import functions.Basic_soil_budget_monthly as swb
-reload(swb)
+# reload(swb)
 
 
 # %%
@@ -100,23 +102,25 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-# # testing
-# year = int(2015)
-# crop='Grape'
-# crop='Corn'
+# # # # testing
+# year = int(2020)
+# # # crop='Grape'
+# # # crop='Corn'
 # crop='Alfalfa'
-# crop='Pasture' # will require extra work due to AUM vs hay
-# crop = 'Misc Grain and Hay'
+# # crop='Pasture' # will require extra work due to AUM vs hay
+# # crop = 'Misc Grain and Hay'
 
 # %%
-# # # # # testing
-# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # # # # # testing
+# # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# m_nam = 'input_write_2014_2022'
 # m_nam = 'input_write_2014_2020'
 # base_model_ws = join(loadpth, m_nam )
 # swb_ws = join(base_model_ws, 'crop_soilbudget')
 # crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
-# # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
-# #                      index_col=0, parse_dates=['dt'])
+# dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
+#                      index_col=0, parse_dates=['dt'])
 # dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
 #                     index_col=0, parse_dates=['date'])
 # dtw_df.columns = dtw_df.columns.astype(int)
@@ -128,11 +132,18 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # sw_con=100
 # gw_con=36
 
+# load parcel data for soil_rep=False
+# soil_rep=False
+
+# dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
+# dtw_df.index = pd.to_datetime(dtw_df.index)
+# dtw_df.columns = dtw_df.columns.astype(int)
+
 # %%
-# ## simple representative DTW for linear steps 10 ft to 200 ft
-# ## with a 5 ft decline from June to December based on observed data
+## simple representative DTW for linear steps 10 ft to 200 ft
+## with a 5 ft decline from June to December based on observed data
 # dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
-# dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
+# dtw_avg = dtw_avg.assign(decline = float(0)).set_index('date')
 # # dates where a decline date is specified
 # decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
 # decline_total = 5
@@ -142,7 +153,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
 # dtw_df =  pd.DataFrame(dtw_simple, dtw_avg.index)
 
-# # plt.plot(dtw_simple[:,0])
+# plt.plot(dtw_simple[:,0])
 
 # %% [markdown]
 # Now that we are interested in making this run for the native land use perhaps then it may be time to create a class object to allow flexibility.
@@ -152,7 +163,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 run_opt=True, irr_all=None, field_id = 'parcels', 
-                sw_con=1000, gw_con=1000):
+                sw_con=200, gw_con=200):
     ''' 
     Function to import variables related to soil water budget function
     to then run the function in a profit optimizer before saving the results in hdf5 format
@@ -281,6 +292,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         crop_dtw = pd.concat([crop_dtw]*ntimes, axis=1)
     else:
         crop_dtw = dtw_df.loc[:,soil_crop['UniqueID'].values]
+        # could also import already ffill data created in 03b_summarize_output
+        crop_dtw = crop_dtw.reindex(dates).ffill() 
+
 
     # select dates being simulated
     crop_dtw = crop_dtw.loc[dates].values
@@ -290,6 +304,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 # %%
 # import matplotlib.pyplot as plt
 # plt.plot(crop_dtw);
+# dates
+# dtw_df
 
 
 # %% [markdown]

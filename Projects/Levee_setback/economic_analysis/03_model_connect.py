@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -67,6 +67,7 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 m_nam = sys.argv[1]
 
 # m_nam = 'input_write_2014_2022_R3'
+# m_nam = 'input_write_2014_2020_R3'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
@@ -176,7 +177,8 @@ well_loc_merge.UniqueID = well_loc_merge.UniqueID.astype(int)
 
 # %%
 # should we may the loadpth economic instead of Regional?
-loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
@@ -199,12 +201,22 @@ ibound = m.bas6.ibound.array
 # bottom array is needed for referencing well layer
 botm = m.dis.botm.array
 
+# %%
+m_dim = (m.dis.nlay, m.dis.nrow,  m.dis.ncol)
+np.savetxt(join(m_model_ws, 'model_metadata.txt'), m_dim)
+
+
 # %% [markdown]
 # ## General model input
 # Data that is not impacted by crop choice or irrigation decisions
 # - Well data for pumping
 # - Native land use recharge
 # - recharge scenarios (requires use of a different model_ws)
+
+# %%
+# may want to add a year start/end or put in subfolder of modflow model
+# so we can run different versions
+model_ws = join(loadpth, m_nam)
 
 # %%
 ## add domestic pumping
@@ -272,16 +284,23 @@ native_pc = native_pc[native_pc.rch_rate!=0]
 # we are underestimating recharge
 
 # %%
+dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # well_loc_merge.depth_m
 ## sample well layer
 # get top elevations to calculate well screen elevation
-well_loc_merge['top_elev'] = m.dis.top.array[well_loc_merge.row-1, well_loc_merge.column-1]
-well_loc_merge['well_elev'] = well_loc_merge.top_elev - well_loc_merge.depth_m
+# well_loc_merge['top_elev'] = m.dis.top.array[well_loc_merge.row-1, well_loc_merge.column-1]
+# well_loc_merge['well_elev'] = well_loc_merge.top_elev - well_loc_merge.depth_m
+# switched to DEM since model top can sometimes be different than reality
+well_loc_merge['dem'] = dem_data[well_loc_merge.row-1, well_loc_merge.column-1]
+well_loc_merge['well_elev'] = well_loc_merge.dem - well_loc_merge.depth_m*0.9
 # make layer 1 based
 well_loc_merge['layer'] = get_layer_from_elev(well_loc_merge.well_elev.values, 
                     botm[:, well_loc_merge.row-1, well_loc_merge.column-1], m.dis.nlay)+1
 # make 0-based columns
 well_loc_merge[['k','i','j']] = well_loc_merge[['layer','row','column']]-1
+# save file with well layers so it can be easily referenced by other scripts (e.g., summarize_output)
+well_loc_merge[['UniqueID','dem','layer', 'row','column']].to_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'), index=False)
+
 
 # %% [markdown]
 # Specify dates for the entire model period and seasonal dates to start/stop the model.
@@ -317,9 +336,7 @@ else:
 fn = join(data_dir,'static_model_inputs.xlsx')
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
-# may want to add a year start/end or put in subfolder of modflow model
-# so we can run different versions
-model_ws = join(loadpth, m_nam)
+
 
 # save log by date so we can see old versions
 os.makedirs(join(model_ws, 'log'), exist_ok=True)
@@ -779,6 +796,12 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     sys.stdout.flush()
 
+
+# %% [markdown]
+# # Re-run soil water budget to calculate actual profit
+# The soil water budget needs to be re-run at the end of each year to calculate the profit based on the actual water availability for surface water and groundwater. This could be done at the very end of the simulation if the farmer doesn't need previous year profits between years.
+# easiest way is likely to call summarize_output as a function or by having it read-in a csv with the year to make a pseudo-function
+
 # %%
 t_final = time.time()
 print('Total time was %.2f hours' %((t_final-t_start)/3600))
@@ -786,6 +809,3 @@ print('Total time was %.2f hours' %((t_final-t_start)/3600))
 # %% [markdown]
 # The MODFLOW run-time for one year was 49 min. This was for the version with 19 layers which we can cut down to 10 or so by removing TPROGs and this could be sped up by reducing the amont of output saved since we may not need to review the CBC output.
 
-# %% [markdown]
-# # Re-run soil water budget to calculate actual profit
-# The soil water budget needs to be re-run at the end of each year to calculate the profit based on the actual water availability for surface water and groundwater. This could be done at the very end of the simulation if the farmer doesn't need previous year profits between years.
