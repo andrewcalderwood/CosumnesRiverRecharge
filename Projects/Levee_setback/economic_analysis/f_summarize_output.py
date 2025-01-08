@@ -56,30 +56,7 @@ warnings.filterwarnings("ignore")
 # warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 # %%
-# updated version specifies concept_name and copy_files here so it can be easily
-# seen as these are the main update to make in a script
 
-m_nam = sys.argv[1]
-# scenario_name = sys.argv[2]
-
-# m_nam = 'input_write_2000_2022'
-# m_nam = 'input_write_2000_2022_R3'
-# m_nam = 'input_write_2000_2022_R20'
-
-print('sys.argv[1] (m_nam) is...')
-print(m_nam)
-
-
-# print('sys.argv[2] (scenario_name) is...')
-# print(scenario_name)
-print('\n\n')
-
-
-t_start = time.time()
-
-# %%
-import functions.output_processing
-reload(functions.output_processing)
 from functions.output_processing import get_wb_by_parcel
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 import functions.Basic_soil_budget_monthly as swb
@@ -89,10 +66,6 @@ from functions.data_functions import init_h5
 
 
 # %%
-# from functions.swb_functions import run_swb
-# import f_rep_swb_profit_opt
-# reload(f_rep_swb_profit_opt)
-
 from f_rep_swb_profit_opt import load_run_swb
 
 
@@ -118,76 +91,52 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+def summarize_output_year(loadpth, m_nam, m_per, parcels):
+    '''
+    INPUT:
+    m_nam: model name
+    m_per: the integer index of the current model period (1 = year 1)
+    parcels: geopandas dataframe with UniqueID geometry to allow area calculation
+    '''
+    parcels['acres'] = parcels.area_m2/(43560*0.3048**2)
+    parcels.UniqueID = parcels.UniqueID.astype(int)
 
-# m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2020_R1'
-# m_nam = 'input_write_2014_2020_R3'
+    # %%
 
-model_ws = join(loadpth, m_nam)
+    model_ws = join(loadpth, m_nam)
+    out_dir = join(model_ws, 'output_clean')
 
-# simpler way to get base model workspace is remove R\d{1,2} since all should follow this format
-m_nam_base = re.sub(r'_R\d{1,2}', '', m_nam)
-
-
-# %%
-sys.stdout = open(join(model_ws, 'log', 'summarize_output_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
-
-
-# %%
-# provide representative soil water budget folder
-swb_ws = join(model_ws, 'rep_crop_soilbudget')
-os.makedirs(join(swb_ws, 'output'), exist_ok=True)
-
-# %%
-# no longer need to load MODFLOW if we pre-process csv with parcel well and layer
-# define modflow model WS to reference for modflow input
-m_model_ws = join(dirname(loadpth), 'Regional', m_nam_base)
-
-# load_only=['DIS', 'BAS6']
-
-# m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
-#                                 exe_name='mf-owhm', version='mfnwt',
-#                               load_only = load_only)
-
-# %%
-# bottom array is needed for referencing well layer
-# botm = m.dis.botm.array
-m_dim = np.loadtxt(join(m_model_ws, 'model_metadata.txt')).astype(int)
+    # simpler way to get base model workspace is remove R\d{1,2} since all should follow this format
+    m_nam_base = re.sub(r'_R\d{1,2}', '', m_nam)
 
 
-# %%
-# from mf_utility import get_layer_from_elev
-# dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
-# nlay,nrow,ncol = botm.shape
-# # also need shapefile of pumping well locations for each parcel
-# parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
-# frow = parcel_wells.row-1
-# fcol = parcel_wells.column-1
-# # # parcel_wells layers (make 1-based
-# parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
-# # get elevation
-# parcel_wells['dem'] = dem_data[parcel_wells.row-1, parcel_wells.column-1]
-# parcel_wells = parcel_wells[['UniqueID','dem','layer', 'row','column']]
-# now have this file pre-created by model_connect since it already estimates layer
-parcel_wells = pd.read_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'))
-parcel_wells.UniqueID = parcel_wells.UniqueID.astype(int)
+    # %%
+    # provide representative soil water budget folder
+    swb_ws = join(model_ws, 'rep_crop_soilbudget')
+    os.makedirs(join(swb_ws, 'output'), exist_ok=True)
+
+    # %%
+    # define modflow model WS to reference for modflow input
+    m_model_ws = join(dirname(loadpth), 'Regional', m_nam_base)
 
 
-# %%
-all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
+    # %%
+    m_dim = np.loadtxt(join(m_model_ws, 'model_metadata.txt')).astype(int)
 
 
-# %% [markdown]
-# Iteration starts here by year and crop lower down
+    # %%
+    # now have this file pre-created by model_connect since it already estimates layer
+    parcel_wells = pd.read_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'))
+    parcel_wells.UniqueID = parcel_wells.UniqueID.astype(int)
 
-# %%
 
-# for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [all_run_dates.shape[0]-1]:
-for m_per in [6]:
-# for m_per in [4]:
+    # %%
+    all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
+
+
+    # %%
+    # for m_per in np.arange(1, all_run_dates.shape[0]-1):
+    # for m_per in [6]:
     m_strt = all_run_dates.iloc[m_per].date
     year = m_strt.year
     print(year)
@@ -214,13 +163,10 @@ for m_per in [6]:
     # determine dates for spring sampling
     spring_dates = m_dates[m_dates.index.month==3]
     # get head value from last 30 days to avoid using extreme single day value
-    # spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
     spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m_dim)
     
     # the dtw conversion runs a little slow
     # get the DTW for the wels in the simulation from the last period
-    # well_dtw = sample_dtw(spring_heads, botm) # old version re-calculated well layer
-    # new version loads the parcel_wells_csv
     well_dtw = sample_dtw(spring_heads, parcel_wells)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
@@ -382,22 +328,53 @@ for m_per in [6]:
 # %%
 # after running the updated swb for a year then it would make sense to load in the hdf5 for profit to calculate the average value but this could also be done
 # in a secondary script called by model_connect
+# code comes from plot_final_output.py
+    print('Loading output to calculate crop average profit and yield')
+    # %%
+    # load SWB folder
+    crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
+    print('\n', year, end=' - ')
+    df_all = pd.DataFrame()
 
-# %%
-t_final = time.time()
-print('Total time was %.2f hours' %((t_final-t_start)/3600))
+    # for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'yield']:
+        print(var, end=',')
+        name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        with h5py.File(name) as dset:
+            finished_crops = list(dset['array'].keys())
+            print(finished_crops, end='.')
+        for crop in finished_crops:
+            # need dates for time series water budget output
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
 
-# %% [markdown]
-# # Comparison of output
+            # extract output and convert to dataframe with ID columns
+            arr = read_crop_arr_h5(crop, name)
+            df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
+            # add parcel information back
+            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
+            df_all = pd.concat((df_all, df))
 
-# %%
-# out_ws = join(model_ws,'crop_soilbudget')
 
-# %%
-# # # applied water (GW and SW are separate)
-# fn = join(out_ws, 'field_SWB', "yield_WY"+str(year)+".hdf5")
-# Y_A = read_crop_arr_h5(crop, fn)
 
-# fn = join(out_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
-# # the saved profit is mutliplied by negative for minimization so need to make into real profit
-# pi = -read_crop_arr_h5(crop, fn)
+    # correct profit from negative to positive
+    df_all.loc[df_all['var']=='profit','value'] *= -1
+    # fix name before ID join
+    df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
+    # rename as econ for plotting reference
+    df_econ = df_all.merge(parcels[['UniqueID','acres']])
+
+    # %%
+    # scale value rates (1/acre) into totals 
+    df_econ['total_value'] = df_econ['value']*df_econ.acres
+    # we want to aggregate yield and profit by the profit/acre and yield/acre to the total
+    # look at average rate, and summed total (scaled by acreage)
+    df_econ_agg = df_econ.groupby(['crop','name','var','year'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
+    # df_econ.groupby(['crop','name','var','year'])['total_value'].agg(['sum', 'mean'])
+
+    df_econ_agg = df_econ_agg.reset_index()
+    df_econ_agg.year = df_econ_agg.year.astype(str)
+
+    # %%
+    print('Saving average profit and yield')
+    # save data for read in by model_connect to inform next year's crop choice
+    df_econ_agg.to_csv(join(out_dir, 'profit_yield_long_'+str(year)+'.csv'))

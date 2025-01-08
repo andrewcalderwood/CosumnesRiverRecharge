@@ -68,7 +68,10 @@ def predict_crops(data, rev_prior_yr_df, logit_coefs):
     
     # Assign Crop Choice based on maximum probability
     conditions = [data[f'PP.{crop}'] == data['maxprob'] for crop in crops]
-    data['Crop_Choice'] = np.select(conditions, crops)
+    data['Crop_Choice'] = np.select(conditions, crops, default='Unclassified_fallow')
+    # a suggestion by the peer review group was that a farmer may not always
+    # select the highest probability, thus a random number should be used to select
+    # from the distribution to determine the crop used
     
     # MODFLOW/irrigation choice info: parcel_id and Crop_Choice
     # not going to extract probabilities because that should be reviewed/processed elsewhere

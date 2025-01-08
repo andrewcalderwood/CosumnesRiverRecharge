@@ -68,6 +68,7 @@ m_nam = sys.argv[1]
 
 # m_nam = 'input_write_2014_2022_R3'
 # m_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2020'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
@@ -96,6 +97,8 @@ from report_cln import base_round
 from mf_utility import get_layer_from_elev
 
 # %%
+# import parcelchoicemodelupdate.f_predict_landuse
+# reload(parcelchoicemodelupdate.f_predict_landuse)
 from parcelchoicemodelupdate.f_predict_landuse import predict_crops
 
 # %%
@@ -119,8 +122,8 @@ from functions.f_gw_dtw_extract import calc_simple_dtw
 from functions.data_functions import read_crop_arr_h5
 
 # %%
-import functions.output_processing
-reload(functions.output_processing)
+# import functions.output_processing
+# reload(functions.output_processing)
 from functions.output_processing import get_local_data, out_arr_to_long_df
 from functions.output_processing import get_wb_by_parcel
 
@@ -129,6 +132,12 @@ from functions.output_processing import get_wb_by_parcel
 # reload( reference_swb_ag_winter )
 from reference_swb_ag_winter import run_swb_ag_winter
 
+
+# %%
+# option 2 is to call a function
+# import f_summarize_output
+# reload(f_summarize_output)
+from f_summarize_output import summarize_output_year
 
 # %% [markdown]
 # If we are going to run the crop/swb for a certain period then there should already have been a MODFLOW model run for that same period with estimates of streamflow and precipitation to drive the other boundary conditions.
@@ -202,12 +211,9 @@ ibound = m.bas6.ibound.array
 botm = m.dis.botm.array
 
 # %%
-join(m_model_ws, 'model_metadata.txt')
-
-# %%
 m_dim = (m.dis.nlay, m.dis.nrow,  m.dis.ncol)
 np.savetxt(join(m_model_ws, 'model_metadata.txt'), m_dim)
-# # np.savetxt?
+
 
 # %% [markdown]
 # ## General model input
@@ -302,7 +308,8 @@ well_loc_merge['layer'] = get_layer_from_elev(well_loc_merge.well_elev.values,
 # make 0-based columns
 well_loc_merge[['k','i','j']] = well_loc_merge[['layer','row','column']]-1
 # save file with well layers so it can be easily referenced by other scripts (e.g., summarize_output)
-well_loc_merge[['UniqueID','dem','layer', 'row','column']].to_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'), index=False)
+parcel_wells = well_loc_merge[['UniqueID','dem','layer', 'row','column']].copy()
+parcel_wells.to_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'), index=False)
 
 
 # %% [markdown]
@@ -425,11 +432,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # get head value from last 30 days to avoid using extreme single day value
-    fall_heads = avg_heads(fall_dates.kstpkper.values, hdobj, m)
+    fall_heads = avg_heads(fall_dates.kstpkper.values, hdobj, m_dim)
     
     # the dtw conversion runs a little slow
     # get the DTW for the wels in the simulation from the last period
-    well_dtw = sample_dtw(fall_heads, botm)
+    well_dtw = sample_dtw(fall_heads, parcel_wells)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
@@ -497,11 +504,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # get head value from last 30 days to avoid using extreme single day value
-    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m_dim)
     
     # the dtw conversion runs a little slow
     # get the DTW for the wels in the simulation from the last period
-    well_dtw = sample_dtw(spring_heads, botm)
+    well_dtw = sample_dtw(spring_heads, parcel_wells)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
     well_dtw.to_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'))
@@ -804,6 +811,17 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # # Re-run soil water budget to calculate actual profit
 # The soil water budget needs to be re-run at the end of each year to calculate the profit based on the actual water availability for surface water and groundwater. This could be done at the very end of the simulation if the farmer doesn't need previous year profits between years.
 # easiest way is likely to call summarize_output as a function or by having it read-in a csv with the year to make a pseudo-function
+#
+
+# %%
+# option 1 is call entire script
+# import subprocess
+    # subprocess.call("03b_summarize_output.py", shell=False)
+
+    # %%
+    # calculate the actual profit and yield for each parcel then calculate the average
+    # to inform next years crop choice
+    summarize_output_year(m_nam, m_per, parcels)
 
 # %%
 t_final = time.time()
