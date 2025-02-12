@@ -520,6 +520,12 @@ def mak_irr_con_adj(n_irr, sw_con = 100, gw_con = 100):
     linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
     return linear_constraint
 
+    # %%
+    # SLSQP requires
+    # eq_cons = {'type': 'eq',
+    #            'fun' : lambda x: np.array([2*x[0] + x[1] - 1]),
+    #            'jac' : lambda x: np.array([2.0, 1.0])}
+
 
 # %%
 # linear_constraint = mak_irr_con_adj(7, sw_con=0, gw_con=36)

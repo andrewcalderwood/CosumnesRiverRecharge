@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -585,6 +585,9 @@ params = param_load(model_ws, gel_dir, 'ZonePropertiesInitial.csv')
 params = params.set_index('Zone')
 # convert from m/s to m/d
 params['K_m_d'] = params.K_m_s * 86400    
+
+# %%
+# tprogs_files
 
 # %%
 # # load data from Steven

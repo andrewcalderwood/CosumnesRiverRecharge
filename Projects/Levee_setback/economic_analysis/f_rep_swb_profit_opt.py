@@ -125,12 +125,12 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 #                     index_col=0, parse_dates=['date'])
 # dtw_df.columns = dtw_df.columns.astype(int)
 
-# soil_rep = True # True is for the complex dtw_df case
-# run_opt=True
-# field_id = 'parcels'
+soil_rep = True # True is for the complex dtw_df case
+run_opt=True
+field_id = 'parcels'
 
-# sw_con=100
-# gw_con=36
+sw_con=200
+gw_con=200
 
 # load parcel data for soil_rep=False
 # soil_rep=False
@@ -315,9 +315,19 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 
     # convert dictionary of variables to class for easier referencing, constant over different soil
     gen = cost_variables(gen_dict)
-    
-    bounds = Bounds(lb = 0)
 
+    # can define bounds for each variable individually
+    # a scalar indicates it is applied to all variables
+    # could easily throw in the upper bound here based on crop reasonable upper limit
+    # for now the max upper limit is 2 ft based on alfalfa
+    bounds = Bounds(lb = 0, ub = (24/12)*0.3048)
+
+
+    # %%
+    # SLSQP requires
+    # eq_cons = {'type': 'eq',
+    #            'fun' : lambda x: np.array([2*x[0] + x[1] - 1]),
+    #            'jac' : lambda x: np.array([2.0, 1.0])}
 
     # %%
     # # create a dataframe of soil data to save
@@ -386,8 +396,13 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 n_irr_type=1
             
             irr_lvl = np.zeros(n_irr_type*n_irr); # Initial irrigation values for optimization
+            # review shows usually it should be 4 inches for most crops with 8 for alfalfa
+            # starting at 4 seems to run eve slower
+            # starting at 2 also has issues
             irr_lvl[:] = (2/12)*0.3048 # irrigate with 2 inches (convert to meters)
             irr_lvl_base = np.ones(n_irr_type*n_irr)*(2/12)*0.3048
+            # the issue with reusing previous irrigation is if a bad decision
+            # is made by the solver then it persists so better to start from defaults each time
             if ns > 0:
                 if water_source=='gw':
                     irr_lvl[:] = irr_all[ns-1,n_irr:]
@@ -395,6 +410,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                     irr_lvl[:] = irr_all[ns-1,:n_irr]
                 else:
                     irr_lvl[:] = irr_all[ns-1]
+
+            # if irrigation is greater than maximum then reset to default
+            
+            
             print('Irr length:', len(irr_lvl))
             # simple linear keeps both SW/GW
             # linear_constraint = mak_irr_con(n_irr, gw_con = gw_con, sw_con = sw_con) 
@@ -414,9 +433,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 # means we should also adjust the linear constraint for each efficiency
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
                                method='trust-constr',
+                               method='SLSQP',
                         constraints = [linear_constraint],
                         bounds=bounds,
-                #          options={'verbose':1}
+                         options={'verbose':1}
                                tol = tol
                         )
                 # decrease tolerance and reset starting irrigation to help solving
@@ -489,6 +509,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         print('Assuming no irrigation for all fields')
         irr_all = np.zeros((nfield_crop,2*n_irr))
     print('Calculating true irrigation with irrigation efficiency')
+    # correct for any irrigation below 0
+
     # scale by irrigation efficiency of the crop after optimizing
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     p_true = np.zeros(nfield_crop) 

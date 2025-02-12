@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -519,6 +519,12 @@ def mak_irr_con_adj(n_irr, sw_con = 100, gw_con = 100):
     # make constraint
     linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
     return linear_constraint
+
+    # %%
+    # SLSQP requires
+    # eq_cons = {'type': 'eq',
+    #            'fun' : lambda x: np.array([2*x[0] + x[1] - 1]),
+    #            'jac' : lambda x: np.array([2.0, 1.0])}
 
 
 # %%

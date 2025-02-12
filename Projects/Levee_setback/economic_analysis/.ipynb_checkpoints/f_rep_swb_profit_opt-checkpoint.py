@@ -28,6 +28,7 @@ import glob
 import sys
 import time
 from importlib import reload
+import h5py
 
 import pandas as pd
 import numpy as np
@@ -35,9 +36,6 @@ import numpy as np
 # standard geospatial python utilities
 import shapely
 import geopandas as gpd
-
-import h5py
-
 
 # %%
 from scipy.optimize import minimize
@@ -73,7 +71,7 @@ add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
 import functions.Basic_soil_budget_monthly as swb
-# reload(swb)
+reload(swb)
 
 
 # %%
@@ -102,48 +100,40 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-# # # # testing
-# year = int(2020)
-# # # crop='Grape'
-# # # crop='Corn'
+# # testing
+year = int(2017)
+crop='Grape'
+# crop='Corn'
 # crop='Alfalfa'
-# # crop='Pasture' # will require extra work due to AUM vs hay
-# # crop = 'Misc Grain and Hay'
+# crop='Pasture' # will require extra work due to AUM vs hay
+# crop = 'Misc Grain and Hay'
 
 # %%
-# # # # # # testing
-# # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# m_nam = 'input_write_2014_2022'
-# m_nam = 'input_write_2014_2020'
-# base_model_ws = join(loadpth, m_nam )
-# swb_ws = join(base_model_ws, 'crop_soilbudget')
-# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+# # # # # testing
+# loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+m_nam = 'input_write_2014_2020'
+base_model_ws = join(loadpth, m_nam )
+swb_ws = join(base_model_ws, 'crop_soilbudget')
+crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
 # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
 #                      index_col=0, parse_dates=['dt'])
-# dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
-#                     index_col=0, parse_dates=['date'])
-# dtw_df.columns = dtw_df.columns.astype(int)
+dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+                    index_col=0, parse_dates=['date'])
+dtw_df.columns = dtw_df.columns.astype(int)
 
-# soil_rep = True # True is for the complex dtw_df case
-# run_opt=True
-# field_id = 'parcels'
+soil_rep = True # True is for the complex dtw_df case
+run_opt=True
+field_id = 'parcels'
 
-# sw_con=100
-# gw_con=36
-
-# load parcel data for soil_rep=False
-# soil_rep=False
-
-# dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
-# dtw_df.index = pd.to_datetime(dtw_df.index)
-# dtw_df.columns = dtw_df.columns.astype(int)
+sw_con=200
+gw_con=200
 
 # %%
-## simple representative DTW for linear steps 10 ft to 200 ft
-## with a 5 ft decline from June to December based on observed data
+# ## simple representative DTW for linear steps 10 ft to 200 ft
+# ## with a 5 ft decline from June to December based on observed data
 # dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
-# dtw_avg = dtw_avg.assign(decline = float(0)).set_index('date')
+# dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
 # # dates where a decline date is specified
 # decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
 # decline_total = 5
@@ -153,7 +143,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
 # dtw_df =  pd.DataFrame(dtw_simple, dtw_avg.index)
 
-# plt.plot(dtw_simple[:,0])
+# # plt.plot(dtw_simple[:,0])
 
 # %% [markdown]
 # Now that we are interested in making this run for the native land use perhaps then it may be time to create a class object to allow flexibility.
@@ -163,7 +153,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 run_opt=True, irr_all=None, field_id = 'parcels', 
-                sw_con=200, gw_con=200):
+                sw_con=1000, gw_con=1000):
     ''' 
     Function to import variables related to soil water budget function
     to then run the function in a profit optimizer before saving the results in hdf5 format
@@ -304,8 +294,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 # %%
 # import matplotlib.pyplot as plt
 # plt.plot(crop_dtw);
-# dates
-# dtw_df
 
 
 # %% [markdown]
@@ -315,9 +303,19 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
 
     # convert dictionary of variables to class for easier referencing, constant over different soil
     gen = cost_variables(gen_dict)
-    
-    bounds = Bounds(lb = 0)
 
+    # can define bounds for each variable individually
+    # a scalar indicates it is applied to all variables
+    # could easily throw in the upper bound here based on crop reasonable upper limit
+    # for now the max upper limit is 2 ft based on alfalfa
+    bounds = Bounds(lb = 0, ub = (24/12)*0.3048)
+
+
+    # %%
+    # SLSQP requires
+    # eq_cons = {'type': 'eq',
+    #            'fun' : lambda x: np.array([2*x[0] + x[1] - 1]),
+    #            'jac' : lambda x: np.array([2.0, 1.0])}
 
     # %%
     # # create a dataframe of soil data to save
@@ -386,8 +384,13 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 n_irr_type=1
             
             irr_lvl = np.zeros(n_irr_type*n_irr); # Initial irrigation values for optimization
+            # review shows usually it should be 4 inches for most crops with 8 for alfalfa
+            # starting at 4 seems to run eve slower
+            # starting at 2 also has issues
             irr_lvl[:] = (2/12)*0.3048 # irrigate with 2 inches (convert to meters)
             irr_lvl_base = np.ones(n_irr_type*n_irr)*(2/12)*0.3048
+            # the issue with reusing previous irrigation is if a bad decision
+            # is made by the solver then it persists so better to start from defaults each time
             if ns > 0:
                 if water_source=='gw':
                     irr_lvl[:] = irr_all[ns-1,n_irr:]
@@ -395,6 +398,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                     irr_lvl[:] = irr_all[ns-1,:n_irr]
                 else:
                     irr_lvl[:] = irr_all[ns-1]
+
+            # if irrigation is greater than maximum then reset to default
+            
+            
             print('Irr length:', len(irr_lvl))
             # simple linear keeps both SW/GW
             # linear_constraint = mak_irr_con(n_irr, gw_con = gw_con, sw_con = sw_con) 
@@ -414,9 +421,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 # means we should also adjust the linear constraint for each efficiency
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
                                method='trust-constr',
+                               method='SLSQP',
                         constraints = [linear_constraint],
                         bounds=bounds,
-                #          options={'verbose':1}
+                         options={'verbose':1}
                                tol = tol
                         )
                 # decrease tolerance and reset starting irrigation to help solving
@@ -489,6 +497,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         print('Assuming no irrigation for all fields')
         irr_all = np.zeros((nfield_crop,2*n_irr))
     print('Calculating true irrigation with irrigation efficiency')
+    # correct for any irrigation below 0
+
     # scale by irrigation efficiency of the crop after optimizing
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     p_true = np.zeros(nfield_crop) 

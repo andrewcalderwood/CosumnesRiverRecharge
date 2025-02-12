@@ -89,6 +89,7 @@ def read_crop_arr_h5(crop, h5_fn):
 
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
@@ -160,40 +161,59 @@ nrow = int(np.ceil(nyears/ncol_max))
 figsize= (4*ncol, 3*nrow)
 
 # %%
-# df_all = pd.DataFrame()
-# for year in run_years:
-# # for year in [2015]:
-#     # load SWB folder
-#     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
-#     print('\n', year, end=' - ')
-#     # for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
-#     for var in ['profit', 'yield']:
-#         print(var, end=',')
-#         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-#         with h5py.File(name) as dset:
-#             finished_crops = list(dset['array'].keys())
-#             print(finished_crops, end='.')
-#         for crop in finished_crops:
-#         # for crop in finished_crops[2]:
-#             # need dates for time series water budget output
-#             var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-#             # strt_date = yield_start.min()
-#             # end_date = yield_end.max()
-#             # dates = pd.date_range(strt_date, end_date, freq='D')
-#             # extract output and convert to dataframe with ID columns
-#             arr = read_crop_arr_h5(crop, name)
-#             df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
-#             # add parcel information back
-#             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
+
+df_all = pd.DataFrame()
+for year in run_years:
+# for year in [2015]:
+    # load SWB folder
+    crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
+    print('\n', year, end=' - ')
+    # for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'yield']:
+        print(var, end=',')
+        # version for results
+        name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        # version for troubleshooting
+        # name = join(model_ws, 'rep_crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        with h5py.File(name) as dset:
+            finished_crops = list(dset['array'].keys())
+            print(finished_crops, end='.')
+        for crop in finished_crops:
+        # for crop in finished_crops[2]:
+            # need dates for time series water budget output
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            # yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            # yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # # get the total extent of the irrigation season (calculation period)
+            # strt_date = yield_start.min()
+            # end_date = yield_end.max()
+            # dates = pd.date_range(strt_date, end_date, freq='D')
+            # extract output and convert to dataframe with ID columns
+            arr = read_crop_arr_h5(crop, name)
+            df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
+            # add parcel information back
+            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
 
 #             df_all = pd.concat((df_all, df))
 
-# # correct profit from negative to positive
-# df_all.loc[df_all['var']=='profit','value'] *= -1
-# # fix name before ID join
-# df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
-# # rename as econ for plotting reference
-# df_econ = df_all.merge(parcels[['UniqueID','acres']])
+
+# correct profit from negative to positive
+df_all.loc[df_all['var']=='profit','value'] *= -1
+# fix name before ID join
+df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
+# rename as econ for plotting reference
+df_econ = df_all.merge(parcels[['UniqueID','acres']])
+# troublshooting for rep version 
+# df_econ = df_all.copy()
+
+# %%
+
+# ## investigate problematic irrigation through profit
+# # check parcels that are reporting poor profit to see if there is a balance or outliers
+# sns.catplot(df_econ[(df_econ.year==2017)&(df_econ['var']=='profit')],y='value',  col='crop',
+#             kind='box', color='tab:blue',
+#             sharey=False
+# );
 
 # %%
 # # scale value rates (1/acre) into totals 
@@ -219,11 +239,11 @@ df_econ_agg = df_econ_agg.reset_index()
 
 # %%
 # save data for Yusuke
-df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+# df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
 
 # convert to wide format so Yusuke can plot easier
 df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
-df_econ_agg_wide.to_csv(join(out_dir, 'annual_profit_yield_wide.csv'))
+# df_econ_agg_wide.to_csv(join(out_dir, 'annual_profit_yield_wide.csv'))
 
 # %%
 # plot the total profit and yield after scaling by acreage
@@ -328,6 +348,8 @@ for year in run_years:
     for var in ['percolation','GW_applied_water', 'SW_applied_water']:
         print(var, end=',')
         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        # troubleshooting to identify if issues in irrigation exist in rep case
+        # name = join(model_ws, 'rep_crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         with h5py.File(name) as dset:
             finished_crops = list(dset['array'].keys())
             print(finished_crops, end='.')
@@ -348,16 +370,31 @@ for year in run_years:
             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
             # melt to long format for easier appending
             df = df.melt(var_name='date', id_vars=crop_in.columns)
+            # rep swb version troubleshooting
+            # df = df.assign(dtw_id = np.arange(0,len(df))).melt(var_name='date', id_vars='dtw_id')
             df = df.assign(crop=crop, year=year, var=var)
-            # concat to existing data
+            # # concat to existing data
             df_all = pd.concat((df_all, df))
 
-# # correct profit from negative to positive
-# df_all.loc[df_all['var']=='profit','values'] *= -1
-# # fix name before ID join
-# df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
-# # rename as econ for plotting reference
-# df_econ = df_all.merge(parcels[['UniqueID','area_m2']])
+
+
+# %%
+# df_chk = df_all[df_all.value!=0].copy().reset_index()
+# ## investigate problematic irrigation through profit
+# # check parcels that are reporting poor profit to see if there is a balance or outliers
+# # sns.catplot(df_chk[(df_chk.year==2017)&(df_chk['var']=='GW_applied_water')],y='value',  col='crop',
+# #             kind='box', color='tab:blue',sharey=False);
+# # check annual totals between years
+# df_chk_tot = df_chk.groupby(['year','crop', 'var', 'dtw_id']).sum(numeric_only=True).reset_index()
+# sns.catplot(df_chk_tot[(df_chk_tot['var']=='GW_applied_water')&(df_chk_tot['crop']=='Grape')],y='value',  col='year',
+#             kind='box', color='tab:blue',sharey=False);
+
+# # df_all
+
+# %%
+# troubleshooting - which dtw causes bad solver results
+# dtw_df_chk = df_chk_tot[(df_chk_tot['var']=='GW_applied_water')&(df_chk_tot['crop']=='Grape')].copy()
+# dtw_df_chk[dtw_df_chk.year==2019].plot(x='dtw_id',y='value', kind='scatter')
 
 # %%
 # rename as econ for plotting reference
