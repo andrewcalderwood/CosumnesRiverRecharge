@@ -41,7 +41,7 @@ import geopandas as gpd
 # m_nam = 'input_write_2014_2020'
 
 # %%
-def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
+def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020', loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'):
     ''' 
     function to run the SWB for the agricultural fields in the winter
     needs some updates to better represent initial conditions (sample
@@ -112,7 +112,6 @@ def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
     # nat_lu = pd.read_csv(join(proj_dir, 'native_parcel_zonalstats','native_land_use.csv'),index_col=0)
 
     # %%
-    loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
     
     
     model_ws = join(loadpth, m_nam)

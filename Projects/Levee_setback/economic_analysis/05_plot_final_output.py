@@ -89,7 +89,8 @@ def read_crop_arr_h5(crop, h5_fn):
 
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 m_nam = 'input_write_2014_2020'
@@ -186,12 +187,12 @@ for year in run_years:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
             var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-            yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
-            yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
-            # get the total extent of the irrigation season (calculation period)
-            strt_date = yield_start.min()
-            end_date = yield_end.max()
-            dates = pd.date_range(strt_date, end_date, freq='D')
+            # yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            # yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # # get the total extent of the irrigation season (calculation period)
+            # strt_date = yield_start.min()
+            # end_date = yield_end.max()
+            # dates = pd.date_range(strt_date, end_date, freq='D')
             # extract output and convert to dataframe with ID columns
             arr = read_crop_arr_h5(crop, name)
             df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
