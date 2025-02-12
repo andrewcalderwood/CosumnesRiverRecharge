@@ -132,80 +132,17 @@ run_years = run_years[:-1]
 # run_years = np.arange(2001, 2020)
 
 # %% [markdown]
-# # Review data available
-
-# %%
-for year in [run_years[-3]]:
-    crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
-    # crop_in[crop_in.name=='Vineyards']
-    # load SWB folder
-    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
-        print(var)
-        name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-        with h5py.File(name) as dset:
-            finished_crops = list(dset['array'].keys())
-            print(finished_crops)
-
-# %% [markdown]
-# # Process economic indicators
+# # Plot economic indicators
 
 # %%
 # general limits for plotting
-ncol_max = 5
+ncol_max = 4
 # subtract 1 from run_years since last doesn't cover full period
-nyears = len(run_years)
+nyears = len(run_years)-1
 ncol = np.min((ncol_max, nyears))
 nrow = int(np.ceil(nyears/ncol_max))
 
 figsize= (4*ncol, 3*nrow)
-
-# %%
-# df_all = pd.DataFrame()
-# for year in run_years:
-# # for year in [2015]:
-#     # load SWB folder
-#     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
-#     print('\n', year, end=' - ')
-#     # for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
-#     for var in ['profit', 'yield']:
-#         print(var, end=',')
-#         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-#         with h5py.File(name) as dset:
-#             finished_crops = list(dset['array'].keys())
-#             print(finished_crops, end='.')
-#         for crop in finished_crops:
-#         # for crop in finished_crops[2]:
-#             # need dates for time series water budget output
-#             var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-#             # strt_date = yield_start.min()
-#             # end_date = yield_end.max()
-#             # dates = pd.date_range(strt_date, end_date, freq='D')
-#             # extract output and convert to dataframe with ID columns
-#             arr = read_crop_arr_h5(crop, name)
-#             df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
-#             # add parcel information back
-#             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
-
-#             df_all = pd.concat((df_all, df))
-
-# # correct profit from negative to positive
-# df_all.loc[df_all['var']=='profit','value'] *= -1
-# # fix name before ID join
-# df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
-# # rename as econ for plotting reference
-# df_econ = df_all.merge(parcels[['UniqueID','acres']])
-
-# %%
-# # scale value rates (1/acre) into totals 
-# df_econ['total_value'] = df_econ['value']*df_econ.acres
-# # we want to aggregate yield and profit by the profit/acre and yield/acre to the total
-# # look at average rate, and summed total (scaled by acreage)
-# df_econ_agg = df_econ.groupby(['crop','name','var','year'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
-# # df_econ.groupby(['crop','name','var','year'])['total_value'].agg(['sum', 'mean'])
-
-# df_econ_agg = df_econ_agg.reset_index()
-# df_econ_agg.year = df_econ_agg.year.astype(str)
-# # df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
 
 # %%
 df_econ_agg = pd.DataFrame()
@@ -216,14 +153,6 @@ for year in run_years:
 
 df_econ_agg = df_econ_agg.reset_index()
 # df_all
-
-# %%
-# save data for Yusuke
-df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
-
-# convert to wide format so Yusuke can plot easier
-df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
-df_econ_agg_wide.to_csv(join(out_dir, 'annual_profit_yield_wide.csv'))
 
 # %%
 # plot the total profit and yield after scaling by acreage
@@ -266,9 +195,6 @@ for var in ['profit', 'yield']:
     plt.close()
 
 # %%
-nrow,ncol
-
-# %%
 crop='Alfalfa'
 crops = df_econ_agg.crop.unique()
 dtw_mean_all = pd.DataFrame()
@@ -276,12 +202,11 @@ dtw_mean_all = pd.DataFrame()
 for crop in crops:
     fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
-    for n,year in enumerate(run_years):
+    for n,year in enumerate(run_years[:-1]):
         name = join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv')
         if exists(name):
             dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
-            # ax_n = ax[int(n/ncol), int(n%ncol)]
-            ax_n = ax[int(n%ncol)]
+            ax_n = ax[int(n/ncol), int(n%ncol)]
             # keeps column of unique ID as index
             dtw_arr_mean = dtw_arr.mean()
             dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean, columns=['dtw_ft']).assign(year=year, crop=crop)))
@@ -301,9 +226,8 @@ dtw_mean_all.to_csv(join(out_dir, 'dtw_ft_mean_all.csv'))
 
 fig,ax = plt.subplots(nrow,ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
 
-for n,year in enumerate(run_years):
-    # ax_n = ax[int(n/ncol), int(n%ncol)]
-    ax_n = ax[int(n%ncol)]
+for n,year in enumerate(run_years[:-1]):
+    ax_n = ax[int(n/ncol), int(n%ncol)]
     dtw_mean_all.loc[dtw_mean_all.year==year,'dtw_ft'].hist(ax=ax_n)
     ax_n.set_title(year)
  

@@ -347,6 +347,8 @@ fn = join(data_dir,'static_model_inputs.xlsx')
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
 
+os.makedirs(join(model_ws, 'output_clean'), exist_ok=True)
+os.makedirs(join(model_ws,'crop_soilbudget','field_dtw'),exist_ok=True)
 
 # save log by date so we can see old versions
 os.makedirs(join(model_ws, 'log'), exist_ok=True)
@@ -362,7 +364,10 @@ print('SW Constraint %.2f' %sw_con, 'inches')
 print('GW Constraint %.2f' %gw_con, 'inches')
 print('\n')
 
+
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
+os.makedirs(join(swb_ws, 'field_SWB'), exist_ok=True)
+os.makedirs(join(swb_ws, 'output'), exist_ok=True)
 
 # simple code to set dates for april 1
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
@@ -574,7 +579,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     from functions.data_functions import init_h5
     # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
     # initialize SWB folder
-    os.makedirs(join(swb_ws, 'field_SWB'), exist_ok=True)
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
@@ -660,7 +664,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     ## the only difference is that the ETc might need to be resampled
 
     # function that saves a csv with the output by unique field similar to the native land
-    ag_pc_df = run_swb_ag_winter(year, m_nam = m_nam)
+    ag_pc_df = run_swb_ag_winter(year, m_nam = m_nam, loadpth = loadpth)
 
     # long format to join with row,column
     ag_pc_df_long = ag_pc_df.melt(ignore_index=False, 
@@ -821,7 +825,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # calculate the actual profit and yield for each parcel then calculate the average
     # to inform next years crop choice
-    summarize_output_year(m_nam, m_per, parcels)
+    summarize_output_year(loadpth, m_nam, m_per, parcels)
 
 # %%
 t_final = time.time()

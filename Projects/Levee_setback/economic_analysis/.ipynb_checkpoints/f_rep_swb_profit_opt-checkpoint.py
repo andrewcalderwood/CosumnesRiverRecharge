@@ -292,6 +292,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
         crop_dtw = pd.concat([crop_dtw]*ntimes, axis=1)
     else:
         crop_dtw = dtw_df.loc[:,soil_crop['UniqueID'].values]
+        # could also import already ffill data created in 03b_summarize_output
+        crop_dtw = crop_dtw.reindex(dates).ffill() 
+
 
     # select dates being simulated
     crop_dtw = crop_dtw.loc[dates].values
