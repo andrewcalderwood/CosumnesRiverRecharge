@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -308,7 +308,7 @@ for m_per in [6]:
         print(crop)
 
         # %%
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])

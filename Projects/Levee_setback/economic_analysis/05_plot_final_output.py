@@ -181,7 +181,7 @@ for year in run_years:
         for crop in finished_crops:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
             # yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
             # yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
             # # get the total extent of the irrigation season (calculation period)
@@ -239,7 +239,7 @@ df_econ_agg = df_econ_agg.reset_index()
 
 # %%
 # save data for Yusuke
-# df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
 
 # convert to wide format so Yusuke can plot easier
 df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
@@ -356,7 +356,7 @@ for year in run_years:
         for crop in finished_crops:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
             yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
             yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
             # get the total extent of the irrigation season (calculation period)

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -144,7 +144,7 @@ for crop in crop_list:
     print(crop)
 
     # %%
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
 
 # %%
     

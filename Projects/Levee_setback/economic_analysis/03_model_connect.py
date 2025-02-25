@@ -527,6 +527,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     crop_list = ['Corn','Alfalfa','Pasture','Misc Grain and Hay', 'Grape']
+    # this is set up to essentially skip over Unclassified Fallow since we don't want to calculate the depth to water for it
 
 
     # %%
@@ -569,7 +570,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     print(pred_crops)
     for crop in crop_list:
     # for crop in ['Alfalfa']:
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -591,7 +592,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops: 
             # to equalize the situation we might use a simple DTW profile

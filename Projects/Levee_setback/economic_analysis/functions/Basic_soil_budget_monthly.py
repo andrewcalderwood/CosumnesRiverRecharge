@@ -133,7 +133,12 @@ def load_var(crop, year=None):
     var_yield = var_yields_all[var_yields_all.crop==crop]
     
     season = season_all[season_all.crop==crop].sort_values(['crop','season'])
-    return(var_gen, var_crops, var_yield, season, pred_dict, crop_dict)
+
+    # new input is irrigation bounds (initial, rate maximum, season total) by crop
+    var_irr_all = pd.read_excel(fn, sheet_name='Irrigation', comment='#').dropna(axis=1, how='all')
+    var_irr = var_irr_all[var_irr_all.crop==crop]
+
+    return(var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr)
 
 # %%
 # get_var_year(var_crops, 2020)

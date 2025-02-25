@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -61,19 +61,20 @@ import flopy
 
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 
 # %%
+# update to different modflow models here
 m_nam = 'input_write_2014_2020'
-s_nam = 'input_write_2014_2020_R1'
-# s_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2022'
 
+scenario = '_R20' # pumping constraint
+scenario = '_R4' # 90/20 floodplain
+# scenario = '_R3' # 6x existing diversion for MAR vineyard
 
-m_nam = 'input_write_2014_2022'
-
-s_nam = 'input_write_2014_2022_R3'
-# s_nam = 'input_write_2014_2022_R4'
-# s_nam = 'input_write_2014_2022_R20'
+s_nam = m_nam+scenario
 
 model_ws = join(loadpth, m_nam)
 scenario_ws = join(loadpth, s_nam)
@@ -95,7 +96,18 @@ parcels.UniqueID = parcels.UniqueID.astype(int)
 # %%
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 # years to sample output
-run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year
+run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
+# run_years = run_years[:-1]
+
+# %%
+# general limits for plotting
+ncol_max = 4
+# subtract 1 from run_years since last doesn't cover full period
+nyears = len(run_years)-1
+ncol = np.min((ncol_max, nyears))
+nrow = int(np.ceil(nyears/ncol_max))
+
+figsize= (4*ncol, 3*nrow)
 
 # %%
 # save data for Yusuke
@@ -210,18 +222,79 @@ out_dir = join(model_ws, 'output_clean')
 dtw_mean_all = pd.read_csv(join(model_out, 'dtw_ft_mean_all.csv'),index_col=0)
 dtw_mean_all_s = pd.read_csv(join(scenario_out, 'dtw_ft_mean_all.csv'),index_col=0)
 
-dtw_mean_all = dtw_mean_all.groupby(['year','crop']).mean().reset_index()
-dtw_mean_all_s = dtw_mean_all_s.groupby(['year','crop']).mean().reset_index()
+dtw_mean_all_mean = dtw_mean_all.groupby(['year','crop']).mean().reset_index()
+dtw_mean_all_s_mean = dtw_mean_all_s.groupby(['year','crop']).mean().reset_index()
+
+
 
 # %%
 for crop in df_econ.crop.unique():
     fig,ax = plt.subplots()
 
-    dtw_mean_all[dtw_mean_all_s.crop==crop].plot(x='year',y='dtw_ft', legend=False, ax=ax)
-    dtw_mean_all_s[dtw_mean_all_s.crop==crop].plot(x='year',y='dtw_ft', legend=False,ax=ax)
+    dtw_mean_all_mean[dtw_mean_all_mean.crop==crop].plot(x='year',y='dtw_ft', legend=False, ax=ax)
+    dtw_mean_all_s_mean[dtw_mean_all_s_mean.crop==crop].plot(x='year',y='dtw_ft', legend=False,ax=ax)
 
     plt.legend(['Baseline','Scenario'])
     plt.ylabel('Depth to Water (ft)')
     plt.title(crop)
     plt.savefig(join(scenario_dir, 'dtw_ft_yearly_'+crop+'.png'))
     plt.close()
+
+# %%
+# dtw_mean_all[(dtw_mean_all.crop==crop)&(dtw_mean_all.year==year)]
+# dtw_mean_all.year.max()
+
+
+# %%
+from scipy.stats import gaussian_kde
+
+crop='Grape'
+df_plt = dtw_mean_all[(dtw_mean_all.crop==crop)&(dtw_mean_all.year==year)]
+# df_plt.dtw_ft.values
+kernel = gaussian_kde(df_plt.dtw_ft, weights = df_plt.acres)
+eval_points = np.linspace(np.min(df_plt.dtw_ft), np.max(df_plt.dtw_ft))
+
+plt.plot(kernel.pdf(eval_points))
+
+# %%
+# the current density plot is basing density on the number of parcels, the actual density should use acreage
+
+crops = dtw_mean_all.crop.unique()
+
+for crop in crops:
+    fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
+    
+    for n,year in enumerate(run_years):
+            if nrow>1:
+                ax_n = ax[int(n/ncol), int(n%ncol)]
+            elif nrow==1:
+                ax_n = ax[int(n%ncol)]
+            df_plt = dtw_mean_all[(dtw_mean_all.crop==crop)&(dtw_mean_all.year==year)]
+            ax_n.set_ylabel('')
+            if len(df_plt)>0:
+                df_plt.dtw_ft.plot.kde(ax=ax_n, label='Baseline Unweighted') # version with kernel density plot
+                df_plt_s = dtw_mean_all_s[(dtw_mean_all_s.crop==crop)&(dtw_mean_all_s.year==year)]
+                # df_plt_s.dtw_ft.plot.kde(ax=ax_n, label='Scenario') # version with kernel density plot
+                # weighted kde for baseline
+                eval_points = np.linspace(np.min(df_plt.dtw_ft), np.max(df_plt.dtw_ft))
+                kernel = gaussian_kde(df_plt.dtw_ft, weights = df_plt.acres)
+                ax_n.plot(kernel.pdf(eval_points), label='Baseline')
+                # weighted kde for scenario
+                eval_points = np.linspace(np.min(df_plt_s.dtw_ft), np.max(df_plt_s.dtw_ft))
+                kernel = gaussian_kde(df_plt_s.dtw_ft, weights = df_plt_s.acres)
+                ax_n.plot(kernel.pdf(eval_points), label='Scenario')
+            ax_n.set_title(year)
+    ax[0,0].legend()
+        
+    fig.suptitle(crop)
+    fig.supylabel('Number of fields')
+    fig.supylabel('Density')
+    fig.supxlabel('Mean depth to water (ft)')
+    # plt.savefig(join(out_dir, 'dtw_ft_histogram_'+crop+'.png'))
+    # plt.close()
+
+
+# %% [markdown]
+# Adding weighting definitely shifts the results, especially since they are for the actual DTW extent. What doesn't make sense is the PDf still has values with negative they just aren't evaluated.
+
+# %%

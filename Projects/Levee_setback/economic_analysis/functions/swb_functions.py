@@ -181,6 +181,11 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     in_2_m = (1/12)*0.3048 # convert from inches to meters
     c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0]*irr_eff_mult)/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
     c_swtot = np.multiply(p_sw, irr_sw[:,0]*irr_eff_mult)/in_2_m # Calcualte total surface water costs for the season ($/acre)
+    # to prevent negative irrigation from being used, remove any negative cost (profit) from putting water back and add a penalty
+    # there were still a few event for misc grain and grape with negative so increasing penalty from 2x to 4x
+    c_gwtot[c_gwtot<0] *= -4
+    c_swtot[c_swtot<0] *= -4
+    # calculate the total cost from irrigation
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
     # return as a negative for minimization

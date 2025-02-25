@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -101,7 +101,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
     parcels['acres'] = parcels.area_m2/(43560*0.3048**2)
     parcels.UniqueID = parcels.UniqueID.astype(int)
 
-    # %%
+# %%
 
     model_ws = join(loadpth, m_nam)
     out_dir = join(model_ws, 'output_clean')
@@ -183,6 +183,9 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
     # remove unclassified fallow for identifying fields with irrigation
     crop_in_irr = crop_in[crop_in.name!='Unclassified fallow']
+    # now after the fact it would be useful to have summary info on dtw for fallow
+    # going to see if anything in the code would break by updating this
+    # crop_in_irr = crop_in.copy()
     dtw_simple_df = pd.read_csv(join(swb_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),index_col='date')
 
     # subset parcels with wells to those identified in crop choice
@@ -254,7 +257,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
         print(crop)
 
         # %%
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -345,7 +348,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
             print(finished_crops, end='.')
         for crop in finished_crops:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
 
             # extract output and convert to dataframe with ID columns
             arr = read_crop_arr_h5(crop, name)
