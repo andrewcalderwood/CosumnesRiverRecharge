@@ -72,7 +72,7 @@ m_nam = 'input_write_2014_2020'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
-# scenario = '_R3' # 6x existing diversion for MAR vineyard
+scenario = '_R3' # 6x existing diversion for MAR vineyard
 
 s_nam = m_nam+scenario
 
@@ -214,21 +214,34 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 
 # %% [markdown]
 # ## plot DTW
+# Switched to plotting difference in spring levels as this is available for fallow and irrigated crops
+
+# %%
+# load scenario data at once to simplify plotting 
+scenarios = ['','_R3','_R4']
+dtw_all_scenario = pd.DataFrame()
+for scenario in scenarios:
+    dtw_mean_all = pd.read_csv(join(model_ws+scenario,'output_clean', 'dtw_ft_spring_all.csv'),index_col=0)
+    dtw_all_scenario = pd.concat((dtw_all_scenario, dtw_mean_all.assign(scenario=scenario)))
 
 # %%
 out_dir = join(model_ws, 'output_clean')
 # index is UniqueID
 # average dtw across time for each parcel by year 
-dtw_mean_all = pd.read_csv(join(model_out, 'dtw_ft_mean_all.csv'),index_col=0)
-dtw_mean_all_s = pd.read_csv(join(scenario_out, 'dtw_ft_mean_all.csv'),index_col=0)
+# seasonal average by parcel
+# dtw_mean_all = pd.read_csv(join(model_out, 'dtw_ft_mean_all.csv'),index_col=0)
+# dtw_mean_all_s = pd.read_csv(join(scenario_out, 'dtw_ft_mean_all.csv'),index_col=0)
+# spring average, includes fallow
+dtw_mean_all = pd.read_csv(join(model_out, 'dtw_ft_spring_all.csv'),index_col=0)
+dtw_mean_all_s = pd.read_csv(join(scenario_out, 'dtw_ft_spring_all.csv'),index_col=0)
 
-dtw_mean_all_mean = dtw_mean_all.groupby(['year','crop']).mean().reset_index()
-dtw_mean_all_s_mean = dtw_mean_all_s.groupby(['year','crop']).mean().reset_index()
+dtw_mean_all_mean = dtw_mean_all.groupby(['year','crop']).mean(numeric_only=True).reset_index()
+dtw_mean_all_s_mean = dtw_mean_all_s.groupby(['year','crop']).mean(numeric_only=True).reset_index()
 
 
 
 # %%
-for crop in df_econ.crop.unique():
+for crop in dtw_mean_all.crop.unique():
     fig,ax = plt.subplots()
 
     dtw_mean_all_mean[dtw_mean_all_mean.crop==crop].plot(x='year',y='dtw_ft', legend=False, ax=ax)
@@ -251,7 +264,8 @@ from scipy.stats import gaussian_kde
 crop='Grape'
 df_plt = dtw_mean_all[(dtw_mean_all.crop==crop)&(dtw_mean_all.year==year)]
 # df_plt.dtw_ft.values
-kernel = gaussian_kde(df_plt.dtw_ft, weights = df_plt.acres)
+kernel = gaussian_kde(df_plt.dtw_ft)
+# kernel = gaussian_kde(df_plt.dtw_ft, weights = df_plt.acres)
 eval_points = np.linspace(np.min(df_plt.dtw_ft), np.max(df_plt.dtw_ft))
 
 plt.plot(kernel.pdf(eval_points))
@@ -290,11 +304,45 @@ for crop in crops:
     fig.supylabel('Number of fields')
     fig.supylabel('Density')
     fig.supxlabel('Mean depth to water (ft)')
-    # plt.savefig(join(out_dir, 'dtw_ft_histogram_'+crop+'.png'))
-    # plt.close()
+    plt.savefig(join(scenario_dir, 'dtw_ft_kde_'+crop+'.png'))
+    plt.close()
 
 
 # %% [markdown]
 # Adding weighting definitely shifts the results, especially since they are for the actual DTW extent. What doesn't make sense is the PDf still has values with negative they just aren't evaluated.
+# - need to better understand KDE so ask Yusuke
 
 # %%
+os.makedirs(join(model_out, 'scenario_comparison'), exist_ok=True)
+
+# %%
+
+# spring average, includes fallow
+dtw_mean_all = pd.read_csv(join(model_out, 'dtw_ft_spring_all.csv'),index_col=0)
+dtw_mean_all_s = pd.read_csv(join(scenario_out, 'dtw_ft_spring_all.csv'),index_col=0)
+
+# also Yusuke would ultimately like to plot all scenarios at once
+# get the field count by year to plot as a time series over the simulation period
+# dtw_count = dtw_mean_all.groupby(['year','crop']).count()[['acres']].reset_index()
+# dtw_count_s = dtw_mean_all_s.groupby(['year','crop']).count()[['acres']].reset_index()
+# better to do the sum for the total number of acres
+dtw_count = dtw_mean_all.groupby(['year','crop'])[['acres']].sum().reset_index()
+dtw_count_s = dtw_mean_all_s.groupby(['year','crop'])[['acres']].sum().reset_index()
+for crop in crops:
+    fig,ax = plt.subplots()
+
+    for scenario in scenarios:
+        df_plt = dtw_all_scenario[dtw_all_scenario.scenario==scenario].groupby(['year','crop'])[['acres']].sum().reset_index()
+
+        df_plt = df_plt[(df_plt.crop==crop)]
+        df_plt.plot(x='year',y='acres', label=scenario, ax=ax)
+        # df_plt = dtw_count_s[(dtw_count_s.crop==crop)]
+        # df_plt.plot(x='year',y='acres', label='Scenario', ax=ax)
+        # ax.set_ylabel('Number of fields')
+    ax.set_ylabel('Total Area (acres)')
+    ax.set_title(crop)
+
+    ax.set_xlabel('Year')
+    plt.savefig(join(model_out, 'scenario_comparison', 'crop_acreage_by_year_'+crop+'.png'))
+    plt.close()
+

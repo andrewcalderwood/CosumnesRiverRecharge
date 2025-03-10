@@ -239,7 +239,7 @@ df_econ_agg = df_econ_agg.reset_index()
 
 # %%
 # save data for Yusuke
-# df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
 
 # convert to wide format so Yusuke can plot easier
 df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
