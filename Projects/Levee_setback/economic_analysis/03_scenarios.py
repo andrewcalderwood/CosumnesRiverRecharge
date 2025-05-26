@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.4
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -48,7 +48,7 @@ doc_dir = os.getcwd()
 while basename(doc_dir) != 'Documents':
     doc_dir = dirname(doc_dir)
 # dir of all gwfm data
-gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
+gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'se
 gwfm_dir
 
 
@@ -76,7 +76,7 @@ data_dir = join(proj_dir, 'model_inputs')
 
 # %%
 run_dir = 'C:/WRDAPP/GWFlowModel'
-# run_dir = 'F://WRDAPP/GWFlowModel'
+run_dir = 'F://WRDAPP/GWFlowModel'
 # run_dir = 'D://WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
@@ -257,19 +257,28 @@ deer_ck_buf = deer_ck.copy()
 deer_ck_buf.geometry = deer_ck.buffer(buf)
 
 cr_buf = cosumnes_r.copy()
-cr_buf.geometry = cr_buf.buffer(buf)
+cr_buf.geometry = cr_buf.buffer(buf) #original
 
+# original code used simple intersect which included cells in Wilton
 floodplain = gpd.sjoin(cr_buf[['reach','geometry']], deer_ck_buf[['geometry']], predicate='intersects')
+
 # simplify to one geometry
 floodplain = gpd.GeoDataFrame([0], geometry = [floodplain.unary_union], crs=floodplain.crs)
 floodplain_grid = gpd.overlay(grid_p, floodplain)
 floodplain_grid = floodplain_grid.drop(columns=0)
+
+# %% [markdown]
+# Original method used 90th percentile across all time, I should verify but I believe this should be done on a daily historical basis as State Board says to use USGS website which does on a daily basis. So there is a higher flow requirement in winter which will mean less recharge. 90th percentile ranges from 40 in late summer to a few thousand in January.
+#
+#
+# 1. Check the gage to determine if flows are above the 90th percentile at the point of diversion (POD). 2. If flows are above the 90th percentile, calculate their diversion rate as the lesser of: a. [Diversion rate] = [Actual flows] minus [the 90th percentile flow for that day] or b. [Diversion rate] = 0.2 multiply [Actual flows] 
 
 # %%
 # for floodplain
 fp_mar = mar.copy()
 # when flows exceed 5E3 cfs allow 90% flow then allow 20% diversion
 flow_90 = fp_mar.flow_cfs.quantile([0.9]).values[0]
+print('The 90th percentile is %.2e cfs' %flow_90)
 fp_mar.loc[fp_mar.flow_cfs>flow_90, 'rch_cfs'] = fp_mar.loc[fp_mar.flow_cfs>flow_90, 'flow_cfs']*0.2
 # calculate recharge recharge rate in m3/day
 fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
@@ -284,6 +293,69 @@ fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
 fp_mar_grid = fp_mar[['rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
 fp_mar_grid_out = fp_mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
 fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
+
+
+
+# %%
+floodplain.drop(columns=0).to_file(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_outline.shp'))
+
+# %% [markdown]
+# ## second floodplain scenario - more refined
+# The actuall scenario should cover less of the area and follow the proper diversion criteria daily 90th percentile
+#
+# Also diversion should only technically be from December to March (when most water is around anyway)
+
+# %%
+# better approach would be to do an overlay
+floodplain_clean = gpd.overlay(cr_buf[['reach','geometry']], deer_ck_buf[['geometry']])
+# simplify to one geometry
+floodplain_clean = gpd.GeoDataFrame([0], geometry = [floodplain_clean.unary_union], crs=floodplain_clean.crs)
+floodplain_grid = gpd.overlay(grid_p, floodplain_clean)
+floodplain_grid = floodplain_grid.drop(columns=0)
+
+# %%
+# for floodplain
+fp_mar = mar.copy()
+# when flows exceed 5E3 cfs allow 90% flow then allow 20% diversion
+fp_mar['month'] = fp_mar.index.month
+fp_mar['day'] = fp_mar.index.day
+# the 90th percentile is calculated on a daily basis
+flow_90 = fp_mar.groupby(['month','day'])[['flow_cfs']].quantile(0.9).reset_index().rename(columns={'flow_cfs':'flow_90'})
+# print('The 90th percentile is %.2e cfs' %flow_90)
+# add in 90th percentile flows to verify conditions
+fp_mar = fp_mar.merge(flow_90)
+fp_mar
+# fp_mar.loc[fp_mar.flow_cfs>flow_90, 'rch_cfs'] = fp_mar.loc[fp_mar.flow_cfs>flow_90, 'flow_cfs']*0.2
+# # calculate recharge recharge rate in m3/day
+# fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
+
+# # scale the total recharge flux by the area to get the average rate
+# fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
+
+# %%
+
+# convert mar to grid level
+# need date as index, row, column, rch_rate (m/day)
+fp_mar_grid = fp_mar[['rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
+fp_mar_grid_out = fp_mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
+fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
+
+
+
+# %%
+floodplain_clean.drop(columns=0).to_file(join(proj_dir, 'scenarios', 'R5_floodplain_MAR_clean_outline.shp'))
+
+# %%
+# map review shows the floodplain scenario creeps into Wilton a bit so it is 
+# a little impractical, would make more sense to force a right buffer on the Cosumnes River 
+import contextily as ctx
+fig,ax = plt.subplots(figsize=(8,8))
+floodplain.plot(ax=ax, color='None')
+floodplain_clean.plot(ax=ax, color='None', edgecolor='blue')
+# deer_ck_buf.plot(ax=ax, color='None', edgecolor='green')
+# cr_buf.plot(ax=ax, color='None', edgecolor='blue')
+ctx.add_basemap(ax, source = ctx.providers.Esri.WorldImagery, crs='epsg:26910', alpha = 0.8, attribution=False)
+
 
 # %% [markdown]
 # ## plot climate

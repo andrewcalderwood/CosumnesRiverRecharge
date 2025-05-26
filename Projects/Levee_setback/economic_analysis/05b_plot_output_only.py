@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.16.4
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -242,9 +242,14 @@ dtw_spring_ref.to_csv(join(out_dir, 'dtw_ft_spring_all.csv'))
 
 
 # %%
+df_plt.hist('dtw_ft', weights = df_plt.acres, histtype=u'step',)
+
+
+# %%
 crops = dtw_spring_ref.crop.unique()
 
-for crop in crops:
+# for crop in crops:
+for crop in crops[[1]]:
     fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
     for n,year in enumerate(run_years):
@@ -265,7 +270,7 @@ for crop in crops:
     fig.supxlabel('Mean depth to water (ft)')
     plt.savefig(join(out_dir, 'DTW', 'spring_dtw_ft_histogram_acres_'+crop+'.png'))
     plt.close()
-dtw_mean_all.index.name = 'UniqueID'
+# dtw_mean_all.index.name = 'UniqueID'
 
 # %% [markdown]
 # ## seasonal avg dtw
