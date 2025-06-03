@@ -5,12 +5,14 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# Goal: plot groundwater level against nearest stream thalweg
 
 # +
 # standard python utilities
@@ -71,7 +73,9 @@ nrow, ncol = grid_match.row.max(), grid_match.column.max()
 delr, delc = (100, 100)
 
 # +
-ext_dir = 'F:/WRDAPP'
+# ext_dir = 'F:/WRDAPP'
+ext_dir = 'D:/WRDAPP'
+
 c_dir = 'C:/WRDAPP'
 if os.path.exists(ext_dir):
     loadpth = ext_dir 
@@ -151,6 +155,30 @@ legend_elements = [
 ]
 
 # +
+mw = 'MW_5'
+fig,ax_n = plt.subplots(figsize=(6.5, 4), dpi=600)
+def mw_plt(gwl_long, mw, ax_n):
+    gwl_long[gwl_long.Well==mw].plot(x='dt',y='obs', ax=ax_n, legend=False)
+    ax_n.set_xlabel(None)
+    ax_n.minorticks_on()
+
+    ax_n.grid(axis='y', alpha=0.8)
+    ax_n.grid(visible=True, axis='y', which='minor', alpha=0.3, )
+    # ax_n.set_title(mw[n])
+    mw_dat = rm_elev[rm_elev.Sensor ==mw]
+    # ax_n.axhline(mw_dat['MPE (meters)'].values[0], ls='--', linewidth=1, color='brown')
+    ax_n.axhline(mw_dat['z_m_min_cln'].values[0]-1, ls='--', linewidth=1, color='blue')
+    # label each monitoring well
+    ax_n.annotate(mw.replace('_',' '), xy = (0.01,0.9), xycoords = 'axes fraction')
+
+mw_plt(gwl_long, mw, ax_n)
+fig.supylabel('Elevation (m)')
+fig.supxlabel('Date')
+ax_n.annotate('Stream Bottom', xy = ('2015-3-1',4), xycoords = 'data', ha='center')
+ax_n.annotate('Groundwater', xy = ('2016-10-1',-3), xycoords = 'data', ha='center')
+
+
+# +
 # just realized that with the sns relplot that the results aren't ordered as expected if specify them
 mw = gwl_long.Well.unique()
 mw = ['MW_5','MW_14', 'MW_19', 'MW_2', 'MW_13', 'MW_17']
@@ -165,14 +193,16 @@ fig,ax = plt.subplots(nx,ny, sharex=True, sharey=True, figsize=(6.5, 4),dpi=600)
 for n in np.arange(0,nx*ny):
     # ax_n = ax[n%nx, int(n/nx)]
     ax_n = ax[int(n/ny), n%ny]
-    gwl_long[gwl_long.Well==mw[n]].plot(x='dt',y='obs', ax=ax_n, legend=False)
-    ax_n.set_xlabel(None)
-    # ax_n.set_title(mw[n])
-    mw_dat = rm_elev[rm_elev.Sensor ==mw[n]]
-    # ax_n.axhline(mw_dat['MPE (meters)'].values[0], ls='--', linewidth=1, color='brown')
-    ax_n.axhline(mw_dat['z_m_min_cln'].values[0]-1, ls='--', linewidth=1, color='blue')
-    # label each monitoring well
-    ax_n.annotate(mw[n].replace('_',' '), xy = (0.01,0.9), xycoords = 'axes fraction')
+    # gwl_long[gwl_long.Well==mw[n]].plot(x='dt',y='obs', ax=ax_n, legend=False)
+    # ax_n.set_xlabel(None)
+    # # ax_n.set_title(mw[n])
+    # mw_dat = rm_elev[rm_elev.Sensor ==mw[n]]
+    # # ax_n.axhline(mw_dat['MPE (meters)'].values[0], ls='--', linewidth=1, color='brown')
+    # ax_n.axhline(mw_dat['z_m_min_cln'].values[0]-1, ls='--', linewidth=1, color='blue')
+    # # label each monitoring well
+    # ax_n.annotate(mw[n].replace('_',' '), xy = (0.01,0.9), xycoords = 'axes fraction')
+    mw_plt(gwl_long, mw[n], ax_n)
+
 fig.supylabel('Elevation (m)')
 fig.supxlabel('Date')
 # alternate title scheme
