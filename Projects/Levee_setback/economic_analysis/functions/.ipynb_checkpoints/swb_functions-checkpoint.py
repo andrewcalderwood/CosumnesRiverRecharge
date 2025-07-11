@@ -155,7 +155,7 @@ def calc_yield(ETc, K_S, gen):
 # %%
 
        
-def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
+def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays, p_o_bool =True):
     """
     Y_A : actual yield (tons)
     dtw_arr : depth to water (ft)
@@ -163,6 +163,7 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     irr_sw : surface water irrigation (m)
     gen : dictionary with cost variables
     arrays: when False says that the optimization is being run so irrigation efficiency should be used to scale gw cost
+    p_o_bool: boolean whether to remove operating costs or not
     """
     # set up local variables
     p_c = gen.p_c
@@ -189,7 +190,11 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
     # return as a negative for minimization
-    pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    if p_o_bool ==True:
+        pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    else:
+        pi = -((np.sum(p_c*Y_A) - np.sum(cost))) # Calculate profit ($/acre) without removing static operating costs
+
     # forced internal boundary to prevent negatives
     # if any(irr_lvl <0):
     #     # set a scalable penalty, assuming p_o would be a sizable penalty

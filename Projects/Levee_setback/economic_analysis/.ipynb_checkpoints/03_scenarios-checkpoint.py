@@ -48,7 +48,7 @@ doc_dir = os.getcwd()
 while basename(doc_dir) != 'Documents':
     doc_dir = dirname(doc_dir)
 # dir of all gwfm data
-gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
+gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'se
 gwfm_dir
 
 

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -67,6 +67,7 @@ def add_path(fxn_dir):
         sys.path.insert(0, fxn_dir)
 # flopy github path - edited
 add_path(doc_dir+'/GitHub/flopy')
+# reload(flopy)
 import flopy 
 
 # other functions
@@ -84,8 +85,8 @@ data_dir = join(proj_dir, 'model_inputs')
 
 # %%
 run_dir = 'C:/WRDAPP/GWFlowModel'
-# run_dir = 'F://WRDAPP/GWFlowModel'
-# run_dir = 'D://WRDAPP/GWFlowModel'
+run_dir = 'F:/WRDAPP/GWFlowModel'
+# run_dir = 'D:/WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
 # # model_nam = 'setback_streamflow'
@@ -116,7 +117,10 @@ gel = m.__getattr__(gel_nam)
 # %%
 loadpth = run_dir +'/Cosumnes/Economic/'
 
-m.model_ws = join(loadpth, model_nam, 'crop_modflow')
+# it is probably better to create a slightly different file name then to copy these over for a set scenario
+econ_model_ws = join(loadpth, model_nam+'_copy', 'crop_modflow')
+
+m.model_ws = econ_model_ws
 # # drop HOB since we don't want to update it
 # m.remove_package('HOB')
 # # re-write name file before copying
@@ -384,8 +388,6 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
     np.savetxt(join(model_ws,'MF.dc.tab'), time_flow, delimiter = '\t')
 
 # %%
-
-# %%
 m_strt, m_end, nper, spd.shape
 m_strt+pd.DateOffset(days=nper)
 
@@ -405,13 +407,18 @@ for m_per in np.arange(0, all_run_dates.shape[0]-1):
 
 # %%
 # name file had HOB manually removed
+# need to improve so this isn't manually copied each time
 files_copy = ['MF.nam']
 
 for m_per in np.arange(0, all_run_dates.shape[0]-1):
     m_strt = all_run_dates.iloc[m_per].date
     model_ws = join(m.model_ws, str(m_strt.date()))
     for f in files_copy:
-        shutil.copy(join(m.model_ws,f), join(model_ws,f))
+        # shutil.copy(join(m.model_ws,f), join(model_ws,f))
+        # name file doesn't change between versions copy from central location
+        shutil.copy(join(loadpth,f), join(model_ws,f))
+
+        
 
 # %% [markdown]
 # This code should also run the first period from October to April so that the next script can reference the model output from March.
@@ -435,7 +442,7 @@ model_ws = join(m.model_ws, str(m_strt.date()))
 
 load_only = ['DIS']
 # switch to modflow nwt to enable option bloack for use in owhm
-m_month = flopy.modflow.Modflow.load('MF.nam',  model_ws= model_ws,
+m_month = flopy.modflow.Modflow.load('MF.nam',  model_ws= model_ws, exe_name='mf-owhm',
                                     load_only = load_only)
 
 # overwrite files that change
