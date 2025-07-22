@@ -93,12 +93,13 @@ loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
 m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2022'
+m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
-scenario=''
+scenario = '_R200' # 200 represents no p_o
+# scenario=''
 
 
 model_ws = join(loadpth, m_nam+scenario)
@@ -242,7 +243,7 @@ dtw_spring_ref.to_csv(join(out_dir, 'dtw_ft_spring_all.csv'))
 
 
 # %%
-df_plt.hist('dtw_ft', weights = df_plt.acres, histtype=u'step',)
+# df_plt.hist('dtw_ft', weights = df_plt.acres, histtype=u'step',)
 
 
 # %%

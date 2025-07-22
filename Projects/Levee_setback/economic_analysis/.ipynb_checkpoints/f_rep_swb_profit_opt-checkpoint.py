@@ -163,9 +163,12 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # %%
 
 
-def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
+def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
+                 input_name, 
+                 soil_rep = False,
                 run_opt=True, irr_all=None, field_id = 'parcels', 
-                sw_con=125, gw_con=125):
+                sw_con=125, gw_con=125,
+                ):
     ''' 
     Function to import variables related to soil water budget function
     to then run the function in a profit optimizer before saving the results in hdf5 format
@@ -179,10 +182,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
                 of unique soils for each field
     run_opt: boolean to identify whether to run the optimization for each field
     irr_all: irrigation for each field to be specified if run_opt=False
+    input_name: need to pass on name of spreadsheet with static inputs so can adjust revenue, costs, etc.
     '''
     # %%
     # need to specify year to get specify year values or nearest available
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year=year)
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year=year, input_name = input_name)
 
 
 
@@ -567,6 +571,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df, soil_rep = False,
     # the profit saved here is negative for minimization
     fn = join(base_model_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
     crop_arr_to_h5(p_true, crop, fn)
+
+    # does it make sense to simply create another output file to cover the revenue or create a sub file for it under profit?
+    # if a new file then it needs to also be initiated at the start and post-processed in f_summarize_output.py
 
     fn = join(base_model_ws, 'field_SWB', "yield_WY"+str(year)+".hdf5")
     crop_arr_to_h5(Y_A_true, crop, fn)

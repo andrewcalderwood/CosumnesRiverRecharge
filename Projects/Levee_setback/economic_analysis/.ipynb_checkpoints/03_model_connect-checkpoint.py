@@ -65,14 +65,20 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 # seen as these are the main update to make in a script
 
 m_nam = sys.argv[1]
+# added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+input_name = sys.argv[2]
 
-# m_nam = 'input_write_2014_2022_R3'
+# m_nam = 'input_write_2014_2022_no_p_o'
 # m_nam = 'input_write_2014_2020_R3'
 # m_nam = 'input_write_2014_2020'
+
+# input_name = 'static_model_inputs.xlsx'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
 
+print('sys.argv[2] (input_name) is...')
+print(input_name)
 
 t_start = time.time()
 
@@ -150,7 +156,7 @@ data_dir = join(proj_dir, 'model_inputs')
 # loda model scenario reference sheet
 scenario_summary = pd.read_excel(join(data_dir, 'scenario_summary.xlsx'))
 # select the current model run scenario based on model and scenario name from batch file
-scenario_info = scenario_summary[(scenario_summary.m_nam==m_nam )& (scenario_summary.m_nam==m_nam)]
+scenario_info = scenario_summary[scenario_summary.m_nam==m_nam] # & (scenario_summary.m_nam==m_nam)
 # create series to make easier data sampling
 scenario_info = scenario_info.iloc[0]
 # create into variables for easier referencing
@@ -163,6 +169,8 @@ base_m_nam = scenario_info.base_m_nam
 print('SW Constraint %.2f' %sw_con, 'inches')
 print('GW Constraint %.2f' %gw_con, 'inches')
 
+print('base_nam is...')
+print(base_m_nam)
 print('scenario_name is...')
 print(scenario_name)
 print('\n\n')
@@ -197,6 +205,7 @@ loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 # m_nam = 'input_write_2000_2022'
 # define modflow model WS to reference for modflow input
 m_model_ws = join(dirname(loadpth), 'Regional', base_m_nam)
+m_model_ws
 
 # %%
 load_only=['DIS', 'BAS6']
@@ -343,7 +352,10 @@ else:
 
 # load summary excel sheet on irrigation optimization
 # this will specify the date ranges to run and pause
-fn = join(data_dir,'static_model_inputs.xlsx')
+# fn = join(data_dir,'static_model_inputs.xlsx') # original
+fn = join(data_dir ,input_name) # new version allows alternates
+
+
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
 
 
@@ -600,6 +612,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
                          dtw_simple_df, 
                          soil_rep=True,
                          sw_con=sw_con, gw_con=gw_con,
+                         input_name = input_name
                          ) 
         sys.stdout.flush()
 
@@ -826,7 +839,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # calculate the actual profit and yield for each parcel then calculate the average
     # to inform next years crop choice
-    summarize_output_year(loadpth, m_nam, m_per, parcels)
+    summarize_output_year(loadpth, m_nam, m_per, parcels, input_name)
 
 # %%
 t_final = time.time()

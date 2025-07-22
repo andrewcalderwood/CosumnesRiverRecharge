@@ -195,6 +195,9 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays, p_o_bool =True):
     else:
         pi = -((np.sum(p_c*Y_A) - np.sum(cost))) # Calculate profit ($/acre) without removing static operating costs
 
+    # it would be nice to be able to return both profit and revenue in an alternate scenario
+    # with alternate input file set up, may not need to use the alternate function to not include p_o
+    
     # forced internal boundary to prevent negatives
     # if any(irr_lvl <0):
     #     # set a scalable penalty, assuming p_o would be a sizable penalty

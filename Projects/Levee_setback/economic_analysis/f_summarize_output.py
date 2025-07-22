@@ -91,7 +91,7 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
-def summarize_output_year(loadpth, m_nam, m_per, parcels):
+def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
     '''
     INPUT:
     m_nam: model name
@@ -106,8 +106,9 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
     model_ws = join(loadpth, m_nam)
     out_dir = join(model_ws, 'output_clean')
 
-    # simpler way to get base model workspace is remove R\d{1,2} since all should follow this format
-    m_nam_base = re.sub(r'_R\d{1,2}', '', m_nam)
+    # simpler way to get base model workspace is remove R\d{1,3} since all should follow this format
+    # made it {1,3} digits to allow for hundreds to represent larger shifts in base conditions (e.g., 200 series have different costs)
+    m_nam_base = re.sub(r'_R\d{1,3}', '', m_nam)
 
 
     # %%
@@ -324,7 +325,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels):
         # %%
         print('Running soil water budget with irrigation and updated DTW to re-calculate yield, profit, and percolation')
         # in theory the best function to use if it works
-        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, soil_rep = False,
+        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, input_name = input_name, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
         sys.stdout.flush()
 
