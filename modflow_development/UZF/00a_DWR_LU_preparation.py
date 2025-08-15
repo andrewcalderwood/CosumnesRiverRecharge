@@ -173,7 +173,7 @@ index_cols = ['WATERSOURC', 'MULTIUSE', 'crop_num',
 
 
 # %%
-def make_wide_lu_df(lu_long):
+def make_wide_lu_df(lu_long, index_cols):
     """
     The long format doesn't have individual columns for CLASS, CROPTYP, IRR_TYP_PA/B, PCNT, SPECOND, SUBCLASS
     Pivot wide for these from var_nam to make more easily referenceable
@@ -190,7 +190,7 @@ def make_wide_lu_df(lu_long):
 
 
 # %%
-lu_wide = make_wide_lu_df(lu_long)
+lu_wide = make_wide_lu_df(lu_long, index_cols)
 
 
 # %%
