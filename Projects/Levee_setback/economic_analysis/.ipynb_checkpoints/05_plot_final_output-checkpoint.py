@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -92,21 +92,18 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
-# update to different modflow models here, next step is using the 20 year model
+# update to different modflow models here
 m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2020_R1'
-# m_nam = 'input_write_2014_2020_R3'
-
 # m_nam = 'input_write_2014_2022'
-# m_nam = 'input_write_2014_2022_R20'
-# m_nam = 'input_write_2014_2022_R3'
-# m_nam = 'input_write_2014_2022_R4'
 
-model_ws = join(loadpth, m_nam)
+scenario = '_R20' # pumping constraint
+scenario = '_R4' # 90/20 floodplain
+# scenario = '_R3' # 6x existing diversion for MAR vineyard
+scenario=''
 
 
-# %%
-# m_nam
+model_ws = join(loadpth, m_nam+scenario)
+
 
 # %%
 # provide representative soil water budget folder
@@ -129,9 +126,6 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 # years to sample output
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 run_years = run_years[:-1]
-
-# %%
-# all_run_dates
 
 # %%
 # temp for while model is still running
@@ -158,15 +152,16 @@ for year in [run_years[-3]]:
 
 # %%
 # general limits for plotting
-ncol_max = 4
+ncol_max = 5
 # subtract 1 from run_years since last doesn't cover full period
-nyears = len(run_years)-1
+nyears = len(run_years)
 ncol = np.min((ncol_max, nyears))
 nrow = int(np.ceil(nyears/ncol_max))
 
 figsize= (4*ncol, 3*nrow)
 
 # %%
+
 df_all = pd.DataFrame()
 for year in run_years:
 # for year in [2015]:
@@ -186,20 +181,21 @@ for year in run_years:
         for crop in finished_crops:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
-            yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
-            yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
-            # get the total extent of the irrigation season (calculation period)
-            strt_date = yield_start.min()
-            end_date = yield_end.max()
-            dates = pd.date_range(strt_date, end_date, freq='D')
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+            # yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            # yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # # get the total extent of the irrigation season (calculation period)
+            # strt_date = yield_start.min()
+            # end_date = yield_end.max()
+            # dates = pd.date_range(strt_date, end_date, freq='D')
             # extract output and convert to dataframe with ID columns
             arr = read_crop_arr_h5(crop, name)
             df = pd.DataFrame(arr, columns=['value']).assign(crop=crop, year=year, var=var)
             # add parcel information back
             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
 
-            df_all = pd.concat((df_all, df))
+#             df_all = pd.concat((df_all, df))
+
 
 # correct profit from negative to positive
 df_all.loc[df_all['var']=='profit','value'] *= -1
@@ -220,20 +216,30 @@ df_econ = df_all.merge(parcels[['UniqueID','acres']])
 # );
 
 # %%
-# scale value rates (1/acre) into totals 
-df_econ['total_value'] = df_econ['value']*df_econ.acres
-# we want to aggregate yield and profit by the profit/acre and yield/acre to the total
-# look at average rate, and summed total (scaled by acreage)
-df_econ_agg = df_econ.groupby(['crop','name','var','year'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
-# df_econ.groupby(['crop','name','var','year'])['total_value'].agg(['sum', 'mean'])
+# # scale value rates (1/acre) into totals 
+# df_econ['total_value'] = df_econ['value']*df_econ.acres
+# # we want to aggregate yield and profit by the profit/acre and yield/acre to the total
+# # look at average rate, and summed total (scaled by acreage)
+# df_econ_agg = df_econ.groupby(['crop','name','var','year'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
+# # df_econ.groupby(['crop','name','var','year'])['total_value'].agg(['sum', 'mean'])
+
+# df_econ_agg = df_econ_agg.reset_index()
+# df_econ_agg.year = df_econ_agg.year.astype(str)
+# # df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
+
+# %%
+df_econ_agg = pd.DataFrame()
+
+for year in run_years:
+    df_econ_in = pd.read_csv(join(out_dir, 'profit_yield_long_'+str(year)+'.csv'),index_col=0)
+    df_econ_agg = pd.concat((df_econ_agg, df_econ_in))
 
 df_econ_agg = df_econ_agg.reset_index()
-df_econ_agg.year = df_econ_agg.year.astype(str)
-# df_econ_agg['end_date'] = pd.to_datetime(df_econ_agg.year.astype(str)+'-9-30')
+# df_all
 
 # %%
 # save data for Yusuke
-# df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
 
 # convert to wide format so Yusuke can plot easier
 df_econ_agg_wide = df_econ_agg.pivot_table(index=['name','year'], values=['total_value','value'], columns=['var'])
@@ -280,6 +286,9 @@ for var in ['profit', 'yield']:
     plt.close()
 
 # %%
+nrow,ncol
+
+# %%
 crop='Alfalfa'
 crops = df_econ_agg.crop.unique()
 dtw_mean_all = pd.DataFrame()
@@ -287,11 +296,12 @@ dtw_mean_all = pd.DataFrame()
 for crop in crops:
     fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
-    for n,year in enumerate(run_years[:-1]):
+    for n,year in enumerate(run_years):
         name = join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv')
         if exists(name):
             dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
-            ax_n = ax[int(n/ncol), int(n%ncol)]
+            # ax_n = ax[int(n/ncol), int(n%ncol)]
+            ax_n = ax[int(n%ncol)]
             # keeps column of unique ID as index
             dtw_arr_mean = dtw_arr.mean()
             dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean, columns=['dtw_ft']).assign(year=year, crop=crop)))
@@ -311,8 +321,9 @@ dtw_mean_all.to_csv(join(out_dir, 'dtw_ft_mean_all.csv'))
 
 fig,ax = plt.subplots(nrow,ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
 
-for n,year in enumerate(run_years[:-1]):
-    ax_n = ax[int(n/ncol), int(n%ncol)]
+for n,year in enumerate(run_years):
+    # ax_n = ax[int(n/ncol), int(n%ncol)]
+    ax_n = ax[int(n%ncol)]
     dtw_mean_all.loc[dtw_mean_all.year==year,'dtw_ft'].hist(ax=ax_n)
     ax_n.set_title(year)
  
@@ -345,7 +356,7 @@ for year in run_years:
         for crop in finished_crops:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
             yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
             yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
             # get the total extent of the irrigation season (calculation period)

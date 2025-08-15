@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -60,20 +60,20 @@ warnings.filterwarnings("ignore")
 # seen as these are the main update to make in a script
 
 m_nam = sys.argv[1]
-# scenario_name = sys.argv[2]
+# added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+input_name = sys.argv[2]
 
-# m_nam = 'input_write_2000_2022'
-# m_nam = 'input_write_2000_2022_R3'
-# m_nam = 'input_write_2000_2022_R20'
+# m_nam = 'input_write_2014_2022_no_p_o'
+# m_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2020'
+
+# input_name = 'static_model_inputs.xlsx'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
 
-
-# print('sys.argv[2] (scenario_name) is...')
-# print(scenario_name)
-print('\n\n')
-
+print('sys.argv[2] (input_name) is...')
+print(input_name)
 
 t_start = time.time()
 
@@ -308,7 +308,7 @@ for m_per in [6]:
         print(crop)
 
         # %%
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -375,7 +375,7 @@ for m_per in [6]:
         # %%
         print('Running soil water budget with irrigation and updated DTW to re-calculate yield, profit, and percolation')
         # in theory the best function to use if it works
-        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, soil_rep = False,
+        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, input_name = input_name, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
         sys.stdout.flush()
 

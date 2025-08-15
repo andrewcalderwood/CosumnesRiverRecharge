@@ -93,12 +93,13 @@ loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
 m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2022'
+m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
-scenario=''
+scenario = '_R200' # 200 represents no p_o
+# scenario=''
 
 
 model_ws = join(loadpth, m_nam+scenario)
@@ -124,7 +125,7 @@ parcels.UniqueID = parcels.UniqueID.astype(int)
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
 # years to sample output
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
-run_years = run_years[:-1]
+# run_years = run_years[:-1]
 
 # %%
 # temp for while model is still running
@@ -155,6 +156,10 @@ df_econ_agg = df_econ_agg.reset_index()
 # df_all
 
 # %%
+df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
+
+
+# %%
 # plot the total profit and yield after scaling by acreage
 # sns.relplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
 #            facet_kws={'sharey': False, 'sharex': True})
@@ -175,6 +180,8 @@ sns.catplot(df_econ_agg,x='year',y='value', col='crop', row='var',
            # facet_kws={'sharey': False, 'sharex': True}
 )
 
+plt.savefig(join(out_dir,'profit_yield_annual_total_m.png'))
+
 
 # %%
 # var = 'profit'
@@ -194,6 +201,81 @@ for var in ['profit', 'yield']:
     plt.savefig(join(out_dir, var+'_field_avg.png'), bbox_inches='tight')
     plt.close()
 
+# %% [markdown]
+# # Depth to water
+# There are two options for plotting:
+# 1. The Spring DTW (march avg) which informs the crop choice
+# 2. the seasonal average value for crops that are irrigated
+#
+# To include fallow it makes the most sense to use the spring value because that is what is driving the decision rather than the final seasonal values
+
+# %%
+os.makedirs(join(out_dir,'DTW'), exist_ok=True)
+
+# %%
+crop_name_dict = pd.read_excel(join(proj_dir,'model_inputs','static_model_inputs.xlsx'),sheet_name='Name_dict')
+
+# %% [markdown]
+# ## spring dtw
+
+# %%
+dtw_spring = pd.DataFrame()
+crop_all = pd.DataFrame()
+for n,year in enumerate(run_years):
+    name = join(model_ws, 'rep_crop_soilbudget','field_SWB','modflow_spring_dtw_ft_WY'+str(year)+'.csv')
+    dtw_spring_year = pd.read_csv(name,index_col=0)
+    dtw_spring = pd.concat((dtw_spring, dtw_spring_year.assign(year=year)))
+    
+    name = join(model_ws, 'rep_crop_soilbudget','field_SWB','crop_parcels_'+str(year)+'.csv')
+    crop_year = pd.read_csv(name,index_col=0)
+    crop_all = pd.concat((crop_all, crop_year.assign(year=year)))
+
+
+# %%
+# add info on crops and acreage to spring dtw
+dtw_spring_ref = dtw_spring.merge(parcels[['UniqueID','acres']]).merge(crop_all.rename(columns={'parcel_id':'UniqueID'}))
+# # add simpler crop name
+dtw_spring_ref = dtw_spring_ref.merge(crop_name_dict[['Crop','pred_name']].rename(columns={'pred_name':'name','Crop':'crop'}), how='left')
+# where there is not a short name use the existing
+dtw_spring_ref.loc[dtw_spring_ref.crop.isna(),'crop'] = dtw_spring_ref.loc[dtw_spring_ref.crop.isna(),'name'] 
+
+dtw_spring_ref.to_csv(join(out_dir, 'dtw_ft_spring_all.csv')) 
+
+
+# %%
+# df_plt.hist('dtw_ft', weights = df_plt.acres, histtype=u'step',)
+
+
+# %%
+crops = dtw_spring_ref.crop.unique()
+
+# for crop in crops:
+for crop in crops[[1]]:
+    fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
+    
+    for n,year in enumerate(run_years):
+        if nrow>1:
+            ax_n = ax[int(n/ncol), int(n%ncol)]
+        elif nrow==1:
+            ax_n = ax[int(n%ncol)]
+        # keeps column of unique ID as index
+        df_plt = dtw_spring_ref[(dtw_spring_ref.crop==crop)&(dtw_spring_ref.year==year)]
+        if len(df_plt)>0:
+            df_plt.hist('dtw_ft', ax=ax_n, weights = df_plt.acres)
+            # dtw_arr_mean.plot.kde(ax=ax_n) # version with kernel density plot
+            ax_n.set_title(year)
+        
+    fig.suptitle(crop)
+    fig.supylabel('Area (acres)')
+    # fig.supylabel('Density')
+    fig.supxlabel('Mean depth to water (ft)')
+    plt.savefig(join(out_dir, 'DTW', 'spring_dtw_ft_histogram_acres_'+crop+'.png'))
+    plt.close()
+# dtw_mean_all.index.name = 'UniqueID'
+
+# %% [markdown]
+# ## seasonal avg dtw
+
 # %%
 crop='Alfalfa'
 crops = df_econ_agg.crop.unique()
@@ -202,32 +284,77 @@ dtw_mean_all = pd.DataFrame()
 for crop in crops:
     fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
-    for n,year in enumerate(run_years[:-1]):
+    for n,year in enumerate(run_years):
         name = join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv')
         if exists(name):
             dtw_arr = pd.read_csv(name,index_col=0,parse_dates=[0])
-            ax_n = ax[int(n/ncol), int(n%ncol)]
+            if nrow>1:
+                ax_n = ax[int(n/ncol), int(n%ncol)]
+            elif nrow==1:
+                ax_n = ax[int(n%ncol)]
             # keeps column of unique ID as index
             dtw_arr_mean = dtw_arr.mean()
             dtw_mean_all = pd.concat((dtw_mean_all, pd.DataFrame(dtw_arr_mean, columns=['dtw_ft']).assign(year=year, crop=crop)))
             dtw_arr_mean.hist(ax=ax_n)
+            # dtw_arr_mean.plot.kde(ax=ax_n) # version with kernel density plot
             ax_n.set_title(year)
         
     fig.suptitle(crop)
     fig.supylabel('Number of fields')
+    # fig.supylabel('Density')
     fig.supxlabel('Mean depth to water (ft)')
-    plt.savefig(join(out_dir, 'dtw_ft_histogram_'+crop+'.png'))
+    plt.savefig(join(out_dir, 'DTW','season_avg_dtw_ft_histogram_'+crop+'.png'))
     plt.close()
+dtw_mean_all.index.name = 'UniqueID'
 
 # %%
-dtw_mean_all.to_csv(join(out_dir, 'dtw_ft_mean_all.csv'))
+dtw_mean_all_ref = dtw_mean_all.copy()
+dtw_mean_all_ref.index = dtw_mean_all_ref.index.astype(int)
+
+# add info on acreage
+dtw_mean_all_ref = dtw_mean_all_ref.join(parcels.set_index('UniqueID')[['acres']])
+
+
+# %%
+dtw_mean_all_ref.to_csv(join(out_dir, 'dtw_ft_mean_all.csv')) # new version with acreage
+# dtw_mean_all.to_csv(join(out_dir, 'dtw_ft_mean_all.csv'))
+
+# %%
+crop='Alfalfa'
+crops = df_econ_agg.crop.unique()
+
+for crop in crops:
+    fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
+    
+    for n,year in enumerate(run_years):
+        if nrow>1:
+            ax_n = ax[int(n/ncol), int(n%ncol)]
+        elif nrow==1:
+            ax_n = ax[int(n%ncol)]
+        # keeps column of unique ID as index
+        df_plt = dtw_mean_all_ref[(dtw_mean_all_ref.crop==crop)&(dtw_mean_all_ref.year==year)]
+        if len(df_plt)>0:
+            df_plt.hist('dtw_ft', ax=ax_n, weights = df_plt.acres)
+            # dtw_arr_mean.plot.kde(ax=ax_n) # version with kernel density plot
+            ax_n.set_title(year)
+        
+    fig.suptitle(crop)
+    fig.supylabel('Area (acres)')
+    # fig.supylabel('Density')
+    fig.supxlabel('Mean depth to water (ft)')
+    plt.savefig(join(out_dir, 'DTW', 'season_avg_dtw_ft_histogram_acres_'+crop+'.png'))
+    plt.close()
+dtw_mean_all.index.name = 'UniqueID'
 
 # %%
 
 fig,ax = plt.subplots(nrow,ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
 
 for n,year in enumerate(run_years[:-1]):
-    ax_n = ax[int(n/ncol), int(n%ncol)]
+    if nrow>1:
+        ax_n = ax[int(n/ncol), int(n%ncol)]
+    elif nrow==1:
+        ax_n = ax[int(n%ncol)]    
     dtw_mean_all.loc[dtw_mean_all.year==year,'dtw_ft'].hist(ax=ax_n)
     ax_n.set_title(year)
  
@@ -258,7 +385,7 @@ for year in run_years:
         for crop in finished_crops:
         # for crop in finished_crops[2]:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
             yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
             yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
             # get the total extent of the irrigation season (calculation period)
@@ -276,12 +403,6 @@ for year in run_years:
             # concat to existing data
             df_all = pd.concat((df_all, df))
 
-# # correct profit from negative to positive
-# df_all.loc[df_all['var']=='profit','values'] *= -1
-# # fix name before ID join
-# df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
-# # rename as econ for plotting reference
-# df_econ = df_all.merge(parcels[['UniqueID','area_m2']])
 
 # %%
 # rename as econ for plotting reference

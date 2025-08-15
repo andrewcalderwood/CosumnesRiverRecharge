@@ -105,9 +105,17 @@ def get_var_year(df, year):
 
 
 # %%
-def load_var(crop, year=None):
+def load_var(crop, year=None, input_name = 'static_model_inputs.xlsx'):
+    """
+    standard input loading file with variables to describe the: crop name, crop yield, irrigation requirements, season dates
+    INPUT:
+        crop: crop to extract information on
+        year: specific year to extract information assuming multiple years are present
+        input_name: spreadsheet name with static_model_inputs, added to allow use of different variables
+                for yield, revenue, operating costs, etc.
+    """
     # crop = 'Alfalfa'
-    fn = join(data_dir,'static_model_inputs.xlsx')
+    fn = join(data_dir, input_name)
     var_gen = pd.read_excel(fn, sheet_name='General', comment='#')
     var_gen = get_var_year(var_gen, year)
     var_gen = var_gen.set_index('variable')['value'] # adjust for quick pulling of variables
@@ -133,7 +141,12 @@ def load_var(crop, year=None):
     var_yield = var_yields_all[var_yields_all.crop==crop]
     
     season = season_all[season_all.crop==crop].sort_values(['crop','season'])
-    return(var_gen, var_crops, var_yield, season, pred_dict, crop_dict)
+
+    # new input is irrigation bounds (initial, rate maximum, season total) by crop
+    var_irr_all = pd.read_excel(fn, sheet_name='Irrigation', comment='#').dropna(axis=1, how='all')
+    var_irr = var_irr_all[var_irr_all.crop==crop]
+
+    return(var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr)
 
 # %%
 # get_var_year(var_crops, 2020)

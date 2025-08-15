@@ -155,7 +155,7 @@ def calc_yield(ETc, K_S, gen):
 # %%
 
        
-def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
+def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays, p_o_bool =True):
     """
     Y_A : actual yield (tons)
     dtw_arr : depth to water (ft)
@@ -163,6 +163,7 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     irr_sw : surface water irrigation (m)
     gen : dictionary with cost variables
     arrays: when False says that the optimization is being run so irrigation efficiency should be used to scale gw cost
+    p_o_bool: boolean whether to remove operating costs or not
     """
     # set up local variables
     p_c = gen.p_c
@@ -181,10 +182,22 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays):
     in_2_m = (1/12)*0.3048 # convert from inches to meters
     c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0]*irr_eff_mult)/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
     c_swtot = np.multiply(p_sw, irr_sw[:,0]*irr_eff_mult)/in_2_m # Calcualte total surface water costs for the season ($/acre)
+    # to prevent negative irrigation from being used, remove any negative cost (profit) from putting water back and add a penalty
+    # there were still a few event for misc grain and grape with negative so increasing penalty from 2x to 4x
+    c_gwtot[c_gwtot<0] *= -4
+    c_swtot[c_swtot<0] *= -4
+    # calculate the total cost from irrigation
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
     # return as a negative for minimization
-    pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    if p_o_bool ==True:
+        pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    else:
+        pi = -((np.sum(p_c*Y_A) - np.sum(cost))) # Calculate profit ($/acre) without removing static operating costs
+
+    # it would be nice to be able to return both profit and revenue in an alternate scenario
+    # with alternate input file set up, may not need to use the alternate function to not include p_o
+    
     # forced internal boundary to prevent negatives
     # if any(irr_lvl <0):
     #     # set a scalable penalty, assuming p_o would be a sizable penalty

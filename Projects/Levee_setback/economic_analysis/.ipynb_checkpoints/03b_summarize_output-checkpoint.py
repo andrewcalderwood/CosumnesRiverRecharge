@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -60,20 +60,20 @@ warnings.filterwarnings("ignore")
 # seen as these are the main update to make in a script
 
 m_nam = sys.argv[1]
-# scenario_name = sys.argv[2]
+# added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+input_name = sys.argv[2]
 
-# m_nam = 'input_write_2000_2022'
-# m_nam = 'input_write_2000_2022_R3'
-# m_nam = 'input_write_2000_2022_R20'
+# m_nam = 'input_write_2014_2022_no_p_o'
+# m_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2020'
+
+# input_name = 'static_model_inputs.xlsx'
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
 
-
-# print('sys.argv[2] (scenario_name) is...')
-# print(scenario_name)
-print('\n\n')
-
+print('sys.argv[2] (input_name) is...')
+print(input_name)
 
 t_start = time.time()
 
@@ -118,16 +118,12 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
-loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # m_nam = 'input_write_2014_2020'
 # m_nam = 'input_write_2014_2020_R1'
 # m_nam = 'input_write_2014_2020_R3'
-
-# m_nam = 'input_write_2000_2022'
-# m_nam = 'input_write_2000_2022_R3'
-# m_nam = 'input_write_2000_2022_R20'
 
 model_ws = join(loadpth, m_nam)
 
@@ -145,32 +141,37 @@ swb_ws = join(model_ws, 'rep_crop_soilbudget')
 os.makedirs(join(swb_ws, 'output'), exist_ok=True)
 
 # %%
+# no longer need to load MODFLOW if we pre-process csv with parcel well and layer
 # define modflow model WS to reference for modflow input
 m_model_ws = join(dirname(loadpth), 'Regional', m_nam_base)
 
-load_only=['DIS', 'BAS6']
+# load_only=['DIS', 'BAS6']
 
-m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
-                                exe_name='mf-owhm', version='mfnwt',
-                              load_only = load_only)
+# m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
+#                                 exe_name='mf-owhm', version='mfnwt',
+#                               load_only = load_only)
 
 # %%
 # bottom array is needed for referencing well layer
-botm = m.dis.botm.array
+# botm = m.dis.botm.array
+m_dim = np.loadtxt(join(m_model_ws, 'model_metadata.txt')).astype(int)
+
 
 # %%
-from mf_utility import get_layer_from_elev
-dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
-nlay,nrow,ncol = botm.shape
-# also need shapefile of pumping well locations for each parcel
-parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
-frow = parcel_wells.row-1
-fcol = parcel_wells.column-1
-# # parcel_wells layers (make 1-based
-parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
-# get elevation
-parcel_wells['dem'] = dem_data[parcel_wells.row-1, parcel_wells.column-1]
-parcel_wells = parcel_wells[['UniqueID','dem','layer', 'row','column']]
+# from mf_utility import get_layer_from_elev
+# dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+# nlay,nrow,ncol = botm.shape
+# # also need shapefile of pumping well locations for each parcel
+# parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
+# frow = parcel_wells.row-1
+# fcol = parcel_wells.column-1
+# # # parcel_wells layers (make 1-based
+# parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
+# # get elevation
+# parcel_wells['dem'] = dem_data[parcel_wells.row-1, parcel_wells.column-1]
+# parcel_wells = parcel_wells[['UniqueID','dem','layer', 'row','column']]
+# now have this file pre-created by model_connect since it already estimates layer
+parcel_wells = pd.read_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'))
 parcel_wells.UniqueID = parcel_wells.UniqueID.astype(int)
 
 
@@ -183,8 +184,9 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 
 # %%
 
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [1]:
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in [all_run_dates.shape[0]-1]:
+for m_per in [6]:
 # for m_per in [4]:
     m_strt = all_run_dates.iloc[m_per].date
     year = m_strt.year
@@ -212,11 +214,14 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # determine dates for spring sampling
     spring_dates = m_dates[m_dates.index.month==3]
     # get head value from last 30 days to avoid using extreme single day value
-    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    # spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m_dim)
     
     # the dtw conversion runs a little slow
     # get the DTW for the wels in the simulation from the last period
-    well_dtw = sample_dtw(spring_heads, botm)
+    # well_dtw = sample_dtw(spring_heads, botm) # old version re-calculated well layer
+    # new version loads the parcel_wells_csv
+    well_dtw = sample_dtw(spring_heads, parcel_wells)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
@@ -243,11 +248,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     with h5py.File(fn) as dset:
         finished_crops = list(dset['array'].keys())
         print(finished_crops)
-
-# %%
-# import functions.output_processing
-# reload(functions.output_processing)
-# from functions.output_processing import get_wb_by_parcel
 
     # %%
     # load the processed dataframe with all datas
@@ -308,7 +308,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         print(crop)
 
         # %%
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -375,9 +375,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         # %%
         print('Running soil water budget with irrigation and updated DTW to re-calculate yield, profit, and percolation')
         # in theory the best function to use if it works
-        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, soil_rep = False,
+        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, input_name = input_name, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
         sys.stdout.flush()
+
+# %%
+# after running the updated swb for a year then it would make sense to load in the hdf5 for profit to calculate the average value but this could also be done
+# in a secondary script called by model_connect
 
 # %%
 t_final = time.time()

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -141,7 +141,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df):
     dtw_df: dataframe with depth to water for each daily step needed for the year
     '''
     # %%
-    var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+    var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
 
     # %%
     #  get the dates for each yield cycle

@@ -31,6 +31,8 @@ Scenario analysis:
 
 # Post-processing
 03b_summarize_output takes the saved irrigation rates and the simulated DTW after the fact to calculate the actual profit and yield on a parcel basis. This code could be integrated into 03_model_connect if interested in getting year by year updates in profit to inform decision making. This would also help provide better estimates of percolation.
+	- this was implemented via f_summarize_output
+	- the actual post-processing is now in the function 05_plot_final_output but this was partly pulled into a function called by model connect so 05b_plot_output_only.py should be able to do most processing
 
 
 
