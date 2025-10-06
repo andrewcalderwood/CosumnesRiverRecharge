@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -41,7 +41,7 @@ import matplotlib.pyplot as plt
 # standard geospatial python utilities
 # import pyproj # for converting proj4string
 import geopandas as gpd
-from osgeo import gdal
+# from osgeo import gdal
 import rasterio
 
 # mapping utilities
@@ -106,8 +106,8 @@ ss_bool = False # false = no steady state
 # Transient -> might want to think about making SP1 steady
 ss_strt = pd.to_datetime('2010-10-01')
 strt_date = pd.to_datetime('2014-10-01')
-end_date = pd.to_datetime('2018-09-30') # end date for validation
-# end_date = pd.to_datetime('2020-9-30') # end time for analysis
+# end_date = pd.to_datetime('2018-09-30') # end date for validation
+end_date = pd.to_datetime('2020-9-30') # end time for analysis
 
 dates = pd.date_range(strt_date, end_date)
 # The number of periods is the number of dates 
@@ -257,7 +257,7 @@ elif os.path.exists(c_dir):
 loadpth += '/GWFlowModel/Cosumnes/Stream_seepage/'
 model_nam = 'oneto_denier_upscale'+str(upscale)+'x'
 # model_nam = 'oneto_denier'
-model_nam = 'oneto_denier_homogeneous'
+# model_nam = 'oneto_denier_homogeneous'
 
 model_ws = loadpth+ model_nam +'_'+ str(strt_date.year)+'_'+str(end_date.year)
 if scenario != '':
@@ -802,6 +802,7 @@ XSg_z = gpd.GeoDataFrame(XSg_z, geometry = gpd.points_from_xy(XSg_z.easting, XSg
 # identify XS to be copied for diversion reaches
 fp_grid_xs = fp_grid[['Logger Location','geometry']].copy()
 fp_grid_xs = fp_grid_xs.sjoin_nearest(XSg_z.reset_index(), how='inner') #.drop(columns=['index_right'])
+fp_grid_xs = fp_grid_xs.drop(columns = fp_grid_xs.columns[fp_grid_xs.columns.str.contains('index_')])
 # od_breach is the sensor location where the breach was made in the levees for flow to leave the river
 od_breach = fp_grid_xs[fp_grid_xs['Logger Location']=='OD_Excavation'].copy()
 od_breach['xs_num'] -= 0.2 # adjust xs_num to set sorting order
@@ -858,10 +859,6 @@ XSg = XSg.set_index('iseg')
 
 # %% [markdown]
 # Had to add extra if statements for if the previous segment ends at diversion
-
-# %%
-# XSg.head()
-# XSg.iloc[26:35]
 
 # %%
 # fill upstream with parameters from sensors
@@ -1739,10 +1736,10 @@ lu_ag = gpd.overlay(lu_ag, m_domain)
 
 # %% editable=true slideshow={"slide_type": ""}
 # WATERSOURC = {1: SW, 2: Mixed, 3: GW, 4:Unknown}
-fig,ax = plt.subplots()
-lu_ag.plot(ax=ax)
-XSg.plot(ax=ax, markersize=0.1)
-gpd.sjoin_nearest(lu_ag, XSg.drop(columns=['index_right']), max_distance=1000*0.3048, how='inner')
+# fig,ax = plt.subplots()
+# lu_ag.plot(ax=ax)
+# XSg.plot(ax=ax, markersize=0.1)
+# gpd.sjoin_nearest(lu_ag, XSg.drop(columns=['index_right']), max_distance=1000*0.3048, how='inner')
 # 1000*0.3048
 # lu_ag
 
@@ -2295,9 +2292,6 @@ nwt.__dict__ = nwt_dict
 m.write_input()
 
 
-
-# %% [markdown]
-#
 
 # %%
 

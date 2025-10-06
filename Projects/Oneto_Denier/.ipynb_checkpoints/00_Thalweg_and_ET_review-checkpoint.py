@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -126,7 +126,7 @@ rm_elev = rm_elev.drop_duplicates(['xs_num','Sensor'])
 # -
 
 # identify segments with 100 m of the lake
-lak_segs = gpd.sjoin_nearest(XSg.drop(columns=['index_right']), lak_extent, max_distance=100)
+lak_segs = gpd.sjoin_nearest(XSg, lak_extent, max_distance=100)
 print('Extent of lake segments:', lak_segs.iseg.min(), '-', lak_segs.iseg.max())
 
 fig,ax = plt.subplots()
@@ -153,6 +153,9 @@ legend_elements = [
     Line2D([0], [0], linestyle='--', color='blue', label='Nearest Thalweg'),
     # Line2D([0], [0],linestyle='--', color='brown', label='Well Head Reference Point'),
 ]
+# -
+
+fig_dir = join(proj_dir, 'figures', "Methods")
 
 # +
 mw = 'MW_5'
@@ -176,6 +179,8 @@ fig.supylabel('Elevation (m)')
 fig.supxlabel('Date')
 ax_n.annotate('Stream Bottom', xy = ('2015-3-1',4), xycoords = 'data', ha='center')
 ax_n.annotate('Groundwater', xy = ('2016-10-1',-3), xycoords = 'data', ha='center')
+
+plt.savefig(join(fig_dir, 'example GW hydrograph with stream bottom.png'), bbox_inches='tight')
 
 
 # +
@@ -218,6 +223,7 @@ fig.tight_layout(h_pad=0.1, w_pad =-0.1)
 
 fig.legend(handles=legend_elements, loc='outside upper center', ncol=2, bbox_to_anchor=(0.5, 1.05),)
 
+plt.savefig(join(fig_dir, 'GW hydrographs with stream bottom 6 wells.png'), bbox_inches='tight')
 # -
 
 
