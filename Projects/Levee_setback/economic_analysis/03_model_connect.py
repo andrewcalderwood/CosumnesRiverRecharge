@@ -334,7 +334,7 @@ years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
 
 # %% [markdown]
 # ## Scenarios
-# Need to start thinking of the best way to save different model scenarios with the high level model_ws change
+# Need to start thinking of the best way to save different model scenarios with the high level model_ws change. Even with different static_model_input.xlsx as long as scenario_name is kept consistent then it can reference back to this.
 
 # %%
 
@@ -461,7 +461,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # # Crop choice model
 # This uses the updated DTW from each previous year.
 #
-# Some of the file load in of the crop choice could be moved external of the loop (e.g., WY types and logit_coefs)
+# Some of the file load in of the crop choice could be moved external of the loop (e.g., WY types and logit_coefs)  
+#
+# Need to also update to use the estimated revenue rather than historical values.
 
     # %%
     # load Sac Valley WYT

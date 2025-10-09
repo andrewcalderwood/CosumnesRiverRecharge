@@ -49,14 +49,6 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
-# %%
-scenario_summary = pd.read_excel(join(data_dir, 'scenario_summary.xlsx'))
-# subset to scenarios of interest
-scenario_summary = scenario_summary[scenario_summary.base_m_nam==m_nam]
-# to identify file paths
-scenario_summary['extension'] = scenario_summary.m_nam.str.extract(r'(_R\d{1,2})')
-scenario_summary = scenario_summary.set_index('m_nam')
-
 
 # %%
 def add_path(fxn_dir):
@@ -73,24 +65,42 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 
+# %% [markdown]
+# The first few plots are scenario specific, the last plots are across all listed scenarios
+
 # %%
 # update to different modflow models here
 m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2022'
+m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 scenario = '_R3' # 6x existing diversion for MAR vineyard
 
+scenario = '_R203' # no p_o, 6x MAR
+# scenario = '_R204' # no p_o, 90/20 floodplain
+
 s_nam = m_nam+scenario
 
-model_ws = join(loadpth, m_nam)
+m_version = '' # original baseline with p_o
+m_version = '_R200' # no p_o # specified later?
+# need to specify base version for easier scenario switching
+base_model_ws = join(loadpth, m_nam)
+
+model_ws = join(loadpth, m_nam+m_version)
 scenario_ws = join(loadpth, s_nam)
 
 model_out = join(model_ws, 'output_clean')
 scenario_out = join(scenario_ws, 'output_clean')
 
 # %%
+scenario_summary = pd.read_excel(join(data_dir, 'scenario_summary.xlsx'))
+# # subset to scenarios of interest
+scenario_summary = scenario_summary[scenario_summary.base_m_nam==m_nam]
+# # to identify file paths
+scenario_summary['extension'] = scenario_summary.m_nam.str.extract(r'(_R\d{1,2})')
+scenario_summary = scenario_summary.set_index('m_nam')
+
 
 # %%
 scenario_dir = join(scenario_out, 'baseline_comparison')
@@ -139,27 +149,28 @@ diff_econ = df_econ.merge(df_econ_s, on=['crop','name','var','year'], suffixes=(
 # %%
 var = 'yield'
 var='profit'
-for var in ['yield','profit']:
-    # df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
-    df_plt = diff_econ[diff_econ['var']==var].copy()
-    crops = df_plt.crop.unique()
-    fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
-    
-    for n,crop in enumerate(crops):
-        ax_n = ax[n]
-        df_plt[df_plt.crop==crop].plot(x='year',y=['value_m','value_s'], ax=ax_n, kind='bar',legend=False)
-        ax_n.set_title(crop)
-        ax_n.set_xlabel('Year')
-        # ax_n.set_xticks(df_plt.year.unique().astype(str))
-    
-    
-    # df_crop = df_plt[df_plt.crop==crop]
-    # df_crop.set_index('year').reindex(df_plt.year.unique()).reset_index()
-    df_plt[df_plt.crop==crop].plot(x='year',y=['value_m','value_s'], ax=ax_n, kind='bar',legend=True)
-    plt.legend(['Baseline','Scenario'])
-    fig.supylabel(var.capitalize())
-    plt.savefig(join(scenario_dir, var+'_field_avg.png'), bbox_inches='tight')
-    plt.close()
+for val in ['total_value', 'value']:
+    for var in ['yield','profit']:
+        # df_plt = df_econ_agg[df_econ_agg['var']==var].copy()
+        df_plt = diff_econ[diff_econ['var']==var].copy()
+        crops = df_plt.crop.unique()
+        fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
+        
+        for n,crop in enumerate(crops):
+            ax_n = ax[n]
+            df_plt[df_plt.crop==crop].plot(x='year',y=[val+'_m', val+'_s'], ax=ax_n, kind='bar',legend=False)
+            ax_n.set_title(crop)
+            ax_n.set_xlabel('Year')
+            # ax_n.set_xticks(df_plt.year.unique().astype(str))
+        
+        
+        # df_crop = df_plt[df_plt.crop==crop]
+        # add legend to the last plot
+        df_plt[df_plt.crop==crop].plot(x='year',y=[val+'_m',val+'_s'], ax=ax_n, kind='bar',legend=True)
+        plt.legend(['Baseline','Scenario'])
+        fig.supylabel(var.capitalize())
+        plt.savefig(join(scenario_dir, var+'_field_avg_'+val+'.png'), bbox_inches='tight')
+        plt.close()
 
 # %% [markdown]
 # # Process water budget
@@ -224,16 +235,18 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 
 # %% [markdown]
 # ## plot DTW
-# Switched to plotting difference in spring levels as this is available for fallow and irrigated crops
+# Switched to plotting difference in spring levels as this is available for fallow and irrigated crops  
+# The part below here plots for all three scenarios
 
 # %%
 # load scenario data at once to simplify plotting 
 scenarios = ['','_R3','_R4']
+scenarios = ['_R200','_R203','_R204']
 
 dtw_all_scenario = pd.DataFrame()
 for scenario in scenarios:
-    dtw_mean_all = pd.read_csv(join(model_ws+scenario,'output_clean', 'dtw_ft_spring_all.csv'),index_col=0)
-    dtw_all_scenario = pd.concat((dtw_all_scenario, dtw_mean_all.assign(scenario=scenario, scen_name=scenario_summary.loc[basename(model_ws)+scenario, 'plot_name'])))
+    dtw_mean_all = pd.read_csv(join(base_model_ws+scenario,'output_clean', 'dtw_ft_spring_all.csv'),index_col=0)
+    dtw_all_scenario = pd.concat((dtw_all_scenario, dtw_mean_all.assign(scenario=scenario, scen_name=scenario_summary.loc[basename(base_model_ws)+scenario, 'plot_name'])))
 
     # could improve with scenario summary sheet
 scenario_names = dtw_all_scenario.scen_name.unique()
@@ -335,7 +348,7 @@ join(scenario_dir, 'dtw_ft_kde_'+crop+'.png')
 
 # %% [markdown]
 # Adding weighting definitely shifts the results, especially since they are for the actual DTW extent. What doesn't make sense is the PDf still has values with negative they just aren't evaluated.
-# - need to better understand KDE so ask Yusuke
+# - need to better understand KDE so ask Yusuke -> Yusuke was not very familiar with this so suggested whatever I found made sense.
 
 # %%
 os.makedirs(join(model_out, 'scenario_comparison'), exist_ok=True)
@@ -391,3 +404,5 @@ for crop in crops:
     plt.savefig(join(model_out, 'scenario_comparison', 'crop_acreage_by_year_'+crop+'.png'))
     plt.close()
 
+
+# %%

@@ -99,6 +99,9 @@ scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
 scenario = '_R200' # 200 represents no p_o
+scenario = '_R203' # no p_o and 6x MAR
+scenario = '_R204' # no p_o and 90/20 flloodplain
+
 # scenario=''
 
 
