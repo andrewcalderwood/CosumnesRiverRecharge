@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -25,7 +25,7 @@ from scipy.stats import gmean
 
 # standard geospatial python utilities
 import geopandas as gpd
-from osgeo import gdal
+# from osgeo import gdal
 import rasterio
 
 # import flopy
@@ -72,7 +72,7 @@ from mf_utility import get_dates, get_layer_from_elev, clean_wb
 from map_cln import gdf_bnds, plt_cln
 
 # %%
-ext_dir = 'F:/WRDAPP'
+ext_dir = 'D:/WRDAPP'
 c_dir = 'C:/WRDAPP'
 if os.path.exists(ext_dir):
     loadpth = ext_dir 
@@ -95,6 +95,10 @@ load_only = ['DIS','UPW','SFR','OC']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws= base_model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt')
 
+
+# %%
+nrow = m.dis.nrow
+ncol = m.dis.ncol
 
 # %%
 homogeneous_ws = join(loadpth, 'oneto_denier_homogeneous_2014_2018')
@@ -181,6 +185,7 @@ def read_gage(gagenam):
 #
 
 # %%
+add_path('../')
 # slightly different version of clean_sfr_df is used here to help with realization comparison
 # import mf_utility
 # from importlib import reload
@@ -209,6 +214,7 @@ h_sfrdf =  clean_sfr_df(homogeneous_ws, drop_iseg, dt_ref)
 # standardize grouping values
 wy_vals = sfrdf.WY.unique()
 facies_vals = ['Mud','Sandy Mud','Sand','Gravel']
+wy_vals
 
 
 # %% [markdown]
@@ -473,6 +479,7 @@ fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 4)
 
 # %% [markdown]
 # ### In-text numbers, KEEP
+# Need some numeric values to put in the text of the results section to emphasize key results to the reader
 
 # %%
 # how does baseflow persist into the summer by WY
@@ -795,22 +802,25 @@ ax = plt_wy_seg(value, ylabel, grp_col)
 # the connected and gaining variables are interesting from a box plot perspective but the correlations tend to be insignificant or NAs
 variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses', 'flowing':'No. Days\nwith flow',
              # 'connected':'Connected', 'gaining':'Gaining',
-            'Qout':'Streamflow'}
+             'Qout':'Streamflow',
+             'GHB_NET':'Net GW \nFlow', 'ET_OUT':'GDE \nET', 'LAK_IN':'Floodplain\nRecharge',
+            }
 tests = ['Pearson','Spearman','Kendall']
 tests = ['Pearson']
 var_names = list(variables.keys())
+print(var_names)
 
 # %%
-# ref_out = pd.read_csv(join(proj_dir, 'num_sfr_coarse.csv'), index_col=0)
+# summary characterisists of geology
+# added in domain wide and all layers versions which have slightly different distributions
+# potentially length of HCPs and/or count of distinct bodies
 ref_out = pd.read_csv(join(proj_dir, 'coarse_reference.csv'), index_col=0)
-ref_out=ref_out.rename(columns={'num_coarse':'num_sfr'})
+# ref_out=ref_out.rename(columns={'num_coarse':'num_sfr'})
 # ref_out
 
 
 # %%
 lak_head_all = pd.read_csv(join(out_dir, 'lak_head_timeseries.csv')).set_index('totim')
-
-# %%
 
 # %%
 wb_all = pd.DataFrame()
@@ -822,6 +832,9 @@ for r in np.arange(0,100):
     wb['GHB_NET'] = wb['GHB_IN'] - wb['GHB_OUT']
     wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
     wb_all = pd.concat((wb_all, wb.assign(realization=r)))
+
+# %%
+wb_all['dt'] = strt_date+(wb_all.SIMTIME-1).astype('timedelta64[D]')
 
 # %%
 wb_avg = wb_all.groupby('realization').mean(numeric_only=True)
@@ -855,13 +868,14 @@ corr_flow = corr_flow.groupby('realization').mean(numeric_only=True)[['Qout']]
 # join together the data for correlations
 corr_all = corr_seep.join(corr_bool).join(corr_flow)
 
-corr_all = corr_all[var_names]
+corr_all = corr_all.loc[:,corr_all.columns.isin(var_names)]
 
 # %%
 # corr_matrix_in.hist() # all variables are relatively normally distributed
 
 # %% [markdown]
 # Showing that baseflow is correlated with groundwater elevations in the floodplain or stream helps break down further that it is groundwater levels that drive the baseflow.
+# - this is a bit unnecessary as this is somewhat basic groundwater theory
 
 # %%
 # I should present the correlation matrix in the appendix
@@ -869,20 +883,32 @@ corr_all = corr_all[var_names]
 corr_matrix_in = corr_all.copy()
 corr_matrix_in['num_sfr_coarse'] = ref_out.num_sfr.values
 corr_matrix_in['num_lak_coarse'] = ref_out.num_lak.values
+# don't correlate with values in the top layer of the BC and don't show much different corr (except GHB_NET)
+# but could be worth playing out to see how predictions might vary?
+corr_matrix_in['num_sfr_coarse_all_lay'] = ref_out.num_sfr_all_lay.values
+corr_matrix_in['num_lak_coarse_all_lay'] = ref_out.num_lak_all_lay.values
+corr_matrix_in['vka_coarse_all_lay'] = ref_out.vka_tprogs_frac.values
 # corr_matrix_in['lak_gwe_mean'] = lak_head_all.mean(axis=0).values
-# check for correlation with other water budget components
+# check for correlation with other water budget components that vary by realization
+# pumping is constant, recharge is more or less constant (.04%)
 wb_cols = ['LAK_IN', 'ET_OUT','GHB_NET'] 
 # wb_avg[wb_cols]
 corr_matrix_in = pd.concat((corr_matrix_in, wb_avg[wb_cols]), axis=1)
-corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
+# need to maybe add new geology characteristics
+# corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
+
+# %%
+wb_avg.columns
 
 # %%
 corr = corr_matrix_in.corr('pearson')
 # Fill diagonal and upper half with NaNs
 mask = np.zeros_like(corr, dtype=bool)
-mask[np.triu_indices_from(mask)] = True
+# mask[np.triu_indices_from(mask)] = True
 corr[mask] = np.nan
-corr.style.background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1).highlight_null(color='#f1f1f1').format(precision=3)
+corr.style.background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1).highlight_null(color='#f1f1f1').format(precision=2)
+
+# correlation plot could be provided later if needed to justify choice of num_sfr_coarse rather than other geology measures
 
 # %% [markdown]
 # The full simulation correlations should be included to help explain cross-correlations and the potential influence of multiple inputs. The key takeaway is that we should consider the correlations due to the number of coarse reaches because of the consistent higher pearson's r across all areas. For water availability we could use streamflow, stream recharge or ET as an observation since they are all tightly correlated.
@@ -963,8 +989,11 @@ corr_bool = sfr_3mon_all.copy().set_index('realization',append=True)[['flowing',
 corr_seep = sfr_facies_all.groupby('realization').resample('3MS').sum(numeric_only=True)[['Qbase','Qrech']]
 # flow data should be averaged
 corr_flow = sfr_last_all.groupby(['realization']).resample('3MS').mean(numeric_only=True)[['Qout']]
+# groupby domain wide water bduget by quarter 
+wb_quarter = wb_all[['dt', 'realization']+['LAK_IN', 'ET_OUT','GHB_NET']].set_index('dt').groupby(['realization']).resample('3MS').mean(numeric_only=True)
+
 # join together the data for correlations
-corr_all_in = corr_seep.join(corr_bool).join(corr_flow).reset_index('dt')
+corr_all_in = corr_seep.join(corr_bool).join(corr_flow).join(wb_quarter).reset_index('dt')
 
 # %%
 corr_all_in['month'] = corr_all_in.dt.dt.month
@@ -1000,7 +1029,7 @@ for nwy, wy in enumerate(corr_plt.wy.unique()):
     ax_n.set_title(wy)
 # ax[0,0].ticklabel_format(style='plain')
 
-plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inches='tight')
+# plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inches='tight')
 
 # %%
 corr_all = corr_all_in.copy()
@@ -1120,6 +1149,9 @@ plt.savefig(join(fig_dir, 'corr_stats_season_WY.png'), bbox_inches='tight')
 coarse_ref.quantile([0,.5,1])*100/len(grid_sfr)
 
 
+# %% [markdown]
+# It might be good to present data as fraction of river reaches that are coarse instead of the number.
+
 # %%
 bins = len(coarse_ref.num_coarse.unique())
 coarse_ref.hist('num_coarse',
@@ -1143,6 +1175,11 @@ df_plt = plt_month[plt_month.WY==2017]
 # ax.plot(x_range, regr.predict(x_range), color='black', linewidth=3)
 # r2_val = r2_score(df_plt[['Qbase']], regr.predict(df_plt[['num_coarse']].values))
 # ax.annotate('$r^2$: '+ str(np.round(r2_val,3)), (0.85,0.85), xycoords='axes fraction')
+
+# %%
+# sfr_3mon_all
+corr_all_in.reset_index().set_index('dt')
+
 
 # %%
 def corr_plt_seep(name, ylabel, log=False):
@@ -1188,6 +1225,7 @@ def corr_plt_seep(name, ylabel, log=False):
 # %%
 labels=['Recharge ($m^3/day$)','Baseflow ($m^3/day$)','Days with flow','Streamflow ($m^3/day$)']
 var = ['Qrech','Qbase', 'flowing', 'Qout']
+
 # var,labels = ['Qbase'], ['Baseflow']
 for n, param in enumerate(var):
     corr_plt_seep(param, labels[n],log=True)
@@ -1202,7 +1240,7 @@ for n, param in enumerate(var):
 #
 # Although the number of days with flow doesn't have a significant relationship with heterogeneity I can still present the results holistically.
 #
-#
+# ET is very correlated with num coarse because seepage drives ET so this should be shown if we don't include ET in the correlations
 
 # %%
 # sfr_facies_all
@@ -1294,3 +1332,4 @@ plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
 # %%
 
 # %%
+corr_all_in.plot.scatter(x='Qout', y='ET_OUT')
