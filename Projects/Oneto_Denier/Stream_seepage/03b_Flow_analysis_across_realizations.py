@@ -421,8 +421,8 @@ def plt_ts_axes(ax):
     # set axis labels
     ax[-1].set_xlabel('Date')
     # ax[0].set_ylabel('Total Seepage ($m^3/d$)')
-    ax[0].set_ylabel('Total\nRecharge ($m^3/d$)')
-    ax[1].set_ylabel('Total\nBaseflow ($m^3/d$)')
+    ax[0].set_ylabel('Total Stream\nLosses ($m^3/d$)')
+    ax[1].set_ylabel('Total Stream\nBaseflow ($m^3/d$)')
     ax[-1].set_ylabel('Daily\nStreamflow ($m^3/d$)')
     
     # need log scale or peaks wash out other data
@@ -472,7 +472,7 @@ plt_ts_axes(ax)
 fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 4)
 
 # fig.tight_layout()
-# plt.savefig(join(fig_dir, 'time_series_seepage_flow_quantiles.png'), bbox_inches='tight')
+plt.savefig(join(fig_dir, 'time_series_seepage_flow_quantiles.png'), bbox_inches='tight')
 
 
 
@@ -783,7 +783,7 @@ variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses',
              'flowing':'Fraction of\nDays with flow',
              # 'connected':'Connected', 'gaining':'Gaining',
              'Qout':'Streamflow',
-             'GHB_NET':'Net GW \nFlow', 'ET_OUT':'GDE \nET', 'LAK_IN':'Floodplain\nRecharge',
+             'GHB_NET':'Net GW \nFlow', 'ET_OUT':'GW \nET', 'LAK_IN':'Floodplain\nRecharge',
             }
 tests = ['Pearson','Spearman','Kendall']
 tests = ['Pearson']
@@ -1024,7 +1024,7 @@ for nwy, wy in enumerate(corr_plt.wy.unique()):
 
 fig.supxlabel('Month starting 3-month period')
 fig.supylabel('Volumetric flux (million $m^3/day$)')
-# plt.savefig(join(fig_dir, 'corr_boxplots_season_WY.png'), bbox_inches='tight')
+plt.savefig(join(fig_dir, 'corr_boxplots_season_WY.png'), bbox_inches='tight')
 
 # %%
 corr_all = corr_all_in.copy()
@@ -1212,7 +1212,7 @@ def corr_plt_seep(sfr_3mon_all, name, ylabel, log=False):
     for mn, mon in enumerate(sfr_3mon_all.month.unique()):
         ax_n = ax[0, mn]
         ax_n.set_title(labels_3mon[mn])
-    fig.text(-0.01, 0.4, 'Mean Seasonal '+ylabel, rotation=90)
+    fig.text(-0.01, 0.2, 'Mean Seasonal '+ylabel, rotation=90) #-0.01, 0.4
     fig.text(0.4, -0.01, 'Number of Coarse Stream Reaches')
 
     fig.tight_layout()
@@ -1251,7 +1251,7 @@ for n, param in enumerate(var):
     
     # make a log10 version for those transformed
     if (param in log_transform):
-        corr_plt_seep(corr_all_in_lin, param, labels[n],log=True)
+        corr_plt_seep(corr_all_in_lin, param, 'log10 '+labels[n],log=True)
         plt.savefig(join(fig_dir,'Appendix', 'corr_scatter_log10_'+param+'.png'), bbox_inches='tight')
         plt.close()
 
@@ -1292,11 +1292,11 @@ total_conn = total_conn.groupby('realization').resample('3MS').mean().reset_inde
 # Similar to the plot showing days with flow by segment, the overall number of days with flow doesn't change much when looking at the histogram. From the earlier plots it looked like flow was extended at the downstream longer while reduced at the upstream. To show how downstream conditions change, we should represent the flow by requiring all segments to be flowing, take minimum of all segments which would essentially be the same as taking the most downstream segment. 
 
 # %%
-plt_date = '2015-10-1'
-total_conn[total_conn.index==plt_date].hist('flowing')
-plt.axvline(h_conn[h_conn.index==plt_date].flowing[0],color='red')
+# plt_date = '2015-10-1'
+# total_conn[total_conn.index==plt_date].hist('flowing')
+# plt.axvline(h_conn[h_conn.index==plt_date].flowing[0],color='red')
 
-#plot(x='realization',y='flowing',kind='scatter')
+# #plot(x='realization',y='flowing',kind='scatter')
 
 # %%
 total_flow = total_flow.join(h_flow,rsuffix='_h')
@@ -1346,14 +1346,15 @@ for n, n_y in enumerate(total_last_fall.index.year.unique()):
     print(n_y+1, more_flow.sum())
 
 # %%
-plt_date = '2017-10-1'
+# plt_date = '2017-10-1'
 
-total_last[total_last.index==plt_date].hist('flowing')
-plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
+# total_last[total_last.index==plt_date].hist('flowing')
+# plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
 
 
-# %%
-# can we plot ET and flow as fractional changes to the average value for the quarter?
+# %% [markdown]
+# # GW ET vs streamflow
+# Can we plot ET and flow as fractional changes to the average value for the quarter?
 
 # %%
 # plot streamflow vs ET to understand the tradeoff in benefits
@@ -1361,6 +1362,12 @@ plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
 # corr_all_in.plot.scatter(x='Qout', y='ET_OUT')
 # corr_all_in[corr_all_in.wy==2017].plot.scatter(x='Qout', y='ET_OUT')
 # corr_all_in[corr_all_in.wy==2017]
-sns.relplot(corr_all_in, x='Qout', y='ET_OUT', col='month',row='wy', facet_kws={'sharey':False, 'sharex':False})
+
+# sns.relplot(corr_all_in, x='Qout', y='ET_OUT', col='month',row='wy', facet_kws={'sharey':False, 'sharex':False})
+
+# %% [markdown]
+# ET vs streamflow shows linear relationships in wet years which makes sense based on our understanding of the system, i.e., more high K stream reaches leads to more recharge leads to more water for ET and less for streamflow. 
+#
+# Yes we know there is more ET on a daily scale but what are the practical implications. The piece I haven't explored yet is spatial extent and duration of ET. 
 
 # %%
