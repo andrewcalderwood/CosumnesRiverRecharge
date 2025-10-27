@@ -748,9 +748,6 @@ plt.close()
 # adding color helps show tendency for earlier drying with more coarse reaches but there is still internal variability suggesting
 # other geologic structure may have an influence
 
-# %%
-grid_sfr[['reachID', 'Total distance (m)']]
-
 # %% [markdown]
 # All WY have a fairly tight start (low variance) because the flow at the inlet is least impacted yet by differences in geology. In low flow years we don't see a signal from the floodplain connection but rather we see a fairly consistent decline across all realizations in days with flow with the largest variablility toward the outlet. In WY2016 there is a pattern where the peak variability occurs just before the floodplain diversion, which might be explained by the floodplain distributing water for recharge such that it provides a reduction in seepage rates out of the stream, this pattern might be stronger here because 2016 starts with initially dry streamflow conditions. The WY2016 reduction in standard deviation below the floodplain diversion might also be explained by the fact that less water in the channel means less seepage so the channel might be more uniformly dry  
 #
@@ -1369,5 +1366,112 @@ for n, n_y in enumerate(total_last_fall.index.year.unique()):
 # ET vs streamflow shows linear relationships in wet years which makes sense based on our understanding of the system, i.e., more high K stream reaches leads to more recharge leads to more water for ET and less for streamflow. 
 #
 # Yes we know there is more ET on a daily scale but what are the practical implications. The piece I haven't explored yet is spatial extent and duration of ET. 
+#
+# Could represent by plotting if GW > rtg depth or simply by plotting mean DTW under ET/ISW
 
 # %%
+et_surf = m.evt.surf.array[0,0]
+ext_dp = m.evt.exdp.array[0,0]
+# bottom elevation of roots
+et_botm =et_surf - ext_dp
+
+et_row, et_col = np.where(ext_dp>2)
+# evtr_avg = m.evt.evtr.array.sum(axis=0)[0]
+et_lay = get_layer_from_elev(et_botm[et_row, et_col], m.dis.botm[:, et_row, et_col], m.dis.nlay)
+# et_lay
+# identify which lake rows and columns are in GDEs
+# gde_lak_bool = (ext_dp>2)[lak_row, lak_col]
+# gde_lak_row = lak_row[gde_lak_bool]
+# gde_lak_col = lak_col[gde_lak_bool]
+# head = hdobj.get_data(dt_ref.kstpkper.iloc[0])
+# head = np.ma.masked_where(head==-999.99, head)
+def find_active_ET(model_ws):
+    hdobj = flopy.utils.HeadFile(join(model_ws, 'MF.hds'))
+    et_act = np.zeros((m.dis.nper, nrow,ncol))
+    et_head_all = np.zeros((m.dis.nper, len(et_row)))
+    
+    for t in np.arange(0,m.dis.nper):
+        head = hdobj.get_data(dt_ref.kstpkper.iloc[t])
+        head = np.ma.masked_where(head==-999.99, head)
+        # identify which GDE ET cells would active based on head
+        et_head = head[et_lay, et_row, et_col]
+        b = et_head > et_botm[et_row, et_col]
+        et_act[t, et_row[b], et_col[b]] = 1
+        # better to save head just under relevant ET
+        et_head_all[t, :] = et_head
+    return et_act, et_head_all
+
+
+
+# %%
+et_act, et_head = find_active_ET(model_ws)
+
+
+# %%
+# plt.plot(et_head.mean(axis=1))
+
+# %%
+import h5py
+
+# %%
+nt = 100
+
+
+# %%
+if rewrite:
+
+    # load information on whether ET is active and the head in the ET cells with rtg depth >2
+    h5_fn = join(out_dir, 'et_summary_arrays.hdf5')
+    with h5py.File(h5_fn, "w") as f:
+        grp = f.require_group('active_et_arrays') # makes sure group exists
+        grp.attrs['units'] = 'boolean'
+        grp.attrs['description'] = 'arrays where the first dimension is the stress period the second \
+        is the model row and the third is the model column where the value is a boolean for if ET is active'
+    
+        head_grp = f.require_group('et_head_arrays') # makes sure group exists
+        head_grp.attrs['units'] = 'gw head m'
+        head_grp.attrs['description'] = 'arrays where the first dimension is the stress period the second \
+        is the order of ET cells'
+        for t in np.arange(0,nt):
+            model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
+            et_act_t, et_head_t = find_active_ET(model_ws)
+            # et_act_all[t,:] = np.copy(et_act_t)
+            r_name = 'r'+str(t).zfill(3)
+            dset = grp.require_dataset(r_name, et_act_t.shape, dtype='f', compression="gzip", compression_opts=4)
+            dset[:] = et_act_t
+    
+            dset = head_grp.require_dataset(r_name, et_head_t.shape, dtype='f', compression="gzip", compression_opts=4)
+            dset[:] = et_head_t
+
+# %%
+et_act_all = np.zeros((nt, m.dis.nper, nrow,ncol))
+et_head_all = np.zeros((nt, m.dis.nper,len(et_row)))
+
+h5_fn = join(out_dir, 'et_summary_arrays.hdf5')
+
+# et_act_all
+with h5py.File(h5_fn, "r") as f:
+    grp = f['active_et_arrays']
+    head_grp = f['et_head_arrays']
+    for t in np.arange(0,nt):
+        r_name = 'r'+str(t).zfill(3)
+        arr = grp[r_name][:]
+        et_act_all[t,:] = arr
+        arr = head_grp[r_name][:]
+        et_head_all[t,:] = arr
+
+# %%
+plt.plot(np.transpose(et_head_all.mean(axis=2)));
+
+# %% [markdown]
+# What is more interesting is the number of days that are active is different.
+
+# %%
+fig,ax = plt.subplots(figsize=(3,3),  layout='constrained')
+im = ax.imshow(et_act.mean(axis=0))
+plt.colorbar(im, shrink=0.5)# plt.show()
+
+
+# %%
+et_count = et_act.sum(axis=(1,2))/(nrow*ncol/100)
+plt.plot(et_count)
