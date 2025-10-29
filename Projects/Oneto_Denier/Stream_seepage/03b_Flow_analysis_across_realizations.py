@@ -1569,7 +1569,20 @@ et_flow_df.flowing *= 100
 mean_stats = et_flow_df.groupby('realization').mean()
 # Compute numerical data ranks (1 through n) along axis.
 rank_df = mean_stats.rank()
-agg_rank = pd.DataFrame(rank_df[['perc_active_ET','Qbase','flowing']].sum(axis=1), columns=['agg_rank'])
+agg_rank = pd.DataFrame(rank_df[['perc_active_ET','flowing']].sum(axis=1), columns=['agg_rank'])
 
 agg_rank = agg_rank.merge(coarse_ref, on='realization')
-agg_rank.plot.scatter('num_coarse','agg_rank')
+
+fig,ax_n = plt.subplots()
+agg_rank.plot.scatter('num_coarse','agg_rank', ax=ax_n)
+
+name='agg_rank'
+regr = linear_model.LinearRegression()
+regr.fit(agg_rank[['num_coarse']].values, agg_rank[[name]].values)
+x_range = np.array([[agg_rank.num_coarse.min()], [agg_rank.num_coarse.max()]])
+ax_n.plot(x_range, regr.predict(x_range), color='black', linewidth=3)
+r2_val = r2_score(agg_rank[[name]], regr.predict(agg_rank[['num_coarse']].values))
+ax_n.annotate('$R^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes fraction')
+
+# %% [markdown]
+# The most interesting part of this dual rank plot is to consider that within the 2 standard deviations of num coarse there are some that maintain a lot of streamflow and ET and some that don't. What is interesting would be to explore the difference between those two and suggest that as future work to identify smaller scale processes that impact these benefits.
