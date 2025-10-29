@@ -1370,12 +1370,16 @@ for n, n_y in enumerate(total_last_fall.index.year.unique()):
 # Could represent by plotting if GW > rtg depth or simply by plotting mean DTW under ET/ISW
 
 # %%
+
+# %%
 et_surf = m.evt.surf.array[0,0]
 ext_dp = m.evt.exdp.array[0,0]
 # bottom elevation of roots
 et_botm =et_surf - ext_dp
 
 et_row, et_col = np.where(ext_dp>2)
+# specify number of cells classified as GDE (rtg dp >2)
+gde_cells = np.sum(ext_dp>2)
 # evtr_avg = m.evt.evtr.array.sum(axis=0)[0]
 et_lay = get_layer_from_elev(et_botm[et_row, et_col], m.dis.botm[:, et_row, et_col], m.dis.nlay)
 # et_lay
@@ -1461,17 +1465,111 @@ with h5py.File(h5_fn, "r") as f:
         et_head_all[t,:] = arr
 
 # %%
-plt.plot(np.transpose(et_head_all.mean(axis=2)));
+# pre-define gray colors based on num coarse
+gray_colors = cm.gray(norm(coarse_ref.num_coarse))
+et_head_mean = et_head_all.mean(axis=2)
+
+# %%
+
+import matplotlib.dates as mdates
+
+
+# %%
+fig,ax = plt.subplots()
+for t in np.arange(0,nt):
+    ax.plot(dt_ref.dt, et_head_mean[t], color=gray_colors[t]);
+
+# just fix xlabels instead
+plt.ylabel('Active ET\nMean GWE (m)')
+plt.colorbar(s_m, ax=ax, label='Number of coarse reaches')
+plt.grid(axis='y')
+plt.xlim(dt_ref.dt.min(), dt_ref.dt.max())
+ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+# ax.xaxis.set_major_locator(mdates.MonthLocator(interval=12))
+# ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+
+# ax.set_xticks(xticks.index, xticks.dt.astype(str))
+# it mainly seems like a shift in magnitude (less than 1 m or so), no clear shift in timing
+# to look at shifts in timing, would need to plot regression of the day something occurred vs realizations
+# last day of stream or first, same for ET
+
+# %%
+# scatter plot of mean GWE of ET vs num coarse looks similar to flux
+# makes sense since only other shift is ETo
+# fig,ax = plt.subplots()
+# ax.scatter(coarse_ref.num_coarse, et_head_mean.mean(axis=1))
+
 
 # %% [markdown]
-# What is more interesting is the number of days that are active is different.
+# What is more interesting is the number of days that are active is different. Should specify in the paper we focused on GDEs with rooting depths greater than 2 m where we can expect to see consistent connection
 
 # %%
-fig,ax = plt.subplots(figsize=(3,3),  layout='constrained')
-im = ax.imshow(et_act.mean(axis=0))
-plt.colorbar(im, shrink=0.5)# plt.show()
+et_act = et_act_all[0]
+fig,ax = plt.subplots(figsize=(3,3), dpi=200,  layout='constrained')
+et_plt = et_act.mean(axis=0)*100
+et_plt = np.ma.masked_where(et_plt==0, et_plt)
+im = ax.imshow(et_plt)
+plt.colorbar(im, shrink=0.5, label='Percent time active')# plt.show()
 
 
 # %%
-et_count = et_act.sum(axis=(1,2))/(nrow*ncol/100)
-plt.plot(et_count)
+# summarize to count number of active et cells
+et_count_all = et_act_all.sum(axis=(2,3))
+# can represent by scaling by all cells or deep ET cells
+et_perc_all = et_count_all/(nrow*ncol/100)
+et_perc_gde = et_count_all/(gde_cells/100)
+
+# %%
+# the second layer would be to focus on GDEs only where historic DTW <30 ft to align with GSP criteria but
+# this is more a general exploration so probably shouldn't cutoff too much
+
+# %%
+fig,ax = plt.subplots()
+for t in np.arange(0,nt):
+    ax.plot(dt_ref.dt, et_perc_gde[t], color=gray_colors[t]);
+
+plt.ylabel('Percent Active GDEs')
+plt.colorbar(s_m, ax=ax, label='Number of coarse reaches')
+plt.xlim(dt_ref.dt.min(), dt_ref.dt.max())
+ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+
+# spatial extent also seems to shift by mainly a few percent, maybe up to 20% in wet years like 2017
+
+# %%
+# # similarly strong linear relationship to areal extent and num coarse
+# plt.scatter(coarse_ref.num_coarse,et_perc_gde.mean(axis=1))
+
+# %%
+# plot percent active GDE vs number of days of flow in a year
+
+# %%
+# by realization, month, wy
+# corr_all_in.flowing
+et_perc_df = pd.DataFrame(np.transpose(et_perc_gde), index=dt_ref.dt)
+et_seas_df = et_perc_df.resample('3MS').mean()
+et_long = et_seas_df.melt(ignore_index=False, var_name='realization', value_name='perc_active_ET')
+
+# join together for quicker comparison
+et_flow_df = et_long.merge(corr_all_in, on=['dt','realization'])
+et_flow_df = et_flow_df.merge(coarse_ref, on='realization')
+et_flow_df.flowing *= 100
+
+# %%
+# sns.relplot(et_flow_df, x='flowing',y='perc_active_ET', hue='num_coarse', row='wy',col='month', kind='scatter')
+
+# %% [markdown]
+# This is a more useful plot here as it gets at the idea that ET is boosted by coarse cells in the wet season when streamflow is not significantly impacted by the extra losses. And by the dry season when streamflow starts to be imapcted, ET has already dropped generally so it is not compounding the effect on streamflow.
+#
+# There migth be more nuance if we look at specific realizations and their timing given the shift appears to occur between spring and summer.
+
+# %%
+# not that we can change subsurface but make a co-plot of realizations that on average maximize baseflow, streamflow and ET after normalizing
+
+# %%
+mean_stats = et_flow_df.groupby('realization').mean()
+# Compute numerical data ranks (1 through n) along axis.
+rank_df = mean_stats.rank()
+agg_rank = pd.DataFrame(rank_df[['perc_active_ET','Qbase','flowing']].sum(axis=1), columns=['agg_rank'])
+
+agg_rank = agg_rank.merge(coarse_ref, on='realization')
+agg_rank.plot.scatter('num_coarse','agg_rank')
