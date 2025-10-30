@@ -234,12 +234,14 @@ wy_cat = {2015:'Critical',2016:'Below Normal',2017:'Wet', 2018:'Below Normal'}
 # - Since I've focused more baseflow/seepage and streamflow/flowing days the connected/gaining gradient plots tend to repeat the information on baseflow/seepage and are usual lower correlations because they are slightly less impacted by the coarse vs fine conductivity.
 
 # %%
-if rewrite:
+# if rewrite:
+if True:
     # aggregate data by facies and sum to review seepage over time
     t0 = time.time()
 
     sfr_facies_all = pd.DataFrame()
-    for t in np.arange(0,100):
+    # for t in np.arange(0,100):
+    for t in np.arange(0,1):
         model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
         # remove stream segments for routing purposes
         sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
@@ -253,8 +255,17 @@ if rewrite:
     t1 = time.time()
     print('Time: %.2f min' % ((t1-t0)/60))
     # save output to speed up reuse
-    # sfr_facies_all.to_csv(join(out_dir, 'sfrdf_facies_sum.csv'))
-    sfr_facies_all.reset_index(level='facies').to_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'), key='dt', complevel=4)
+    # sfr_facies_all.reset_index(level='facies').to_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'), key='dt', complevel=4)
+
+# %%
+sfr_3mon_all[sfr_3mon_all.realization==0].head()
+
+# %%
+# sfrdf =  clean_sfr_df(base_model_ws, drop_iseg, dt_ref)
+# sfrdf.facies.unique()
+chk = sfr_facies_sum
+# flow exceeds one which indicates the issue
+chk.apply(lambda x: x/chk.num_facies).groupby('dt').sum(numeric_only=True).resample('3MS').mean()
 
 # %%
 sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
@@ -461,6 +472,9 @@ def plt_ts_axes(ax):
 # # plt.savefig(join(fig_dir, 'time_series_seepage_flow.png'), bbox_inches='tight')
 # t1 = time.time()
 # print('Time: %.2f min' % ((t1-t0)/60))
+
+# %%
+# do I want to come back and change the source since sfr_facies_all results were off from the sfr_3month_all?
 
 # %%
 fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
@@ -777,15 +791,15 @@ plt.close()
 # the connected and gaining variables are interesting from a box plot perspective but the correlations tend to be insignificant or NAs
 variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses', 
              # 'flowing':'No. Days\nwith flow',
-             'flowing':'Fraction of\nDays with flow',
+             'flowing':'Mean Fraction \nof Days \nwith Flow', # it's a spatial (segments) and temporal (quarter) mean
              # 'connected':'Connected', 'gaining':'Gaining',
              'Qout':'Streamflow',
              'GHB_NET':'Net GW \nFlow', 'ET_OUT':'GW \nET', 'LAK_IN':'Floodplain\nRecharge',
             }
 tests = ['Pearson','Spearman','Kendall']
 tests = ['Pearson']
-var_names = list(variables.keys())
-print(var_names)
+all_var_names = list(variables.keys())
+print(all_var_names)
 
 # %%
 # summary characterisists of geology
@@ -845,7 +859,7 @@ corr_flow = corr_flow.groupby('realization').mean(numeric_only=True)[['Qout']]
 # join together the data for correlations
 corr_all = corr_seep.join(corr_bool).join(corr_flow)
 
-corr_all = corr_all.loc[:,corr_all.columns.isin(var_names)]
+corr_all = corr_all.loc[:,corr_all.columns.isin(all_var_names)]
 
 # %%
 # corr_matrix_in.hist() # all variables are relatively normally distributed
@@ -921,7 +935,7 @@ def calc_corr_stats(corr_all, coarse_ref):
 corr_out = calc_corr_stats(corr_all, coarse_ref.num_coarse)
 # corr_out = calc_corr_stats(corr_all, ref_out.num_sfr.values)
 # corr_out = calc_corr_stats(corr_all, ref_out.num_lak.values)
-# corr_out = corr_out[[var_names+['type']]]
+# corr_out = corr_out[[all_var_names+['type']]]
 
 # the applicability of certain variables is questionable since Qrech, flowing, Qout have median
 # p values of > 0.05
@@ -975,7 +989,9 @@ corr_seep = corr_seep.rename(columns={'SFR_OUT':'Qbase','SFR_IN':'Qrech'})
 # flow data should be averaged
 corr_flow = sfr_last_all.groupby(['realization']).resample('3MS')[['Qout']].mean(numeric_only=True)
 # groupby domain wide water bduget by quarter, should use sum similar to recharge/baseflow
-wb_quarter = wb_all[['dt', 'realization']+['LAK_IN', 'ET_OUT','GHB_NET']].set_index('dt').groupby(['realization']).resample('3MS').mean(numeric_only=True)
+# taking off ,'GHB_NET' due to uncertainty on exterior boundary and low significance with num_coarse in stream
+wb_cols = ['LAK_IN', 'ET_OUT']  
+wb_quarter = wb_all[['dt', 'realization']+wb_cols].set_index('dt').groupby(['realization']).resample('3MS').mean(numeric_only=True)
 
 # join together the data for correlations
 corr_all_in = corr_seep.join(corr_bool).join(corr_flow).join(wb_quarter).reset_index('dt')
@@ -985,7 +1001,10 @@ corr_all_in['month'] = corr_all_in.dt.dt.month
 corr_all_in['wy'] = corr_all_in.dt.dt.year
 corr_all_in.loc[corr_all_in.month==10,'wy'] +=1
 
+# subset to variables that will be used
+var_names = pd.Series(all_var_names)[pd.Series(all_var_names).isin(corr_all_in.columns)].tolist()
 corr_all_in = corr_all_in[var_names+['dt','month','wy']]
+
 
 
 # %%
@@ -996,7 +1015,7 @@ y_mult = 1E-6
 # m_cols = corr_all.month.unique()
 # figsize=(8,5.3)
 fig, ax = plt.subplots(len(var_names),4, figsize=(8,7), sharex='col', sharey='row', layout='constrained')
-for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
+for nv, v in enumerate(var_names): #['Qbase','Qout']
     corr_plt = corr_all_in[[v,'wy','month']] 
     ax[nv, 0].set_ylabel(variables[v])
 
@@ -1073,7 +1092,7 @@ def plt_corr_lines(ax_n, ms):
 # %%
 # figsize=(8,5.3)
 fig, ax = plt.subplots(len(var_names),4, figsize=(8,7), sharex=True, sharey='row', layout='constrained')
-for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
+for nv, v in enumerate(var_names): #['Qbase','Qout']
     corr_plt = corr_out.loc['r'][[v,'type','wy','month']] 
     p_plt = corr_out.loc['p'][[v,'type','wy','month']] 
     for nwy, wy in enumerate(corr_plt.wy.unique()):
@@ -1229,15 +1248,16 @@ corr_all_in_lin.columns
 # Also need to clarify units are appropriate given the sum to 3 months means they are technically m3/3 months. switched to mean so units can remain m3/day. also baseflow is the only one that should be log-transformed
 
 # %%
-labels=['Recharge ($m^3/day$)','Baseflow ($m^3/day$)',
-        # 'Days with flow',
-        'Fraction of days with flow',
+labels=['Stream Losses ($m^3/day$)','Stream Baseflow ($m^3/day$)',
+        'Mean Fraction of Days with Flow',
         'Streamflow ($m^3/day$)']
 var = ['Qrech','Qbase', 'flowing', 'Qout']
 wb_labels = ['GW ET ($m^3/day$)','Net GW Flow ($m^3/day$)','Floodplain Recharge ($m^3/day$)']
 wb_var = ['ET_OUT','GHB_NET','LAK_IN']
 labels = labels+wb_labels
 var = var+ wb_var
+# filter for those actually used in final
+var = pd.Series(var)[pd.Series(var).isin(var_names)].tolist()
 # labels=['Recharge ($m^3/day$)']
 # var = ['Qrech']
 # var,labels = ['Qbase'], ['Baseflow']
@@ -1253,7 +1273,7 @@ for n, param in enumerate(var):
         plt.close()
 
 # %% [markdown]
-# # Application figure
+# # Application figures
 # Summary of net change in baseflow and ET for all realizations compared to the homogeneous case.
 #
 # And importantly, how does this change baseflow in seasons of concern, regarding the cosumnes functional flow regime. Between the homogeneous and hetergeneous realizations we need to sum across all segments because it's not fair to compare individual segments with the heterogeneity. But each day is a valuable comparison because a lack of flow is potential harmful to up-migrating salmon especially in fall.
@@ -1520,6 +1540,13 @@ et_perc_all = et_count_all/(nrow*ncol/100)
 et_perc_gde = et_count_all/(gde_cells/100)
 
 # %%
+# what if we plot days with a minimum water depth? (not that different from days with flow)
+
+# %%
+# the three month data is to coarse to plot a time series of days of flow
+# sns.relplot(corr_all_in, x='dt',y='flowing', hue='realization', kind='line')
+
+# %%
 # the second layer would be to focus on GDEs only where historic DTW <30 ft to align with GSP criteria but
 # this is more a general exploration so probably shouldn't cutoff too much
 
@@ -1586,3 +1613,36 @@ ax_n.annotate('$R^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes frac
 
 # %% [markdown]
 # The most interesting part of this dual rank plot is to consider that within the 2 standard deviations of num coarse there are some that maintain a lot of streamflow and ET and some that don't. What is interesting would be to explore the difference between those two and suggest that as future work to identify smaller scale processes that impact these benefits.
+
+# %%
+# agg_rank.num_coarse
+coarse_mean = coarse_ref.num_coarse.mean()
+coarse_std = coarse_ref.num_coarse.std()
+# look between 1/2 std deviations
+n_std = 1/2
+coarse_min, coarse_max = coarse_mean-coarse_std*n_std, coarse_mean+coarse_std*n_std
+
+rank_filter = agg_rank[(agg_rank.num_coarse>coarse_min)&(agg_rank.num_coarse<coarse_max)]
+# rank_filter.plot.scatter(x='num_coarse',y='agg_rank')
+# get quantiles to identify realizations for review
+rank_quant = rank_filter.agg_rank.quantile([0,0.25, 0.5, 0.75, 1], interpolation='nearest')
+print(rank_quant)
+rank_r = rank_filter[rank_filter.agg_rank.isin(rank_quant)]
+# print(rank_r)
+
+# %%
+rank_r_out = rank_r.reset_index().merge(rank_quant.reset_index().rename(columns={'index':'quantile'}))
+rank_r_out = rank_r_out.merge(rank_df[['perc_active_ET','flowing']], on='realization')
+rank_r_out.to_csv(join(fig_dir, 'coarse_ref_eco_rank_comp.csv'), index=False)
+# rank_r
+
+# %%
+rank_r_out.plot(x='realization',y=['perc_active_ET','flowing'],kind='bar')
+plt.ylabel('rank')
+
+# %%
+# extract hydrologic output to review for final ranked realizations
+rank_data = corr_all_in.loc[rank_r.index].copy()
+rank_long = rank_data.melt(id_vars=['dt','month','wy'], ignore_index=False)
+# rank_long
+sns.relplot(rank_long, x='dt',y='value', col='variable', col_wrap=3, hue='realization', facet_kws={'sharey':False},kind='line')
