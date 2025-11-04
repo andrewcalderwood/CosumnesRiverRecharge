@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -25,7 +25,7 @@ from scipy.stats import gmean
 
 # standard geospatial python utilities
 import geopandas as gpd
-from osgeo import gdal
+# from osgeo import gdal
 import rasterio
 
 # import flopy
@@ -50,7 +50,8 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 
 # %%
 out_dir = join(proj_dir, 'output')
-fig_dir = join(proj_dir, 'figures')
+fig_dir = join(proj_dir, 'figures','Stream_seepage')
+fig_dir
 
 
 # %%
@@ -72,10 +73,11 @@ from report_cln import magnitude
 # from importlib import reload
 # import OD_utility
 # reload(OD_utility)
+add_path('../')
 from OD_utility import clean_sfr_df
 
 # %%
-ext_dir = 'F:/WRDAPP'
+ext_dir = 'D:/WRDAPP'
 c_dir = 'C:/WRDAPP'
 if os.path.exists(ext_dir):
     loadpth = ext_dir 
@@ -177,7 +179,12 @@ r_review['num_coarse'] = ref_out.loc[r_review.realization, 'num_sfr'].values
 # coarse_ref.loc[r_review], sfr_last_mean[r_review]
 
 # %%
-# ref_out.loc[r_review.realization, 'num_lak'].values
+# altnerate version for ecosystem benefit analysis
+# realizations with same num_coarse but different ET/days with flow
+# r_eco = [10, 11, 15, 65, 73, 77]
+r_eco = pd.read_csv(join(fig_dir, 'coarse_ref_eco_rank_comp.csv'))
+r_eco = r_eco.rename(columns={'quantile':'value'}).assign(variable='quant')
+r_review = pd.concat((r_eco,r_review[r_review.variable=='fit']))
 
 # %%
 grid_sfr_all = pd.DataFrame()
@@ -200,6 +207,7 @@ for r in r_review.realization: #100
 # - the other variable to plot would be the number of distinct connected bodies that outcrop or that are in the domain
 
 # %%
+# maps to look at spatial coverage with stream line
 q_review = r_review[r_review.variable=='quant']
 fig,ax = plt.subplots(1, len(q_review), sharex=True, sharey=True, figsize=(12, 6.5))
 for nr, r in enumerate(q_review.realization):
@@ -212,11 +220,6 @@ fig,ax = plt.subplots(1, len(q_review), sharex=True, sharey=True, figsize=(12, 6
 for nr, r in enumerate(q_review.realization):
     grid_sfr_all[grid_sfr_all.realization==r].plot('facies', ax=ax[nr], legend=True, legend_kwds={'loc':'upper left'})
     ax[nr].set_title(str(r)+' - '+str(q_review.value.iloc[nr])+'\nNo. Coarse:'+str(q_review.num_coarse.iloc[nr]))
-
-# %%
-
-# grid_sfr_all[grid_sfr_all.realization==11]
-# m.name
 
 # %%
 r=11
@@ -232,10 +235,11 @@ sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, m.name)
 
 # %%
 sfrdf_all = pd.DataFrame()
-q_review = r_review[r_review.variable=='quant']
 # q_review = r_review[r_review.variable=='fit']
-q_review = r_review.copy()
+# q_review = r_review.copy()
+q_review = r_review[r_review.variable=='quant']
 
+# quantiles across all realiations
 for nr, r in enumerate(q_review.realization):
     folder = 'realization'+ str(r).zfill(3)
     # update model workspace so outputs to right directory
@@ -251,7 +255,6 @@ plt_segs = sfrdf['Total distance (m)'].unique()
 # instead of plotting just the VKA at the streambed we could plot the 2D slice? Problem is that this can infer that 2D connectivity
 # shows 3D while at 1D we must rely on 3D totally?? overhtinking it? Just try 2D and see
 sfr_hk_plt = grid_sfr_all[~grid_sfr_all.iseg.isin(drop_iseg)]
-fig,ax = plt.subplots(1, len(r_review[r_review.variable=='quant']), figsize=(8, 1), sharex=True, sharey=True, layout='constrained', dpi=300)
 
 def long_vka_plt(sfr_hk_plt, plt_segs, q_review, ax, dx=10):
     vmin = sfr_hk_plt.strhc1.min()
@@ -265,8 +268,11 @@ def long_vka_plt(sfr_hk_plt, plt_segs, q_review, ax, dx=10):
         ax[nr].set_xticks(ticks = np.arange(0, len(plt_segs), int(dx/2)), minor=True)
 
     cbar_ax=ax.ravel().tolist()
-    fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='$K_{vert}$\n($m/day$)', shrink=1, location='right')    
+    fig.colorbar(im, ax=cbar_ax, orientation='vertical', label='$K_{vert}$\n($m/day$)', shrink=1, location='right')  
+
+fig,ax = plt.subplots(1, len(r_review[r_review.variable=='quant']), figsize=(8, 1), sharex=True, sharey=True, layout='constrained', dpi=300)
 long_vka_plt(sfr_hk_plt, plt_segs, r_review[r_review.variable=='quant'], ax, dx=20)
+
 
 # %%
 r=q_review.realization.iloc[0]
@@ -315,6 +321,7 @@ def heat_map(sfrdf_all, variable, var_name, q_review):
     ax[-1,2].set_xlabel('Stream Reach');
     # ax[-1,2].set_xlabel('Total distance (m)');
     return(fig,ax)
+    
 fig, ax = heat_map(sfrdf_all, ['Qrech', 'Qbase'], ['Stream Losses', 'Stream Baseflow'], r_review[r_review.variable=='quant'])
 
 
@@ -330,6 +337,8 @@ def plot_vka(r, ax, sfr_nodata, k_max):
     upw_r = flopy.modflow.ModflowUpw.load(model_ws+'/MF.upw', model=m)
     sfr_hk = upw_r.vka.array[:k_max][:, sfr_rows, sfr_cols]
     sfr_hk = np.ma.masked_where(sfr_nodata[:k_max], sfr_hk)
+    vmin = sfr_hk.min()
+    vmax = sfr_hk.max()
     im = ax.imshow(sfr_hk, norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax), aspect='auto', cmap='viridis')
     # plt.xticks([]);
     ax.set_yticks(ticks = np.arange(1,k_max,5), labels=m.dis.botm.array[:,0,0][:k_max:5]);

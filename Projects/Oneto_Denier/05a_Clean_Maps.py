@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.4
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -91,6 +91,8 @@ from tprogs_review import get_tprogs_quants
 # # make_multi_scale(ax, 0.1, 0.1, dist = 1E3, scales = [3,2,1])
 
 # -
+
+# # Load data
 
 dist_lab = str(np.round(0.5, 1)).replace('.0','')
 len(dist_lab)
@@ -178,6 +180,9 @@ fp_logger = gpd.GeoDataFrame(fp_logger, geometry = gpd.points_from_xy(fp_logger.
 
 od_breach = fp_logger[fp_logger['Logger Location']=='OD_Excavation']
 od_swale = fp_logger[fp_logger['Logger Location']=='SwaleBreach_1']
+
+# + [markdown] jp-MarkdownHeadingCollapsed=true
+# # Maps
 
 # +
 
@@ -396,13 +401,20 @@ crop_sum.to_csv(join(fig_dir, 'irr_eff_by_crop.csv'))
 # It would be cool to have functions that are built on using the flopy output rather than using input data even slightly slower because then there is more interoperability
 
 # +
-loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
-model_nam = 'oneto_denier_upscale4x_2014_2018/'
+# need to specify the model work space as stream seepage or levee removal to update plots accordingly
+loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes'
 
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
-model_nam = 'oneto_denier_upscale4x_2014_2020_no_reconnection/'
+# loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
+project = 'Stream_seepage'
+model_nam = 'oneto_denier_upscale4x_2014_2018'
+model_nam = 'parallel_oneto_denier_upscale4x_2014_2018/realization000'
 
-model_ws = loadpth+model_nam
+# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Stream_seepage/'
+# loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Levee_removal/'
+# project = 'Levee_removal'
+# model_nam = 'oneto_denier_upscale4x_2014_2020_no_reconnection/'
+
+model_ws = join(loadpth, project, model_nam)
 model_ws
 # -
 
@@ -456,43 +468,43 @@ flw_lgd =  [
 ]
 
 
-# +
-fig, ax = plt.subplots(figsize=(6.5,3))
+# only for levee removal
+if project=='Levee_removal':
+    fig, ax = plt.subplots(figsize=(6.5,3))
+    
+    dt = inflow.index.values
+    ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
+    # Create second axes, in order to get the bars from the top you can multiply by -1
+    ax2 = ax.twinx()
+    # ax2.bar(dt, -rain_plt.values, 0.9)
+    ax2.plot(dt, -rain_plt, alpha=0.6)# regular line plot does better than a bar plot
+    # Now need to fix the axis labels
+    max_pre = np.max(rain_plt)+0.01
+    max_pre = 0.12
+    y2_ticks = np.arange(0, max_pre, 0.02)
+    y2_ticklabels = [str(i) for i in y2_ticks]
+    ax2.set_yticks(-1 * y2_ticks)
+    ax2.set_yticklabels(y2_ticklabels)
+    
+    ax2.set_ylabel('Rainfall (m)')
+    ax.set_ylabel('Streamflow ($m^3/s$)')
+    # ax.ticklabel_format(style='plain', axis='y') 
+    ax.set_yscale('log')
+    ax.set_ylim(1,1E3)
+    ax.set_xlabel('Date')
+    
+    fig.legend(handles=flw_lgd, loc='outside upper center',ncol=2, bbox_to_anchor=(0.5, 1.0)) # with flow thresholds (0.5, 1.05)
+    # arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
+    def flow_threshold_lines(ax):
+        ax.axhline(y=23, color='black', linestyle='--')
+        ax.axhline(y=71.6, color='black', linestyle='-.')
+        xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', ax=ax, offset = (0,5), fontsize=10, bbox=False)
+        xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', ax=ax, offset = (0,5), fontsize=10, bbox=False)
+    flow_threshold_lines(ax=ax)
+    
+    fig.savefig(join(fig_dir, 'streamflow_hydrograph_with_rain.png'), bbox_inches='tight')
+    plt.show()
 
-dt = inflow.index.values
-ax.plot(dt, inflow['flow_cms'], color='brown', alpha=0.6)
-# Create second axes, in order to get the bars from the top you can multiply by -1
-ax2 = ax.twinx()
-# ax2.bar(dt, -rain_plt.values, 0.9)
-ax2.plot(dt, -rain_plt, alpha=0.6)# regular line plot does better than a bar plot
-# Now need to fix the axis labels
-max_pre = np.max(rain_plt)+0.01
-max_pre = 0.12
-y2_ticks = np.arange(0, max_pre, 0.02)
-y2_ticklabels = [str(i) for i in y2_ticks]
-ax2.set_yticks(-1 * y2_ticks)
-ax2.set_yticklabels(y2_ticklabels)
-
-ax2.set_ylabel('Rainfall (m)')
-ax.set_ylabel('Streamflow ($m^3/s$)')
-# ax.ticklabel_format(style='plain', axis='y') 
-ax.set_yscale('log')
-ax.set_ylim(1,1E3)
-ax.set_xlabel('Date')
-
-fig.legend(handles=flw_lgd, loc='outside upper center',ncol=2, bbox_to_anchor=(0.5, 1.0)) # with flow thresholds (0.5, 1.05)
-# arr_lab(lak_extent, 'Reconnected\nFloodplain', ax, offset = (-100, 150), fontsize=fontsize)
-def flow_threshold_lines(ax):
-    ax.axhline(y=23, color='black', linestyle='--')
-    ax.axhline(y=71.6, color='black', linestyle='-.')
-    xy_lab((pd.to_datetime('2015-8-1'),23),'23 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
-    xy_lab((pd.to_datetime('2015-8-1'),71.6),'71.6 $m^3/s$', offset = (0,5), fontsize=10, bbox=False)
-flow_threshold_lines(ax=ax)
-
-fig.savefig(join(fig_dir, 'streamflow_hydrograph_with_rain.png'), bbox_inches='tight')
-plt.show()
-
-# -
 
 # ### Precipitation only to show WY type
 
@@ -517,8 +529,10 @@ print('Avg rain %.3f m' %annual_rain.mean())
 annual_rain[annual_rain.index.year.isin([2016,2018])] - annual_rain.mean()
 
 # +
-plt_strt = '2014-10-1'
-plt_end = '2020-9-30'
+# plt_strt = '2014-10-1'
+# plt_end = '2020-9-30'
+plt_strt = strt_date
+plt_end = end_date
 fig, ax = plt.subplots(figsize=(6.5,3), dpi=300)
 rain_mon = rain_plt.resample('MS').sum()
 rain_mon = rain_mon.loc[plt_strt:plt_end]
@@ -527,11 +541,11 @@ ax.bar(np.arange(0, len(rain_mon)), rain_mon.values)
 ax.set_xticks(np.arange(0, len(rain_mon))[3::12], rain_mon.index[3::12].year);
 for n in wy:
     xy_lab((np.where(rain_mon.index==wyt.loc[n, 'plt_date'])[0][0], rain_mon.quantile(0.95))
-           ,wyt.loc[n, 'name'].replace(' ','\n'), offset = (0,2), fontsize=10, bbox=True)
+           ,wyt.loc[n, 'name'].replace(' ','\n'), ax=ax, offset = (0,2), fontsize=10, bbox=True)
 
 ax.set_ylabel('Monthly Rainfall Total (m)');
 ax.set_xlabel('Date');
-plt.savefig(join(fig_dir, 'monthly_rainfall.png'), bbox_inches='tight')
+plt.savefig(join(fig_dir, project, 'monthly_rainfall.png'), bbox_inches='tight')
 plt.close()
 
 # +
@@ -546,7 +560,7 @@ ax.set_ylabel('Daily Streamflow ($m^3/s$)')
 ax.set_xlabel('Date')
 flow_threshold_lines(ax=ax)
 
-plt.savefig(join(fig_dir, 'daily_streamflow.png'), bbox_inches='tight')
+plt.savefig(join(fig_dir, project, 'daily_streamflow.png'), bbox_inches='tight')
 plt.close()
 # -
 
@@ -573,6 +587,8 @@ wb_color = pd.read_excel('mf_wb_color_dict.xlsx',sheet_name='owhm_wb_dict', comm
 color_dict = wb_color.set_index('flux')['color'].to_dict()
 label_dict = wb_color.set_index('flux')['name'].to_dict()
 
+model_ws
+
 wb, out_cols, in_cols = clean_wb(model_ws, dt_ref)
 
 # +
@@ -592,7 +608,7 @@ plt.xlabel('Date')
 fig.supylabel('Flux ($m^3/d$)')
 fig.supylabel('Flux (million $m^3/d$)')
 fig.tight_layout()
-fig.savefig(join(fig_dir, 'water_budget_continuous.png'), bbox_inches='tight')
+fig.savefig(join(fig_dir, project, 'water_budget_continuous.png'), bbox_inches='tight')
 
 # ## Map spatial coverage of boundary conditions
 

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -25,7 +25,7 @@ from scipy.stats import gmean
 
 # standard geospatial python utilities
 import geopandas as gpd
-from osgeo import gdal
+# from osgeo import gdal
 import rasterio
 
 # import flopy
@@ -53,7 +53,8 @@ sfr_dir = gwfm_dir+'/SFR_data/'
 
 # %%
 out_dir = join(proj_dir, 'output')
-fig_dir = join(proj_dir, 'figures')
+fig_dir = join(proj_dir, 'figures','Stream_seepage')
+fig_dir
 
 # %%
 git_dir = join(doc_dir,'GitHub')
@@ -72,7 +73,7 @@ from mf_utility import get_dates, get_layer_from_elev, clean_wb
 from map_cln import gdf_bnds, plt_cln
 
 # %%
-ext_dir = 'F:/WRDAPP'
+ext_dir = 'D:/WRDAPP'
 c_dir = 'C:/WRDAPP'
 if os.path.exists(ext_dir):
     loadpth = ext_dir 
@@ -95,6 +96,10 @@ load_only = ['DIS','UPW','SFR','OC']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws= base_model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt')
 
+
+# %%
+nrow = m.dis.nrow
+ncol = m.dis.ncol
 
 # %%
 homogeneous_ws = join(loadpth, 'oneto_denier_homogeneous_2014_2018')
@@ -181,6 +186,7 @@ def read_gage(gagenam):
 #
 
 # %%
+add_path('../')
 # slightly different version of clean_sfr_df is used here to help with realization comparison
 # import mf_utility
 # from importlib import reload
@@ -203,12 +209,14 @@ sfrdf =  clean_sfr_df(base_model_ws, drop_iseg, dt_ref)
 h_sfrdf =  clean_sfr_df(homogeneous_ws, drop_iseg, dt_ref)
 
 
-
-
 # %%
 # standardize grouping values
-wy_vals = sfrdf.WY.unique()
+# wy_vals = sfrdf.WY.unique()
 facies_vals = ['Mud','Sandy Mud','Sand','Gravel']
+# hard coded to make sure the correct categories are used
+wy_vals = [2015, 2016, 2017, 2018]
+# based on SASb GSP (Rich's table)
+wy_cat = {2015:'Critical',2016:'Below Normal',2017:'Wet', 2018:'Below Normal'}
 
 
 # %% [markdown]
@@ -226,12 +234,14 @@ facies_vals = ['Mud','Sandy Mud','Sand','Gravel']
 # - Since I've focused more baseflow/seepage and streamflow/flowing days the connected/gaining gradient plots tend to repeat the information on baseflow/seepage and are usual lower correlations because they are slightly less impacted by the coarse vs fine conductivity.
 
 # %%
-if rewrite:
+# if rewrite:
+if True:
     # aggregate data by facies and sum to review seepage over time
     t0 = time.time()
 
     sfr_facies_all = pd.DataFrame()
-    for t in np.arange(0,100):
+    # for t in np.arange(0,100):
+    for t in np.arange(0,1):
         model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
         # remove stream segments for routing purposes
         sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
@@ -245,8 +255,17 @@ if rewrite:
     t1 = time.time()
     print('Time: %.2f min' % ((t1-t0)/60))
     # save output to speed up reuse
-    # sfr_facies_all.to_csv(join(out_dir, 'sfrdf_facies_sum.csv'))
-    sfr_facies_all.reset_index(level='facies').to_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'), key='dt', complevel=4)
+    # sfr_facies_all.reset_index(level='facies').to_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'), key='dt', complevel=4)
+
+# %%
+sfr_3mon_all[sfr_3mon_all.realization==0].head()
+
+# %%
+# sfrdf =  clean_sfr_df(base_model_ws, drop_iseg, dt_ref)
+# sfrdf.facies.unique()
+chk = sfr_facies_sum
+# flow exceeds one which indicates the issue
+chk.apply(lambda x: x/chk.num_facies).groupby('dt').sum(numeric_only=True).resample('3MS').mean()
 
 # %%
 sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
@@ -278,11 +297,7 @@ sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
-legend_elements = [
-    Line2D([0], [0], color='gray', label='Heterogeneous\nRealizations'),
-    Line2D([0], [0], color='black', linestyle='--',label='Homogeneous\nCase'),
-    Line2D([0], [0], color='red', linestyle='--', label='Heterogeneous\nMean')
-]
+
 
 ts_lgd = [
     Line2D([0], [0], color='gray', label='100 Heterogeneous\nRealizations'),
@@ -401,7 +416,6 @@ def plt_ts_quants(sfr_facies_all, sfr_last_all, ax):
 
 
 # %%
-
 def plt_ts_100(sfr_facies_all, sfr_last_all, ax):
     for t in np.arange(0,100):
         sfr_last = sfr_last_all[sfr_last_all.realization==t]
@@ -413,6 +427,22 @@ def plt_ts_100(sfr_facies_all, sfr_last_all, ax):
     return None
 
 
+# %%
+def plt_ts_axes(ax):
+    # set axis labels
+    ax[-1].set_xlabel('Date')
+    # ax[0].set_ylabel('Total Seepage ($m^3/d$)')
+    ax[0].set_ylabel('Total Stream\nLosses ($m^3/d$)')
+    ax[1].set_ylabel('Total Stream\nBaseflow ($m^3/d$)')
+    ax[-1].set_ylabel('Daily\nStreamflow ($m^3/d$)')
+    
+    # need log scale or peaks wash out other data
+    ax[0].set_yscale('log')
+    ax[1].set_yscale('log')
+    ax[-1].set_yscale('log')
+    return None
+
+# %%
 # plt_ts_quants(sfr_facies_all, sfr_last_all, ax)
 # # # plot homogeneous case
 # h_sfr_last = h_sfrdf[h_sfrdf[grp_col]==h_sfrdf[grp_col].max()]
@@ -428,19 +458,6 @@ def plt_ts_100(sfr_facies_all, sfr_last_all, ax):
 # sfr_sum_mean.plot(y='Qrech', ax=ax[0], legend=False, color='red', linestyle='--')
 # sfr_sum_mean.plot(y='Qbase', ax=ax[1], legend=False, color='red', linestyle='--')
 
-def plt_ts_axes(ax):
-    # set axis labels
-    ax[-1].set_xlabel('Date')
-    # ax[0].set_ylabel('Total Seepage ($m^3/d$)')
-    ax[0].set_ylabel('Total\nRecharge ($m^3/d$)')
-    ax[1].set_ylabel('Total\nBaseflow ($m^3/d$)')
-    ax[-1].set_ylabel('Daily\nStreamflow ($m^3/d$)')
-    
-    # need log scale or peaks wash out other data
-    ax[0].set_yscale('log')
-    ax[1].set_yscale('log')
-    ax[-1].set_yscale('log')
-    return None
 
 # t0 = time.time()
 # fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
@@ -456,6 +473,8 @@ def plt_ts_axes(ax):
 # t1 = time.time()
 # print('Time: %.2f min' % ((t1-t0)/60))
 
+# %%
+# do I want to come back and change the source since sfr_facies_all results were off from the sfr_3month_all?
 
 # %%
 fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
@@ -467,12 +486,13 @@ plt_ts_axes(ax)
 fig.legend(handles=ts_lgd, loc='outside upper center', ncol = 4)
 
 # fig.tight_layout()
-# plt.savefig(join(fig_dir, 'time_series_seepage_flow_quantiles.png'), bbox_inches='tight')
+plt.savefig(join(fig_dir, 'time_series_seepage_flow_quantiles.png'), bbox_inches='tight')
 
 
 
 # %% [markdown]
 # ### In-text numbers, KEEP
+# Need some numeric values to put in the text of the results section to emphasize key results to the reader
 
 # %%
 # how does baseflow persist into the summer by WY
@@ -504,6 +524,7 @@ zero_flow = sfr_last_all.loc[plt_dates].groupby('realization').sum(numeric_only=
 flow_frac = (zero_flow.flowing/len(plt_dates))
 flow_frac.quantile([0,.5,1]), flow_frac.std()
 # zero_flow.flowing.hist(bins=np.arange(0, len(plt_dates)+10, 10))
+print(plt_strt.date(), plt_end.date())
 print('Realizations with >50%% of days with no flow: %i' %((zero_flow.flowing<0.5*len(plt_dates)).sum()))
 print('Realizations with continuous flow: %i' %(zero_flow.flowing==len(plt_dates)).sum())
 # len(plt_dates)
@@ -628,18 +649,32 @@ flow_summary(1, 0.5, zero_flow, coarse_ref, plt_dates)
 # %%
 from matplotlib import cm
 
-#normalize item number values to colormap
-norm = mpl.colors.Normalize(vmin=0, vmax=99)
 # plt.cmap='gray'
 
+#normalize item number values to colormap by realization (t)
+# norm = mpl.colors.Normalize(vmin=0, vmax=99) 
+#normalize item number values to colormap from min to max num coarse
+norm = mpl.colors.Normalize(vmin=sfr_yr_sum_all.num_coarse.min(), vmax=sfr_yr_sum_all.num_coarse.max())
+
+from matplotlib.lines import Line2D
+
+# custom_lines = [Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.min())), lw=4),
+#                 Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.max())), lw=4)]
+
+# create a ScalarMappable and initialize a data structure
+s_m = cm.ScalarMappable(cmap=cm.gray, norm=norm)
+s_m.set_array([])
+
+
 # %%
-def plt_wy_seg(value, ylabel, grp_col, log=False):
+# should supply norm as an arg
+def plt_wy_seg(value, ylabel, grp_col, wy_cat, log=False):
     grp_col = 'Total distance (m)'
     # grp_col = ['segment','reach']
     grp_wy = np.append(['WY'], grp_col).tolist()
     fig,ax = plt.subplots(2,2, figsize=(8,8), sharex=True, sharey=True, layout='constrained')
     wy_unique = sfr_yr_sum_all.index.get_level_values('WY').unique()
-
+    
     for t in np.arange(0,100):
         sfr_yr_sum = sfr_yr_sum_all[sfr_yr_sum_all.realization==t].reset_index('WY').set_index(grp_col)
         for n,f in enumerate(wy_unique):
@@ -647,10 +682,8 @@ def plt_wy_seg(value, ylabel, grp_col, log=False):
             df_plt = sfr_yr_sum[sfr_yr_sum.WY==f]
             if df_plt.shape[0]>0:
                 df_plt.plot(y=value, ax=ax_n, legend=False, 
-                            color='gray',
-                            # color=cm.gray(norm(t)),alpha=0.7,
+                            color=cm.gray(norm(sfr_yr_sum.num_coarse.iloc[0])),
                                          )
-
     # plot homogeneous case
     h_sfr_yr_sum = h_sfrdf.groupby(grp_wy).sum(numeric_only=True).reset_index('WY')
     # plot mean of heterogeneous
@@ -658,11 +691,11 @@ def plt_wy_seg(value, ylabel, grp_col, log=False):
     # set axis labels
     for n,f in enumerate(wy_unique):
         ax_n = ax[int(n/2), n%2]
-        h_sfr_yr_sum[h_sfr_yr_sum.WY==f].plot(y=value, ax=ax_n, legend=False, color='black', linestyle='--')
+        h_sfr_yr_sum[h_sfr_yr_sum.WY==f].plot(y=value, ax=ax_n, legend=False, color='yellow', linestyle='--')
         sfr_yr_sum_mean[sfr_yr_sum_mean.WY==f].plot(y=value, ax=ax_n, legend=False, color='red', linestyle='--')
-        ax_n.set_title(f)
+        ax_n.set_title(str(f)+' - '+wy_cat[f])
         ax_n.set_ylabel(ylabel)
-        ax_n.set_xlabel('Total distance (m)')
+        ax_n.set_xlabel('Total distance downstream (m)')
         if log:
             ax_n.set_yscale('log')
 #     fig.tight_layout()
@@ -672,17 +705,20 @@ def plt_wy_seg(value, ylabel, grp_col, log=False):
 
 
 # %%
-# h_sfr_yr_sum =  h_sfrdf.groupby(['WY', grp_col]).sum(numeric_only=True).reset_index('WY')
-# h_sfr_yr_sum[h_sfr_yr_sum.WY==2016].plot(y=value, legend=False, color='black', linestyle='--')
+legend_elements = [
+    Line2D([0], [0], color='gray', label='Heterogeneous\nRealizations'),
+    Line2D([0], [0], color='yellow', linestyle='--',label='Homogeneous\nCase'),
+    Line2D([0], [0], color='red', linestyle='--', label='Heterogeneous\nMean')
+]
 
 # %%
 # grid_sfr_all.groupby('iseg').mean(numeric_only=True).strhc1.plot(label='Mean')
 # grid_sfr_all.groupby('iseg').std(numeric_only=True).strhc1.plot(label='Std Dev')
 # plt.legend()
-# # plt.yscale('log')
 # plt.ylabel('Streambed Conductivity ($m/day$)')
 # plt.xlabel('Segment')
-# there is not a particularly helpful pattern from the mean/median and std devation of the longitudinal strhc1 except some indication of the patch that is consistenly sand/gravel.
+# # there is not a particularly helpful pattern from the mean/median and std devation of the longitudinal strhc1 except 
+# # some indication of the patch that is consistenly sand/gravel near the start
 
 # %% [markdown]
 # Plotting the longitudinal profile for the baseflow, connected days, gaining is not very helpful because there is not a clear way to connect the heterogeneity.  
@@ -695,40 +731,14 @@ def plt_wy_seg(value, ylabel, grp_col, log=False):
 # If we don't care about presenting the volumes of baseflow so much as the rates than the existence of it so we could do a count of the number of realizations with baseflow?
 
 # %%
-# fig,ax = plt.subplots()
-# for t in np.arange(0,100):
-#     sfr_seg = sfr_facies_all[sfr_facies_all.realization==t].groupby('dt').sum(numeric_only=True)
-#     sfr_seg.plot(y='Qbase', ax=ax, legend=False, color=cm.gray(norm(t)),alpha=0.7)
-# plt.yscale('log')
-
-# %%
-# sfr_base = sfr_yr_sum_all.groupby(['segment', 'reach','realization']).mean().reset_index('realization')
-# # sfr_base.plot(y='Qbase')
-# value='Qbase'
-# fig, ax_n = plt.subplots()
-# ax_n.set_yscale('log')
-# for t in np.arange(0,100):
-#     df_plt = sfr_base[sfr_base.realization==t]
-#     df_plt.plot(y=value, ax=ax_n, legend=False, 
-#                 # color='gray',
-#                 color=cm.gray(norm(t)),alpha=0.7,
-#                )
-   
-# # plot homogeneous case
-# # h_sfr_yr_sum = h_sfrdf.groupby(['segment', 'reach']).sum(numeric_only=True).plot(y=value, ax=ax_n, legend=False, color='black', linestyle='--')
-# # # plot mean of heterogeneous
-# # sfr_yr_sum_mean = sfr_yr_sum_all.groupby(['segment','reach']).mean().plot(y=value, ax=ax_n, legend=False, color='red', linestyle='--')
-# plt.xlabel('Segment')
-# plt.ylabel('Average Annual Baseflow ($m^3/day$)')
-
-# %%
 
 # value = 'Qbase'
 # ylabel = 'Baseflow'
 # value = 'connected'
 # ylabel = 'Connected Days'
-# plt_wy_seg(value, ylabel, log=True)
+# plt_wy_seg(value, ylabel, grp_col, wy_cat, log=True)
 # ax.legend(handles=legend_elements, loc='lower right')
+# both qbase and connected are messy with no clear relationship demonstrated
 
 
 # %% [markdown]
@@ -739,37 +749,23 @@ def plt_wy_seg(value, ylabel, grp_col, log=False):
 # Also the key conversation between longitudinal days with flow and streamflow at the outlet over time is that by the last segment we see the cumulative effect of the baseflow while intermediate segments may see more or less flow due to high seepage rates and the floodplain.
 
 # %%
-# ax[0,0].get_xticks()
-
-# %%
+# may ultimately remove in favor of ET vs streamflow or a different style of plot as this shows variability in space but doesn't get at the question of 
+# benefits very well. Although the intext numbers of coarse vs percent time dry are helpful
 value = 'flowing'
-ylabel = 'Days with Flow'
-ax = plt_wy_seg(value, ylabel, grp_col)
-# plt.savefig(join(fig_dir, 'days_with_flow_by_WY.png'), bbox_inches='tight')
-
-# %%
-# sfr_yr_sum_all.groupby(['segment']).std(numeric_only=True).plot(y='flowing')
-# sns.relplot(sfr_yr_sum_all.groupby(['WY','segment']).std(numeric_only=True), x = 'segment',y='flowing', col='WY', col_wrap=2)
+ylabel = 'Days with flow'
+ax = plt_wy_seg(value, ylabel, grp_col, wy_cat)
+# ax[0,0].legend(custom_lines, [int(sfr_yr_sum_all.num_coarse.min()), int(sfr_yr_sum_all.num_coarse.max())], facecolor='lightgray', framealpha=1, title='Number of\nCoarse Reaches')
+plt.colorbar(s_m, ax=ax, label='Number of coarse reaches')
+plt.savefig(join(fig_dir, 'days_with_flow_by_WY.png'), bbox_inches='tight')
+plt.close()
+# what if we updated it so the color of each line corresponding to the number of coarse segments, could do this for
+# adding color helps show tendency for earlier drying with more coarse reaches but there is still internal variability suggesting
+# other geologic structure may have an influence
 
 # %% [markdown]
 # All WY have a fairly tight start (low variance) because the flow at the inlet is least impacted yet by differences in geology. In low flow years we don't see a signal from the floodplain connection but rather we see a fairly consistent decline across all realizations in days with flow with the largest variablility toward the outlet. In WY2016 there is a pattern where the peak variability occurs just before the floodplain diversion, which might be explained by the floodplain distributing water for recharge such that it provides a reduction in seepage rates out of the stream, this pattern might be stronger here because 2016 starts with initially dry streamflow conditions. The WY2016 reduction in standard deviation below the floodplain diversion might also be explained by the fact that less water in the channel means less seepage so the channel might be more uniformly dry  
 #
 # IN WY2017 we see lower variability in the upper reaches because there is so much flow available that even seepage from the coarse facies can't drain it all, but as we get downstream we start to see more variability as the cumulative effect of coarse segments occurs and this is likely impact by the floodplain return flows having more variability. 
-
-# %%
-# need to see why water could be leaving the lake in a few scenarios
-# g = sns.relplot(sfr_yr_sum_all, x='segment',y='flowing', col='WY', col_wrap=2, hue='realization', #color='gray', 
-#            facet_kws={'sharey': False, 'sharex': True})
-
-
-
-# %%
-# import seaborn as sns
-
-# g = sns.relplot(sfrdf_all, x='num_coarse',y='Qbase', col= 'month', row='WY', color='gray', 
-           # facet_kws={'sharey': False, 'sharex': True})
-
-
 
 # %% [markdown]
 # # Statistics
@@ -793,24 +789,29 @@ ax = plt_wy_seg(value, ylabel, grp_col)
 
 # %%
 # the connected and gaining variables are interesting from a box plot perspective but the correlations tend to be insignificant or NAs
-variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses', 'flowing':'No. Days\nwith flow',
+variables = {'Qbase':'Stream\nBaseflow','Qrech':'Stream\nLosses', 
+             # 'flowing':'No. Days\nwith flow',
+             'flowing':'Mean Fraction \nof Days \nwith Flow', # it's a spatial (segments) and temporal (quarter) mean
              # 'connected':'Connected', 'gaining':'Gaining',
-            'Qout':'Streamflow'}
+             'Qout':'Streamflow',
+             'GHB_NET':'Net GW \nFlow', 'ET_OUT':'GW \nET', 'LAK_IN':'Floodplain\nRecharge',
+            }
 tests = ['Pearson','Spearman','Kendall']
 tests = ['Pearson']
-var_names = list(variables.keys())
+all_var_names = list(variables.keys())
+print(all_var_names)
 
 # %%
-# ref_out = pd.read_csv(join(proj_dir, 'num_sfr_coarse.csv'), index_col=0)
+# summary characterisists of geology
+# added in domain wide and all layers versions which have slightly different distributions
+# potentially length of HCPs and/or count of distinct bodies
 ref_out = pd.read_csv(join(proj_dir, 'coarse_reference.csv'), index_col=0)
-ref_out=ref_out.rename(columns={'num_coarse':'num_sfr'})
+# ref_out=ref_out.rename(columns={'num_coarse':'num_sfr'})
 # ref_out
 
 
 # %%
 lak_head_all = pd.read_csv(join(out_dir, 'lak_head_timeseries.csv')).set_index('totim')
-
-# %%
 
 # %%
 wb_all = pd.DataFrame()
@@ -822,6 +823,9 @@ for r in np.arange(0,100):
     wb['GHB_NET'] = wb['GHB_IN'] - wb['GHB_OUT']
     wb['kstpkper'] = list(zip(wb.STP-1,wb.PER-1))
     wb_all = pd.concat((wb_all, wb.assign(realization=r)))
+
+# %%
+wb_all['dt'] = strt_date+(wb_all.SIMTIME-1).astype('timedelta64[D]')
 
 # %%
 wb_avg = wb_all.groupby('realization').mean(numeric_only=True)
@@ -855,13 +859,14 @@ corr_flow = corr_flow.groupby('realization').mean(numeric_only=True)[['Qout']]
 # join together the data for correlations
 corr_all = corr_seep.join(corr_bool).join(corr_flow)
 
-corr_all = corr_all[var_names]
+corr_all = corr_all.loc[:,corr_all.columns.isin(all_var_names)]
 
 # %%
 # corr_matrix_in.hist() # all variables are relatively normally distributed
 
 # %% [markdown]
 # Showing that baseflow is correlated with groundwater elevations in the floodplain or stream helps break down further that it is groundwater levels that drive the baseflow.
+# - this is a bit unnecessary as this is somewhat basic groundwater theory
 
 # %%
 # I should present the correlation matrix in the appendix
@@ -869,20 +874,32 @@ corr_all = corr_all[var_names]
 corr_matrix_in = corr_all.copy()
 corr_matrix_in['num_sfr_coarse'] = ref_out.num_sfr.values
 corr_matrix_in['num_lak_coarse'] = ref_out.num_lak.values
+# don't correlate with values in the top layer of the BC and don't show much different corr (except GHB_NET)
+# but could be worth playing out to see how predictions might vary?
+corr_matrix_in['num_sfr_coarse_all_lay'] = ref_out.num_sfr_all_lay.values
+corr_matrix_in['num_lak_coarse_all_lay'] = ref_out.num_lak_all_lay.values
+corr_matrix_in['vka_coarse_all_lay'] = ref_out.vka_tprogs_frac.values
 # corr_matrix_in['lak_gwe_mean'] = lak_head_all.mean(axis=0).values
-# check for correlation with other water budget components
+# check for correlation with other water budget components that vary by realization
+# pumping is constant, recharge is more or less constant (.04%)
 wb_cols = ['LAK_IN', 'ET_OUT','GHB_NET'] 
 # wb_avg[wb_cols]
 corr_matrix_in = pd.concat((corr_matrix_in, wb_avg[wb_cols]), axis=1)
-corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
+# need to maybe add new geology characteristics
+# corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
+
+# %%
+wb_avg.columns
 
 # %%
 corr = corr_matrix_in.corr('pearson')
 # Fill diagonal and upper half with NaNs
 mask = np.zeros_like(corr, dtype=bool)
-mask[np.triu_indices_from(mask)] = True
+# mask[np.triu_indices_from(mask)] = True
 corr[mask] = np.nan
-corr.style.background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1).highlight_null(color='#f1f1f1').format(precision=3)
+corr.style.background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1).highlight_null(color='#f1f1f1').format(precision=2)
+
+# correlation plot could be provided later if needed to justify choice of num_sfr_coarse rather than other geology measures
 
 # %% [markdown]
 # The full simulation correlations should be included to help explain cross-correlations and the potential influence of multiple inputs. The key takeaway is that we should consider the correlations due to the number of coarse reaches because of the consistent higher pearson's r across all areas. For water availability we could use streamflow, stream recharge or ET as an observation since they are all tightly correlated.
@@ -911,10 +928,14 @@ def calc_corr_stats(corr_all, coarse_ref):
     # join data together
     corr_out = pd.concat((pr, sr, kt))
     return(corr_out)
+
+
+# %%
+
 corr_out = calc_corr_stats(corr_all, coarse_ref.num_coarse)
 # corr_out = calc_corr_stats(corr_all, ref_out.num_sfr.values)
 # corr_out = calc_corr_stats(corr_all, ref_out.num_lak.values)
-# corr_out = corr_out[[var_names+['type']]]
+# corr_out = corr_out[[all_var_names+['type']]]
 
 # the applicability of certain variables is questionable since Qrech, flowing, Qout have median
 # p values of > 0.05
@@ -926,15 +947,17 @@ corr_out.loc['p']
 #
 
 # %%
-fig, ax = plt.subplots()
-# prepare for plotting
-corr_out = corr_out.loc['r'].set_index('type').transpose()
+# useful check that there is agreement by correlation functions but not needed for final figures
 
-corr_out.plot(kind='bar', ax=ax, rot=25)
-# fix column names
-ax.set_xticks(ticks = np.arange(0,corr_all.shape[1]), labels = [variables[v] for v in corr_all.columns.values])
-plt.ylabel('Correlation Coefficient')
-# ax.xticks
+# fig, ax = plt.subplots()
+# # prepare for plotting
+# corr_out = corr_out.loc['r'].set_index('type').transpose()
+
+# corr_out.plot(kind='bar', ax=ax, rot=25)
+# # fix column names
+# ax.set_xticks(ticks = np.arange(0,corr_all.shape[1]), labels = [variables[v] for v in corr_all.columns.values])
+# plt.ylabel('Correlation Coefficient')
+# # ax.xticks
 
 # %% [markdown]
 # ## Correlations grouped by water year
@@ -956,31 +979,43 @@ plt.ylabel('Correlation Coefficient')
 # Apply a log transform to baseflow to improve normality.
 
 # %%
-# yearly
-# the data is already summed across the year and should be averaged across segments
+# the 3-month data is averaged across the 3-months so it is the fraction of the period in that condition
 corr_bool = sfr_3mon_all.copy().set_index('realization',append=True)[['flowing','connected','gaining']]
-# sum across all segments for seepage
-corr_seep = sfr_facies_all.groupby('realization').resample('3MS').sum(numeric_only=True)[['Qbase','Qrech']]
+# can just use WB which is already summed across segments
+# may want to just average to the quarter so units can stay m3/day instead of m3/3-months
+corr_seep = wb_all.set_index('dt').groupby('realization').resample('3MS')[['SFR_OUT','SFR_IN']].mean(numeric_only=True)
+corr_seep = corr_seep.rename(columns={'SFR_OUT':'Qbase','SFR_IN':'Qrech'})
+
 # flow data should be averaged
-corr_flow = sfr_last_all.groupby(['realization']).resample('3MS').mean(numeric_only=True)[['Qout']]
+corr_flow = sfr_last_all.groupby(['realization']).resample('3MS')[['Qout']].mean(numeric_only=True)
+# groupby domain wide water bduget by quarter, should use sum similar to recharge/baseflow
+# taking off ,'GHB_NET' due to uncertainty on exterior boundary and low significance with num_coarse in stream
+wb_cols = ['LAK_IN', 'ET_OUT']  
+wb_quarter = wb_all[['dt', 'realization']+wb_cols].set_index('dt').groupby(['realization']).resample('3MS').mean(numeric_only=True)
+
 # join together the data for correlations
-corr_all_in = corr_seep.join(corr_bool).join(corr_flow).reset_index('dt')
+corr_all_in = corr_seep.join(corr_bool).join(corr_flow).join(wb_quarter).reset_index('dt')
 
 # %%
 corr_all_in['month'] = corr_all_in.dt.dt.month
 corr_all_in['wy'] = corr_all_in.dt.dt.year
 corr_all_in.loc[corr_all_in.month==10,'wy'] +=1
 
+# subset to variables that will be used
+var_names = pd.Series(all_var_names)[pd.Series(all_var_names).isin(corr_all_in.columns)].tolist()
 corr_all_in = corr_all_in[var_names+['dt','month','wy']]
+
 
 
 # %%
 # goal is to present the data used to calculate the correlations in box plot format
 # box plot can't seem to handle the xtick formatting and throws an error even though there should only be 4 xticks, it thinks tehre are 8
 m_cols=[10,1,4,7]
+y_mult = 1E-6
 # m_cols = corr_all.month.unique()
-fig, ax = plt.subplots(len(var_names),4, figsize=(8,5.3), sharex='col', sharey='row', layout='constrained')
-for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
+# figsize=(8,5.3)
+fig, ax = plt.subplots(len(var_names),4, figsize=(8,7), sharex='col', sharey='row', layout='constrained')
+for nv, v in enumerate(var_names): #['Qbase','Qout']
     corr_plt = corr_all_in[[v,'wy','month']] 
     ax[nv, 0].set_ylabel(variables[v])
 
@@ -992,7 +1027,10 @@ for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
         # # correct order of tests and months to fix sorting
         # corr_wy.plot(column=m_cols, kind='box', ax=ax_n, legend=False, rot=0)
         # corr_plt[corr_plt.wy==2015].plot(by='month', column=v, kind='box', ax=ax_n)
-        ax_n.boxplot(corr_wy.values, labels=m_cols);
+        if v=='flowing':
+            ax_n.boxplot(corr_wy.values, tick_labels=m_cols);
+        else:
+            ax_n.boxplot(corr_wy.values*y_mult, tick_labels=m_cols);
         # ax_n.set(xticklabels=m_cols)
 
 for nwy, wy in enumerate(corr_plt.wy.unique()):
@@ -1000,15 +1038,17 @@ for nwy, wy in enumerate(corr_plt.wy.unique()):
     ax_n.set_title(wy)
 # ax[0,0].ticklabel_format(style='plain')
 
-plt.savefig(join(fig_dir, 'Appendix', 'corr_boxplots_season_WY.png'), bbox_inches='tight')
+fig.supxlabel('Month starting 3-month period')
+fig.supylabel('Volumetric flux (million $m^3/day$)')
+plt.savefig(join(fig_dir, 'corr_boxplots_season_WY.png'), bbox_inches='tight')
 
 # %%
 corr_all = corr_all_in.copy()
-# the baseflow needs a log transform represent properly
-corr_all.loc[corr_all.Qbase==0, 'Qbase'] = 1 # convert 0 values to 1 for log transform
-corr_all.Qbase = np.log10(corr_all.Qbase)
-
-
+log_transform = ['Qbase']
+for param in log_transform:
+    # the baseflow needs a log transform represent properly
+    corr_all.loc[corr_all.Qbase==0, param] = 1 # convert 0 values to 1 for log transform
+    corr_all[param] = np.log10(corr_all[param])
 
 
 # %%
@@ -1036,8 +1076,7 @@ corr_out = corr_out.drop(columns=['dt'])
 # corr_out
 pval_large = corr_out.loc['p'][(corr_out.loc['p', var_names]>0.05).any(axis=1).values]
 pval_large[pval_large[var_names]<0.05] = np.nan
-pval_large
-
+# pval_large
 
 # %% [markdown]
 # Helen asked why I used more than one correlation coefficient and I didn't have a clear response other than that Steve did it so I'm simplifying to the Pearson's. I also should use color to highlight significance and draw lines at 0.3 and 0.5 to mark the moderate or strong correlations.
@@ -1051,21 +1090,9 @@ def plt_corr_lines(ax_n, ms):
 
 
 # %%
-# v='Qbase'
-# corr_plt = corr_out.loc['r'][[v,'type','wy','month']] 
-# p_plt = corr_out.loc['p'][[v,'type','wy','month']]
-# corr_plt[~(p_plt[v]<.05).values]
-# ax_n.get_xticks()
-
-# %%
-# p_lab = p_wy[tests].loc[corr_out.month.unique()].copy()
-# plt.scatter(np.arange(0,4)[p_lab.Pearson<0.05], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.05],marker='*', color='black')
-# plt.scatter(np.arange(0,4)[p_lab.Pearson<0.01], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.01]+0.005,marker='*', color='black')
-# ax[0,0].get_xticks()
-
-# %%
-fig, ax = plt.subplots(len(var_names),4, figsize=(8,5.3), sharex=True, sharey='row', layout='constrained')
-for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
+# figsize=(8,5.3)
+fig, ax = plt.subplots(len(var_names),4, figsize=(8,7), sharex=True, sharey='row', layout='constrained')
+for nv, v in enumerate(var_names): #['Qbase','Qout']
     corr_plt = corr_out.loc['r'][[v,'type','wy','month']] 
     p_plt = corr_out.loc['p'][[v,'type','wy','month']] 
     for nwy, wy in enumerate(corr_plt.wy.unique()):
@@ -1079,7 +1106,7 @@ for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
         # identify signficant correlations
         p_lab = p_wy[tests].loc[corr_out.month.unique()].copy()
         ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.05], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.05],marker='*', color='black')
-        # could further mark out 0.01 vs 0.001 but gets more complicated
+        # could further mark out 0.01 vs 0.001 (to show strength) but gets more complicated
         # ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.01], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.01]-0.05,marker='*', color='black')
         # ax_n.scatter(np.arange(0,4)[p_lab.Pearson<0.001], corr_wy[tests].loc[corr_out.month.unique()][p_lab.Pearson<0.001]-0.1,marker='*', color='black')
 
@@ -1092,8 +1119,11 @@ for nv, v in enumerate(variables.keys()): #['Qbase','Qout']
 for nwy, wy in enumerate(corr_plt.wy.unique()):
     ax_n = ax[0, nwy]
     ax_n.set_title(wy)
+    ax[-1,nwy].set_xlabel('')
 #     ax_n.set_xticks(ticks = np.arange(0,corr_mon.shape[0]), labels = corr_out.month.unique())
 
+fig.supxlabel('Month starting 3-month period')
+fig.supylabel('Pearson correlation coefficient')
 
 # ax[0,1].legend(loc='best')
 plt.savefig(join(fig_dir, 'corr_stats_season_WY.png'), bbox_inches='tight')
@@ -1120,16 +1150,31 @@ plt.savefig(join(fig_dir, 'corr_stats_season_WY.png'), bbox_inches='tight')
 coarse_ref.quantile([0,.5,1])*100/len(grid_sfr)
 
 
+# %% [markdown]
+# It might be good to present data as fraction of river reaches that are coarse instead of the number.
+
 # %%
-bins = len(coarse_ref.num_coarse.unique())
-coarse_ref.hist('num_coarse',
-                # bins = bins
-                bins= np.arange(0, int(coarse_ref.max().values[0])+4, 4) # group with bins of size 4 to account for downscaling from 200 m to 100m gri dcell
-               )
-plt.xlabel('Number of coarse reaches')
-plt.ylabel('Number of realizations')
-plt.title(None)
-plt.savefig(join(fig_dir, 'Methods','coarse_segments_SFR_histogram.png'), dpi=300, bbox_inches='tight')
+def plt_hist_coarse(coarse_ref, label='Number of coarse reaches', step=4):
+    # bins = len(coarse_ref.num_coarse.unique())
+    # group with bins of size 4 to account for downscaling from 200 m to 100m gri dcell
+    # bins= np.arange(0, coarse_ref.max().values[0]+4, 4)
+    bins= np.arange(0, coarse_ref.max().values[0]+step, step)
+
+    coarse_ref.hist('num_coarse',
+                    # bins = bins
+                    bins= bins 
+                   )
+    plt.xlabel(label)
+    plt.ylabel('Number of realizations')
+    plt.title(None)
+    plt.savefig(join(fig_dir, 'Methods',label+'_SFR_histogram.png'), dpi=300, bbox_inches='tight')
+
+plt_hist_coarse(coarse_ref, label='Number of coarse reaches')
+
+# %%
+# if useful to present simply by fraction rather than count
+# coarse_frac = coarse_ref/len(grid_sfr)
+# plt_hist_coarse(coarse_frac, label='Fraction of reaches with coarse sediment', step=4/len(grid_sfr))
 
 # %%
 # exampel regression
@@ -1145,7 +1190,11 @@ df_plt = plt_month[plt_month.WY==2017]
 # ax.annotate('$r^2$: '+ str(np.round(r2_val,3)), (0.85,0.85), xycoords='axes fraction')
 
 # %%
-def corr_plt_seep(name, ylabel, log=False):
+# sfr_3mon_all
+# corr_all_in.reset_index().set_index('dt')
+
+# %%
+def corr_plt_seep(sfr_3mon_all, name, ylabel, log=False):
     """ name is Qbase or Qrech"""
     fig,ax = plt.subplots(4,4, figsize=(8,5.3), sharex=True, sharey=False, layout='constrained')
     # plot of number of connected days across realizations
@@ -1179,30 +1228,59 @@ def corr_plt_seep(name, ylabel, log=False):
     for mn, mon in enumerate(sfr_3mon_all.month.unique()):
         ax_n = ax[0, mn]
         ax_n.set_title(labels_3mon[mn])
-    fig.text(-0.01, 0.4, 'Mean Seasonal '+ylabel, rotation=90)
+    fig.text(-0.01, 0.2, 'Mean Seasonal '+ylabel, rotation=90) #-0.01, 0.4
     fig.text(0.4, -0.01, 'Number of Coarse Stream Reaches')
 
     fig.tight_layout()
 
 
 # %%
-labels=['Recharge ($m^3/day$)','Baseflow ($m^3/day$)','Days with flow','Streamflow ($m^3/day$)']
-var = ['Qrech','Qbase', 'flowing', 'Qout']
-# var,labels = ['Qbase'], ['Baseflow']
-for n, param in enumerate(var):
-    corr_plt_seep(param, labels[n],log=True)
+# sfr_3mon_all.columns
 
-    plt.savefig(join(fig_dir,'Appendix', 'corr_scatter_'+param+'.png'), bbox_inches='tight')
+# %%
+corr_all_in_lin = corr_all_in.reset_index().merge(coarse_ref, on='realization')
+corr_all_in_lin = corr_all_in_lin.rename(columns={'wy':'WY'})
+corr_all_in_lin.columns
 
 # %% [markdown]
-# # Application figure
+# The plots in the original paper were all log scale but this wasn't specified in the caption.
+#
+# Also need to clarify units are appropriate given the sum to 3 months means they are technically m3/3 months. switched to mean so units can remain m3/day. also baseflow is the only one that should be log-transformed
+
+# %%
+labels=['Stream Losses ($m^3/day$)','Stream Baseflow ($m^3/day$)',
+        'Mean Fraction of Days with Flow',
+        'Streamflow ($m^3/day$)']
+var = ['Qrech','Qbase', 'flowing', 'Qout']
+wb_labels = ['GW ET ($m^3/day$)','Net GW Flow ($m^3/day$)','Floodplain Recharge ($m^3/day$)']
+wb_var = ['ET_OUT','GHB_NET','LAK_IN']
+labels = labels+wb_labels
+var = var+ wb_var
+# filter for those actually used in final
+var = pd.Series(var)[pd.Series(var).isin(var_names)].tolist()
+# labels=['Recharge ($m^3/day$)']
+# var = ['Qrech']
+# var,labels = ['Qbase'], ['Baseflow']
+for n, param in enumerate(var):
+    corr_plt_seep(corr_all_in_lin, param, labels[n],log=False)
+    plt.savefig(join(fig_dir,'Appendix', 'corr_scatter_'+param+'.png'), bbox_inches='tight')
+    plt.close()
+    
+    # make a log10 version for those transformed
+    if (param in log_transform):
+        corr_plt_seep(corr_all_in_lin, param, 'log10 '+labels[n],log=True)
+        plt.savefig(join(fig_dir,'Appendix', 'corr_scatter_log10_'+param+'.png'), bbox_inches='tight')
+        plt.close()
+
+# %% [markdown]
+# # Application figures
 # Summary of net change in baseflow and ET for all realizations compared to the homogeneous case.
 #
 # And importantly, how does this change baseflow in seasons of concern, regarding the cosumnes functional flow regime. Between the homogeneous and hetergeneous realizations we need to sum across all segments because it's not fair to compare individual segments with the heterogeneity. But each day is a valuable comparison because a lack of flow is potential harmful to up-migrating salmon especially in fall.
 #
 # Although the number of days with flow doesn't have a significant relationship with heterogeneity I can still present the results holistically.
 #
-#
+# ET is very correlated with num coarse because seepage drives ET so this should be shown if we don't include ET in the correlations
 
 # %%
 # sfr_facies_all
@@ -1231,27 +1309,27 @@ total_conn = total_conn.groupby('realization').resample('3MS').mean().reset_inde
 # Similar to the plot showing days with flow by segment, the overall number of days with flow doesn't change much when looking at the histogram. From the earlier plots it looked like flow was extended at the downstream longer while reduced at the upstream. To show how downstream conditions change, we should represent the flow by requiring all segments to be flowing, take minimum of all segments which would essentially be the same as taking the most downstream segment. 
 
 # %%
-plt_date = '2015-10-1'
-total_conn[total_conn.index==plt_date].hist('flowing')
-plt.axvline(h_conn[h_conn.index==plt_date].flowing[0],color='red')
+# plt_date = '2015-10-1'
+# total_conn[total_conn.index==plt_date].hist('flowing')
+# plt.axvline(h_conn[h_conn.index==plt_date].flowing[0],color='red')
 
-#plot(x='realization',y='flowing',kind='scatter')
+# #plot(x='realization',y='flowing',kind='scatter')
 
 # %%
 total_flow = total_flow.join(h_flow,rsuffix='_h')
 total_flow['Qbase_diff'] = total_flow.Qbase - total_flow.Qbase_h
 
 # %%
-total_flow_fall = total_flow[total_flow.index.month==10]
-fig, ax = plt.subplots(2,2)
-for n, y in enumerate(total_flow_fall.index.unique()):
-    ax_n = ax[int(n/2), n%2]
-    sns.histplot(total_flow_fall[total_flow_fall.index==y], x='Qbase_diff', ax=ax_n,bins=10)
+# total_flow_fall = total_flow[total_flow.index.month==10]
+# fig, ax = plt.subplots(2,2)
+# for n, y in enumerate(total_flow_fall.index.unique()):
+#     ax_n = ax[int(n/2), n%2]
+#     sns.histplot(total_flow_fall[total_flow_fall.index==y], x='Qbase_diff', ax=ax_n,bins=10)
 
 # %% [markdown]
 # ## Last segment comparison
 # Show plot of how the number of days of flow averaged doesn't change much from the homogeneous case, but the days with flow at the outlet are more noticeable.
-# - based on Graham's recommendation we will see variability above and below the homogeneous case with the heterogeneous realizations, but what is likely more interesting is  showing for an individual realization why the flows were different. We still should provide some variability numbers for managers to understand why heterogeneity in reality might shift from the modeling of a homogeneous case.
+# - based on Graham's recommendation we will see variability above and below the homogeneous case with the heterogeneous realizations, but **what is likely more interesting is  showing for an individual realization why the flows were different, maybe looking at response at observation wells**. We still should provide some variability numbers for managers to understand why heterogeneity in reality might shift from the modeling of a homogeneous case.
 
 # %%
 # groupby season and year
@@ -1285,12 +1363,286 @@ for n, n_y in enumerate(total_last_fall.index.year.unique()):
     print(n_y+1, more_flow.sum())
 
 # %%
-plt_date = '2017-10-1'
+# plt_date = '2017-10-1'
 
-total_last[total_last.index==plt_date].hist('flowing')
-plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
+# total_last[total_last.index==plt_date].hist('flowing')
+# plt.axvline(h_last[h_last.index==plt_date].flowing[0],color='red')
 
+
+# %% [markdown]
+# # GW ET vs streamflow
+# Can we plot ET and flow as fractional changes to the average value for the quarter?
+
+# %%
+# plot streamflow vs ET to understand the tradeoff in benefits
+# may need to scale for easier comparison?
+# corr_all_in.plot.scatter(x='Qout', y='ET_OUT')
+# corr_all_in[corr_all_in.wy==2017].plot.scatter(x='Qout', y='ET_OUT')
+# corr_all_in[corr_all_in.wy==2017]
+
+# sns.relplot(corr_all_in, x='Qout', y='ET_OUT', col='month',row='wy', facet_kws={'sharey':False, 'sharex':False})
+
+# %% [markdown]
+# ET vs streamflow shows linear relationships in wet years which makes sense based on our understanding of the system, i.e., more high K stream reaches leads to more recharge leads to more water for ET and less for streamflow. 
+#
+# Yes we know there is more ET on a daily scale but what are the practical implications. The piece I haven't explored yet is spatial extent and duration of ET. 
+#
+# Could represent by plotting if GW > rtg depth or simply by plotting mean DTW under ET/ISW
 
 # %%
 
 # %%
+et_surf = m.evt.surf.array[0,0]
+ext_dp = m.evt.exdp.array[0,0]
+# bottom elevation of roots
+et_botm =et_surf - ext_dp
+
+et_row, et_col = np.where(ext_dp>2)
+# specify number of cells classified as GDE (rtg dp >2)
+gde_cells = np.sum(ext_dp>2)
+# evtr_avg = m.evt.evtr.array.sum(axis=0)[0]
+et_lay = get_layer_from_elev(et_botm[et_row, et_col], m.dis.botm[:, et_row, et_col], m.dis.nlay)
+# et_lay
+# identify which lake rows and columns are in GDEs
+# gde_lak_bool = (ext_dp>2)[lak_row, lak_col]
+# gde_lak_row = lak_row[gde_lak_bool]
+# gde_lak_col = lak_col[gde_lak_bool]
+# head = hdobj.get_data(dt_ref.kstpkper.iloc[0])
+# head = np.ma.masked_where(head==-999.99, head)
+def find_active_ET(model_ws):
+    hdobj = flopy.utils.HeadFile(join(model_ws, 'MF.hds'))
+    et_act = np.zeros((m.dis.nper, nrow,ncol))
+    et_head_all = np.zeros((m.dis.nper, len(et_row)))
+    
+    for t in np.arange(0,m.dis.nper):
+        head = hdobj.get_data(dt_ref.kstpkper.iloc[t])
+        head = np.ma.masked_where(head==-999.99, head)
+        # identify which GDE ET cells would active based on head
+        et_head = head[et_lay, et_row, et_col]
+        b = et_head > et_botm[et_row, et_col]
+        et_act[t, et_row[b], et_col[b]] = 1
+        # better to save head just under relevant ET
+        et_head_all[t, :] = et_head
+    return et_act, et_head_all
+
+
+
+# %%
+et_act, et_head = find_active_ET(model_ws)
+
+
+# %%
+# plt.plot(et_head.mean(axis=1))
+
+# %%
+import h5py
+
+# %%
+nt = 100
+
+
+# %%
+if rewrite:
+
+    # load information on whether ET is active and the head in the ET cells with rtg depth >2
+    h5_fn = join(out_dir, 'et_summary_arrays.hdf5')
+    with h5py.File(h5_fn, "w") as f:
+        grp = f.require_group('active_et_arrays') # makes sure group exists
+        grp.attrs['units'] = 'boolean'
+        grp.attrs['description'] = 'arrays where the first dimension is the stress period the second \
+        is the model row and the third is the model column where the value is a boolean for if ET is active'
+    
+        head_grp = f.require_group('et_head_arrays') # makes sure group exists
+        head_grp.attrs['units'] = 'gw head m'
+        head_grp.attrs['description'] = 'arrays where the first dimension is the stress period the second \
+        is the order of ET cells'
+        for t in np.arange(0,nt):
+            model_ws = join(all_model_ws, 'realization'+ str(t).zfill(3))
+            et_act_t, et_head_t = find_active_ET(model_ws)
+            # et_act_all[t,:] = np.copy(et_act_t)
+            r_name = 'r'+str(t).zfill(3)
+            dset = grp.require_dataset(r_name, et_act_t.shape, dtype='f', compression="gzip", compression_opts=4)
+            dset[:] = et_act_t
+    
+            dset = head_grp.require_dataset(r_name, et_head_t.shape, dtype='f', compression="gzip", compression_opts=4)
+            dset[:] = et_head_t
+
+# %%
+et_act_all = np.zeros((nt, m.dis.nper, nrow,ncol))
+et_head_all = np.zeros((nt, m.dis.nper,len(et_row)))
+
+h5_fn = join(out_dir, 'et_summary_arrays.hdf5')
+
+# et_act_all
+with h5py.File(h5_fn, "r") as f:
+    grp = f['active_et_arrays']
+    head_grp = f['et_head_arrays']
+    for t in np.arange(0,nt):
+        r_name = 'r'+str(t).zfill(3)
+        arr = grp[r_name][:]
+        et_act_all[t,:] = arr
+        arr = head_grp[r_name][:]
+        et_head_all[t,:] = arr
+
+# %%
+# pre-define gray colors based on num coarse
+gray_colors = cm.gray(norm(coarse_ref.num_coarse))
+et_head_mean = et_head_all.mean(axis=2)
+
+# %%
+
+import matplotlib.dates as mdates
+
+
+# %%
+fig,ax = plt.subplots()
+for t in np.arange(0,nt):
+    ax.plot(dt_ref.dt, et_head_mean[t], color=gray_colors[t]);
+
+# just fix xlabels instead
+plt.ylabel('Active ET\nMean GWE (m)')
+plt.colorbar(s_m, ax=ax, label='Number of coarse reaches')
+plt.grid(axis='y')
+plt.xlim(dt_ref.dt.min(), dt_ref.dt.max())
+ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+# ax.xaxis.set_major_locator(mdates.MonthLocator(interval=12))
+# ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+
+# ax.set_xticks(xticks.index, xticks.dt.astype(str))
+# it mainly seems like a shift in magnitude (less than 1 m or so), no clear shift in timing
+# to look at shifts in timing, would need to plot regression of the day something occurred vs realizations
+# last day of stream or first, same for ET
+
+# %%
+# scatter plot of mean GWE of ET vs num coarse looks similar to flux
+# makes sense since only other shift is ETo
+# fig,ax = plt.subplots()
+# ax.scatter(coarse_ref.num_coarse, et_head_mean.mean(axis=1))
+
+
+# %% [markdown]
+# What is more interesting is the number of days that are active is different. Should specify in the paper we focused on GDEs with rooting depths greater than 2 m where we can expect to see consistent connection
+
+# %%
+et_act = et_act_all[0]
+fig,ax = plt.subplots(figsize=(3,3), dpi=200,  layout='constrained')
+et_plt = et_act.mean(axis=0)*100
+et_plt = np.ma.masked_where(et_plt==0, et_plt)
+im = ax.imshow(et_plt)
+plt.colorbar(im, shrink=0.5, label='Percent time active')# plt.show()
+
+
+# %%
+# summarize to count number of active et cells
+et_count_all = et_act_all.sum(axis=(2,3))
+# can represent by scaling by all cells or deep ET cells
+et_perc_all = et_count_all/(nrow*ncol/100)
+et_perc_gde = et_count_all/(gde_cells/100)
+
+# %%
+# what if we plot days with a minimum water depth? (not that different from days with flow)
+
+# %%
+# the three month data is to coarse to plot a time series of days of flow
+# sns.relplot(corr_all_in, x='dt',y='flowing', hue='realization', kind='line')
+
+# %%
+# the second layer would be to focus on GDEs only where historic DTW <30 ft to align with GSP criteria but
+# this is more a general exploration so probably shouldn't cutoff too much
+
+# %%
+fig,ax = plt.subplots()
+for t in np.arange(0,nt):
+    ax.plot(dt_ref.dt, et_perc_gde[t], color=gray_colors[t]);
+
+plt.ylabel('Percent Active GDEs')
+plt.colorbar(s_m, ax=ax, label='Number of coarse reaches')
+plt.xlim(dt_ref.dt.min(), dt_ref.dt.max())
+ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+
+# spatial extent also seems to shift by mainly a few percent, maybe up to 20% in wet years like 2017
+
+# %%
+# # similarly strong linear relationship to areal extent and num coarse
+# plt.scatter(coarse_ref.num_coarse,et_perc_gde.mean(axis=1))
+
+# %%
+# plot percent active GDE vs number of days of flow in a year
+
+# %%
+# by realization, month, wy
+# corr_all_in.flowing
+et_perc_df = pd.DataFrame(np.transpose(et_perc_gde), index=dt_ref.dt)
+et_seas_df = et_perc_df.resample('3MS').mean()
+et_long = et_seas_df.melt(ignore_index=False, var_name='realization', value_name='perc_active_ET')
+
+# join together for quicker comparison
+et_flow_df = et_long.merge(corr_all_in, on=['dt','realization'])
+et_flow_df = et_flow_df.merge(coarse_ref, on='realization')
+et_flow_df.flowing *= 100
+
+# %%
+# sns.relplot(et_flow_df, x='flowing',y='perc_active_ET', hue='num_coarse', row='wy',col='month', kind='scatter')
+
+# %% [markdown]
+# This is a more useful plot here as it gets at the idea that ET is boosted by coarse cells in the wet season when streamflow is not significantly impacted by the extra losses. And by the dry season when streamflow starts to be imapcted, ET has already dropped generally so it is not compounding the effect on streamflow.
+#
+# There migth be more nuance if we look at specific realizations and their timing given the shift appears to occur between spring and summer.
+
+# %%
+# not that we can change subsurface but make a co-plot of realizations that on average maximize baseflow, streamflow and ET after normalizing
+
+# %%
+mean_stats = et_flow_df.groupby('realization').mean()
+# Compute numerical data ranks (1 through n) along axis.
+rank_df = mean_stats.rank()
+agg_rank = pd.DataFrame(rank_df[['perc_active_ET','flowing']].sum(axis=1), columns=['agg_rank'])
+
+agg_rank = agg_rank.merge(coarse_ref, on='realization')
+
+fig,ax_n = plt.subplots()
+agg_rank.plot.scatter('num_coarse','agg_rank', ax=ax_n)
+
+name='agg_rank'
+regr = linear_model.LinearRegression()
+regr.fit(agg_rank[['num_coarse']].values, agg_rank[[name]].values)
+x_range = np.array([[agg_rank.num_coarse.min()], [agg_rank.num_coarse.max()]])
+ax_n.plot(x_range, regr.predict(x_range), color='black', linewidth=3)
+r2_val = r2_score(agg_rank[[name]], regr.predict(agg_rank[['num_coarse']].values))
+ax_n.annotate('$R^2$: '+ str(np.round(r2_val,3)), (0.1,0.8), xycoords='axes fraction')
+
+# %% [markdown]
+# The most interesting part of this dual rank plot is to consider that within the 2 standard deviations of num coarse there are some that maintain a lot of streamflow and ET and some that don't. What is interesting would be to explore the difference between those two and suggest that as future work to identify smaller scale processes that impact these benefits.
+
+# %%
+# agg_rank.num_coarse
+coarse_mean = coarse_ref.num_coarse.mean()
+coarse_std = coarse_ref.num_coarse.std()
+# look between 1/2 std deviations
+n_std = 1/2
+coarse_min, coarse_max = coarse_mean-coarse_std*n_std, coarse_mean+coarse_std*n_std
+
+rank_filter = agg_rank[(agg_rank.num_coarse>coarse_min)&(agg_rank.num_coarse<coarse_max)]
+# rank_filter.plot.scatter(x='num_coarse',y='agg_rank')
+# get quantiles to identify realizations for review
+rank_quant = rank_filter.agg_rank.quantile([0,0.25, 0.5, 0.75, 1], interpolation='nearest')
+print(rank_quant)
+rank_r = rank_filter[rank_filter.agg_rank.isin(rank_quant)]
+# print(rank_r)
+
+# %%
+rank_r_out = rank_r.reset_index().merge(rank_quant.reset_index().rename(columns={'index':'quantile'}))
+rank_r_out = rank_r_out.merge(rank_df[['perc_active_ET','flowing']], on='realization')
+rank_r_out.to_csv(join(fig_dir, 'coarse_ref_eco_rank_comp.csv'), index=False)
+# rank_r
+
+# %%
+rank_r_out.plot(x='realization',y=['perc_active_ET','flowing'],kind='bar')
+plt.ylabel('rank')
+
+# %%
+# extract hydrologic output to review for final ranked realizations
+rank_data = corr_all_in.loc[rank_r.index].copy()
+rank_long = rank_data.melt(id_vars=['dt','month','wy'], ignore_index=False)
+# rank_long
+sns.relplot(rank_long, x='dt',y='value', col='variable', col_wrap=3, hue='realization', facet_kws={'sharey':False},kind='line')
