@@ -38,7 +38,7 @@ import rasterio
 
 # %%
 import fiona
-from shapely.geometry import shape, mapping
+from shapely.geometry import shape, mapping, Point
 from shapely.ops import linemerge
 
 from shapely.geometry import LineString
@@ -48,10 +48,10 @@ from shapely.geometry import LineString
 # Better approach than directly sampling the NHD lines because using a cross-section perpendicular to a cell should identify the true channel in a cell.
 
 # %%
-def make_transects(geom, dline, xs_width):
+def make_transects(gdf_in, dline, xs_width):
     """ Create regular transects along a line
     INPUT:
-    geom: shapely geometry object, usually created from union_all of a geodataframe geometry
+    gdf_in: geodataframe with a geomery column of lines that will merged
     dline: how often to interpolate a point along a line, typically should be no less than the raster
         resolution that will be used for sampling (e.g., 10m for 10m USGS DEM)
     xs_width: cross-section width (units of crs) that should be used in total (1/2 each river side)
@@ -59,12 +59,12 @@ def make_transects(geom, dline, xs_width):
     OUTPUT:
     transg: geodataframe with transects interpolated at distance dline with width of xs_width (no crs)
     """
-    # dline: how often to interpolate a point along a line
-    # xs_width: 300 meter width so that 100 meter can be cutoff to have 200m around true thalweg
-    long_dline = np.copy(dline)
+    # convert geodataframe to shapely geometry object with union_all 
+    geom = linemerge(gdf_in.geometry.union_all())
+
     # # length of the LineString
     length = int(geom.length)
-    
+    # create blank geodataframe to fill
     transects = pd.DataFrame(np.zeros((int(np.ceil(length/dline)),1)), columns = ['line'])
     transects['geometry'] = LineString([(0,0),(0,1)]) #initiate LineString geometry column
     
@@ -77,7 +77,10 @@ def make_transects(geom, dline, xs_width):
         transects.loc[i,'geometry'] = perp_line
     # convert into geodataframe
     transg = gpd.GeoDataFrame(transects)
+    # add line numbers for reference
     transg['line'] = np.arange(0,len(transg))
+    # add crs from input geodataframe
+    transg.crs = gdf_in.crs
     return(transg)
 
 
@@ -89,8 +92,10 @@ def create_points(transg, xs_width, dline=10):
     OUTPUT:
     xs_all: geodataframe with the transects converted into points with spacing of dline along each transect
     """
-    xs_all = gpd.GeoDataFrame(pd.DataFrame(columns=['xs_num','dist_from_right_m','geometry']))
-    xs = gpd.GeoDataFrame(pd.DataFrame(np.zeros((int(xs_width/dline),2)), columns=['xs_num','dist_from_right_m']))
+    xs_all = gpd.GeoDataFrame(pd.DataFrame(columns=['xs_num','dist_from_right_m']), geometry=[])
+    xs_width_count = int(xs_width/dline)
+    xs = gpd.GeoDataFrame(pd.DataFrame(np.zeros((xs_width_count,2)), columns=['xs_num','dist_from_right_m']),
+                         geometry = [Point([(0,0)])]*xs_width_count)
     
     for j in np.arange(0,len(transg)):
         xs['geometry'] = Point([(0,0)])
@@ -109,29 +114,42 @@ def create_points(transg, xs_width, dline=10):
             xs.loc[i,'dist_from_right_m'] = distance
         # append individual cross section to all dataframe
         xs_all = pd.concat((xs_all, xs))
+
+    # remove rows where new geometry was not inserted
+    xs_all = xs_all[xs_all.geometry!=Point(0,0)]
+    # apply crs from transects to points (if present)
+    xs_all.crs = transg.crs
+    
     return(xs_all)
 
 
 
 # %%
-def sample_points(xs_all, crs, raster_name):
+def sample_points(xs_all, raster_name):
     """
     given a geodatafarme with points sample the elevation from a raster
+    INPUT:
+    xs_all: geodataframe with geometry of points
+    raster_name: full raster path and name to open
     """
-    xs_all.crs=crs
-    xs_all['Easting'] = xs_all.geometry.x
-    xs_all['Northing'] = xs_all.geometry.y
-    point = xs_all.loc[:,['Easting','Northing']].values
-    
     with rasterio.open(raster_name) as src:
-        xs_all['z_m'] = [sample[0] for sample in src.sample(point)]
-    
-    with rasterio.open(raster_name) as dem_f:
-        dem_nodata = dem_f.nodata
-    
+        rio_nodata = src.nodata
+        rio_crs = src.crs
+        
+    # convert points to crs of the raster
+    xs_all = xs_all.to_crs(rio_crs)
+    # create points to extract
+    xs_all['X'] = xs_all.geometry.x
+    xs_all['Y'] = xs_all.geometry.y
+    point = xs_all.loc[:,['X','Y']].values
+    # sample the raster at each point to extract elevations
+    with rasterio.open(raster_name) as src:
+        xs_all['z'] = [sample[0] for sample in src.sample(point)]
+
     # remove any NA values picked up from DEM raster
-    xs_all.loc[xs_all['z_m']==dem_nodata,['z_m']] = np.nan
-    xs_all.index = np.arange(0,len(xs_all))
+    xs_all.loc[xs_all['z']==rio_nodata,['z']] = np.nan
+    xs_all = xs_all.reset_index(drop=True)
+    
     return(xs_all)
 
 
