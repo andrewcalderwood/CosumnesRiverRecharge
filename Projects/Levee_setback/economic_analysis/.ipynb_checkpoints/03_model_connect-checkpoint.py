@@ -63,16 +63,21 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 # %%
 # updated version specifies concept_name and copy_files here so it can be easily
 # seen as these are the main update to make in a script
+in_data = sys.argv
 
-m_nam = sys.argv[1]
-# added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
-input_name = sys.argv[2]
+if 'ipykernel' in in_data[0]:
+    # m_nam = 'input_write_2014_2020_R3'
+    # m_nam = 'input_write_2014_2020'
+    m_nam = 'input_write_2014_2022_R203'
 
-# m_nam = 'input_write_2014_2022_no_p_o'
-# m_nam = 'input_write_2014_2020_R3'
-# m_nam = 'input_write_2014_2020'
+    # input_name = 'static_model_inputs.xlsx'
+    input_name = 'static_model_inputs_no_p_o.xlsx'
 
-# input_name = 'static_model_inputs.xlsx'
+else:
+    m_nam = in_data[1]
+    # added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+    input_name = in_data[2]
+
 
 print('sys.argv[1] (m_nam) is...')
 print(m_nam)
@@ -552,6 +557,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # crop_in[crop_in.name==crop]
     pred_crops = crop_in.name.unique()
     print(pred_crops)
+
+    # add in the crops from previous years
+    for year_previous in np.arange(all_run_dates.date.dt.year.min(), year):
+        crop_in_previous = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
+        # to avoid conflict, add previous years as new columns with convention name_year
+    crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+    crop_in = crop_in.merge(crop_in_previous)
 
     # %%
     print(crop_in.groupby('name')[['parcel_id']].count())

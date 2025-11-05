@@ -103,8 +103,8 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # %%
 # # # # # testing
-# year = int(2016)
-# crop='Grape'
+year = int(2016)
+crop='Grape'
 # # # # crop='Corn'
 # # crop='Alfalfa'
 # # # crop='Pasture' # will require extra work due to AUM vs hay
@@ -114,26 +114,33 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # # # # # # # testing
 # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# # m_nam = 'input_write_2014_2022'
+loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# m_nam = 'input_write_2014_2022'
+m_nam = 'input_write_2014_2022_R203'
 # m_nam = 'input_write_2014_2020'
-# base_model_ws = join(loadpth, m_nam )
-# swb_ws = join(base_model_ws, 'crop_soilbudget')
-# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+base_model_ws = join(loadpth, m_nam )
+swb_ws = join(base_model_ws, 'crop_soilbudget')
+crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
+# add in the crops from previous years
+for year_previous in np.arange(2014, year):
+    crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
+    # to avoid conflict, add previous years as new columns with convention name_year
+    crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+    crop_in = crop_in.merge(crop_in_previous)
+        
+# dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
+#                      index_col=0, parse_dates=['dt'])
+dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+                    index_col=0, parse_dates=['date'])
+dtw_df.columns = dtw_df.columns.astype(int)
 
-# # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
-# #                      index_col=0, parse_dates=['dt'])
-# dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
-#                     index_col=0, parse_dates=['date'])
-# dtw_df.columns = dtw_df.columns.astype(int)
+soil_rep = True # True is for the complex dtw_df case
+run_opt=True
+field_id = 'parcels'
 
-# soil_rep = True # True is for the complex dtw_df case
-# run_opt=True
-# field_id = 'parcels'
-
-# sw_con=125
-# gw_con=125
-
+sw_con=125
+gw_con=125
+input_name = 'static_model_inputs_no_p_o.xlsx'
 # # load parcel data for soil_rep=False
 # # soil_rep=False
 
