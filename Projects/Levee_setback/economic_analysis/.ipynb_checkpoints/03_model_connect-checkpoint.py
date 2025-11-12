@@ -362,7 +362,7 @@ fn = join(data_dir ,input_name) # new version allows alternates
 
 
 season = pd.read_excel(fn, sheet_name='Seasons', comment='#')
-
+irr_est = pd.read_excel(fn, sheet_name='Irr_establish', comment='#')
 
 os.makedirs(join(model_ws, 'output_clean'), exist_ok=True)
 os.makedirs(join(model_ws,'crop_soilbudget','field_dtw'),exist_ok=True)
@@ -415,7 +415,7 @@ sys.stdout.flush()
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
 for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [1]:
+# for m_per in [2]:
 # for m_per in [4]:
 
     m_strt = all_run_dates.iloc[m_per].date
@@ -562,8 +562,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for year_previous in np.arange(all_run_dates.date.dt.year.min(), year):
         crop_in_previous = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
         # to avoid conflict, add previous years as new columns with convention name_year
-    crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
-    crop_in = crop_in.merge(crop_in_previous)
+        crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+        crop_in = crop_in.merge(crop_in_previous)
 
     # %%
     print(crop_in.groupby('name')[['parcel_id']].count())
@@ -618,7 +618,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops: 
             # to equalize the situation we might use a simple DTW profile
@@ -656,8 +656,78 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
 
 
+# %% [markdown]
+# # Correct for new crops and apply estimated irrigation to actual field conditions
+
 # %%
-# pc_df_all
+# need to bring in crops from previous years with soil_dict to make sure run_swb can reference to adjust yield/profit
+# and irrigation (can't adjust ETc for all, need to adjust field when changing)
+
+# if we want to accurately represent new recharge for fields that are considered establishing,
+# we do need to re-run the SWB with the assigned irrigation rates
+
+# %%
+irr_est
+
+# %%
+# irr_gw_df_all
+# find crops that change and need alteration to irr
+# in 2016: 230/3900 show changes, good chunk goes to vineyard ~100
+new_crop = crop_in[crop_in.name != crop_in['name_'+(str(year-1))]]
+est_irr_id = new_crop[new_crop.name=='Vineyards'].parcel_id
+irr_gw_df_all[irr_gw_df_all.UniqueID.isin(est_irr_id)]
+# crop_in
+
+    # %%
+    # import functions.summarize_functions
+    # reload(functions.summarize_functions)
+    from functions.summarize_functions import format_irr_all
+
+    # %%
+    # need to get dtw_df (even if just estimated), unlike f_summarize_output modflow hasn't been run yet
+    # need data from November (-1 year) to December
+    # dtw_df doesn't really matter as no opt is run, and the profit will need to be re-run with actually dtw later
+    dtw_wide = np.repeat(np.reshape(well_dtw.dtw_ft.values, (1,-1)), len(dtw_simple_df), axis=0)
+    # assume same simple 5 ft dtw decline
+    dtw_decline = dtw_simple_df.iloc[:,0]-10
+    dtw_decline = np.repeat(np.reshape(dtw_decline.values, (-1,1)), len(well_dtw), axis=1)
+    dtw_wide_df = pd.DataFrame(dtw_wide-dtw_decline)
+    dtw_wide_df.index = dtw_simple_df.index
+    dtw_wide_df.columns = well_dtw.UniqueID
+
+    # %%
+    print('Re-running SWB with updated irrigation values for fields with establishment irrigation rates')
+    # for crop in ['Alfalfa']:
+    for crop in crop_list:
+        # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
+        # variables, this would be useful for comparing against baseline while future should use average
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+        # need to account for when crops aren't predicted and skip them
+        if pred_dict[crop] in pred_crops:     
+            # irr_all is the combination for each crop
+            irr_all = format_irr_all(crop, year, crop_in, pred_dict, irr_gw_df_all, irr_sw_df_all)
+            # from code f_summarize_output that re-runs SWB at end of each year with true DTW for each field
+            # should rename the path so we can have both saved
+            load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget_est'), dtw_df, input_name = input_name, soil_rep = False,
+                            run_opt=False, irr_all=irr_all, field_id = 'parcels')
+
+            sys.stdout.flush()
+
+# %%
+# need to reload updated output to get information on gw irrigation and surface water irrigation
+irr_gw_df_all.UniqueID.unique()
+# may want to use code from plot_output that has read_hdf5  array and assigns UniqueID
+    for var in ['percolation','GW_applied_water', 'SW_applied_water']:
+        print(var, end=',')
+        name = join(model_ws, 'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+            # extract output and convert to dataframe with ID columns
+            arr = read_crop_arr_h5(crop, name)
+            df = pd.DataFrame(arr, columns=dates)
+            # add parcel information back
+            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
+            # melt to long format for easier appending
+            df = df.melt(var_name='date', id_vars=crop_in.columns)
+            df = df.assign(crop=crop, year=year, var=var)
 
 # %% [markdown]
 # ## RCH input

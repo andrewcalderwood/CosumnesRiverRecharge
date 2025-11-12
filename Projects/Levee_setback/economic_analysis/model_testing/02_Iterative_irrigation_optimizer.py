@@ -63,6 +63,10 @@ py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
+git_proj_dir = join(doc_dir,'GitHub','CosumnesRiverRecharge','Projects','Levee_setback','economic_analysis')
+add_path(git_proj_dir)
+add_path(join(git_proj_dir,'functions'))
+
 import Basic_soil_budget_monthly as swb
 # from importlib import reload
 # reload(swb)

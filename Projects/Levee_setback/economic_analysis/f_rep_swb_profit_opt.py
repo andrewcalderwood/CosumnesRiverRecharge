@@ -102,51 +102,51 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-# # # # # testing
-year = int(2016)
-crop='Grape'
-# # # # crop='Corn'
-# # crop='Alfalfa'
-# # # crop='Pasture' # will require extra work due to AUM vs hay
-# # # crop = 'Misc Grain and Hay'
+# # # # # # testing
+# year = int(2016)
+# crop='Grape'
+# # # # # crop='Corn'
+# # # crop='Alfalfa'
+# # # # crop='Pasture' # will require extra work due to AUM vs hay
+# # # # crop = 'Misc Grain and Hay'
 
 # %%
-# # # # # # # testing
-# # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# m_nam = 'input_write_2014_2022'
-m_nam = 'input_write_2014_2022_R203'
-# m_nam = 'input_write_2014_2020'
-base_model_ws = join(loadpth, m_nam )
-swb_ws = join(base_model_ws, 'crop_soilbudget')
-crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
-# add in the crops from previous years
-for year_previous in np.arange(2014, year):
-    crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
-    # to avoid conflict, add previous years as new columns with convention name_year
-    crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
-    crop_in = crop_in.merge(crop_in_previous)
+# # # # # # # # testing
+# # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # m_nam = 'input_write_2014_2022'
+# m_nam = 'input_write_2014_2022_R203'
+# # m_nam = 'input_write_2014_2020'
+# base_model_ws = join(loadpth, m_nam )
+# swb_ws = join(base_model_ws, 'crop_soilbudget')
+# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
+# # add in the crops from previous years
+# for year_previous in np.arange(2014, year):
+#     crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
+#     # to avoid conflict, add previous years as new columns with convention name_year
+#     crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+#     crop_in = crop_in.merge(crop_in_previous)
         
-# dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
-#                      index_col=0, parse_dates=['dt'])
-dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
-                    index_col=0, parse_dates=['date'])
-dtw_df.columns = dtw_df.columns.astype(int)
+# # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
+# #                      index_col=0, parse_dates=['dt'])
+# dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+#                     index_col=0, parse_dates=['date'])
+# dtw_df.columns = dtw_df.columns.astype(int)
 
-soil_rep = True # True is for the complex dtw_df case
-run_opt=True
-field_id = 'parcels'
+# soil_rep = True # True is for the complex dtw_df case
+# run_opt=True
+# field_id = 'parcels'
 
-sw_con=125
-gw_con=125
-input_name = 'static_model_inputs_no_p_o.xlsx'
-# # load parcel data for soil_rep=False
-# # soil_rep=False
+# sw_con=125
+# gw_con=125
+# input_name = 'static_model_inputs_no_p_o.xlsx'
+# # # load parcel data for soil_rep=False
+# # # soil_rep=False
 
-# # dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
-# # dtw_df.index = pd.to_datetime(dtw_df.index)
-# # dtw_df.columns = dtw_df.columns.astype(int)
+# # # dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
+# # # dtw_df.index = pd.to_datetime(dtw_df.index)
+# # # dtw_df.columns = dtw_df.columns.astype(int)
 
 # %%
 ## simple representative DTW for linear steps 10 ft to 200 ft
@@ -255,6 +255,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     yield_ind = np.append([0], (yield_end-strt_date).dt.days.values +1)
     gen_dict['yield_ind'] = np.append([0], (yield_end-strt_date).dt.days.values + 1)
 
+
     # %%
     # create time series of daily yield response factors
     var_yield['dt'] = swb.ymd2dt(year, var_yield.month, var_yield.day, var_yield.year_adj)
@@ -299,13 +300,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     print('Num crops:', nfield_crop)
 
 
-# %%
-# soil_crop[['UniqueID','Ksat','AWC','Porosity','CN',
-#            'Texture','HydGroup','w3rdbar','w15bar', 'pod_bool']]
-# plt.plot(soil_crop.HydGroup.values)
-# soil_df_out = swb.prep_soil(soil_crop, np.zeros((nper, nfield)), var_crops)
-# soil_df_out.shape
-
     # %%
     # crop_wells = soil_crop[['UniqueID']].merge(parcel_wells)
     # select parcels in the simulation
@@ -326,34 +320,17 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     # print(crop_dtw.shape)
 
 
-# %%
-# import matplotlib.pyplot as plt
-# plt.plot(crop_dtw);
-# dates
-# dtw_df
-
-
 # %% [markdown]
 #     # ## Iterate over each unique soil condition
 
-# %%
-
+    # %%
     # convert dictionary of variables to class for easier referencing, constant over different soil
     gen = cost_variables(gen_dict)
 
-    # can define bounds for each variable individually
     # a scalar indicates it is applied to all variables
-    # could easily throw in the upper bound here based on crop reasonable upper limit
-    # for now the max upper limit is 2 ft based on alfalfa
+    # upper bound here based on crop reasonable upper limit
     bounds = Bounds(lb = 0, ub = (var_irr.depth_max.max()/12)*0.3048)
-    # bounds = Bounds(lb = 0, ub = (20/12)*0.3048)
 
-
-    # %%
-    # SLSQP requires
-    # eq_cons = {'type': 'eq',
-    #            'fun' : lambda x: np.array([2*x[0] + x[1] - 1]),
-    #            'jac' : lambda x: np.array([2.0, 1.0])}
 
     # %%
     # # create a dataframe of soil data to save
@@ -384,11 +361,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         t_all = np.zeros(nfield_crop)
         
         for ns in np.arange(0,nfield_crop):
-        # for ns in np.arange(0,100):
             soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
             nfield = soil_ag.shape[0]
         
-            # dtw_arr = dtw_all[:,ns]
             dtw_arr = crop_dtw[:,ns]
     
             ## add check for cheaper water source
@@ -405,13 +380,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
             # add field to dataframe of all field
             soil_df_out = pd.concat((soil_df_out, field_soil_df),axis=0)
             
-            # reset irrigation constraints to a high value
-            # sw_con = 125
-            # gw_con = 125
             # if no POD then no SW irrig
             if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel':
-                # irr_lvl[:n_irr] = 0
-                # irr_lvl[n_irr:] *= 2 # put double the irrigation to the GW
                 sw_con = 0
                 n_irr_type=1
             if water_source=='gw':
@@ -439,8 +409,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
 
             print('Irr length:', len(irr_lvl))
             # simple linear keeps both SW/GW
-            # linear_constraint = mak_irr_con(n_irr, gw_con = gw_con, sw_con = sw_con) 
-            # linear constraint that keeps only the non-zero constraint
             # the constraint should be divided by the irrigation efficiency multiplier
             # to limit based on the actual water that will be applied
             linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con/gen.irr_eff_mult, sw_con = sw_con/gen.irr_eff_mult) 
@@ -449,9 +417,9 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
             tol = 0.01  
             # continue optimizing until profit is positive (p is negative and means positive profit)
             # this step may no longer be necessary as several crops are
-            # expected to have negative profits (200-400 dollar losses)
+            # expected to have negative profits (200-400 dollar losses), lower limit to avoid >-1000 dollars
+            # and now we are removing p_o so most should be positive
             while p_all[ns] > min_profit:
-                # the minimization with 'trust-constr' and no constraints doesn't solve and has increasing WB error
                 # should look at adding irrigation effiency into cost calculation but not irrigation or else the optimizer would simply scale
                 # means we should also adjust the linear constraint for each efficiency
                 out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr, water_source),
@@ -483,46 +451,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         print('Total time was %.2f min' %((t1-t0)/60), 'for', ns+1,'parcels')
 
 
-# %%
-# import matplotlib.pyplot as plt
-# plt.plot(irr_all[0, n_irr:])
-# irr_all[1,n_irr:].sum()*12*3.28
-
-# %%
-
-
-
-# specify column names
-# soil_df_out.columns=soil_keys_keep+['UniqueID']
-
-# soil_df_out.columns
-# temporary code for solver review, move to post-processing script
-# import matplotlib.pyplot as plt
-# plt_cols = ['Ks','por','wc_f','taw']
-# fig,ax = plt.subplots(len(plt_cols),1, sharex=True)
-# for n,v in enumerate(plt_cols):
-#     ax[n].plot(np.arange(0, len(soil_df_out)), soil_df_out[v], 
-#                label='By field')
-#     ax[n].axhline(soil_df_out[v].mean(), color='gray', alpha=0.6,
-#                   label='Mean')
-#     ax[n].set_ylabel(v)
-
-# # one legend
-# ax[0].legend()
-
-# %% [markdown]
-#     # It wasn't until running grapes which have 3 times the number of irrigations that I realized that each solver takes about 2 min instead of 0.2 min (Corn). Alfalfa had run times of 0.3 min. Misc. grain and hay never found positive profit  (-250 to -300), and took multiple minutes as well.
-
 # %% [markdown]
 #     #     # # Post-processing
 #     #     # 1. run optimized swb with irrigation efficiency
 #     #     # 2. save applied water for pumping
 #     #     # 3. save deep percolation
-
-# %%
-# irr_all = None
-# reload(functions.swb_functions)
-# from functions.swb_functions import run_swb
 
     # %%
     # runs relatively quickly
@@ -531,17 +464,15 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         print('irr_all not specified for soil water budget')
         print('Assuming no irrigation for all fields')
         irr_all = np.zeros((nfield_crop,2*n_irr))
-    print('Calculating true irrigation with irrigation efficiency')
-    # correct for any irrigation below 0
-
+    print('Calculating true SWB + profit with irrigation efficiency')
+    # correct for any irrigation below 0 set by optimization
+    irr_all[irr_all<0] = 0
     # scale by irrigation efficiency of the crop after optimizing
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     p_true = np.zeros(nfield_crop) 
     Y_A_true = np.copy(p_true)
     pc_all = np.zeros((nfield_crop, gen.nper))
     for ns in np.arange(0,nfield_crop):
-    # for ns in np.arange(0,1):
-        # p_true[ns] = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr)
         # update variables for each crop
         dtw_arr = crop_dtw[:,ns]
         soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
@@ -553,12 +484,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         # double check this works for the multiple simple dtw version
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
 
-# %%
-# p_true[0]
-# irr_true[0]
-
-# %%
-
+    # %%
     # break down irrigation into groundwater and surface water time series
     irr_sw_out = np.zeros((nfield_crop, gen.nper))
     irr_sw_out[:, irr_days] = irr_true[:, :n_irr] # SW out

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -60,6 +60,10 @@ py_dir = join(doc_dir,'GitHub/CosumnesRiverRecharge/python_utilities')
 add_path(py_dir)
 from mf_utility import get_layer_from_elev, param_load
 
+git_proj_dir = join(doc_dir,'GitHub','CosumnesRiverRecharge','Projects','Levee_setback','economic_analysis')
+add_path(git_proj_dir)
+add_path(join(git_proj_dir,'functions'))
+
 import Basic_soil_budget_monthly as swb
 # from importlib import reload
 # reload(swb)
@@ -77,8 +81,8 @@ year = int(2015)
 # crop='Grape'
 crop='Corn'
 # crop='Alfalfa'
-crop='Pasture' # will require extra work due to AUM vs hay
-# crop = 'Misc Grain and Hay'
+# crop='Pasture' # will require extra work due to AUM vs hay
+crop = 'Misc Grain and Hay'
 
 # %%
 var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
@@ -463,7 +467,7 @@ print('Optimization time %.2f sec' %(t1-t0))
 
 
 # %% [markdown]
-# SLSQP runs slightly faster (77 to 58 sec), but requires a tighter tolerance because with 1E-2 it didn't finish solving and at 1E-4 it did (1E-3 was slightly off too).
+# SLSQP runs slightly faster (77 to 58 sec), but requires a tighter tolerance because with 1E-2 it didn't finish solving and at 1E-4 it did (1E-3 was slightly off too). (Pasture)
 # - not a clear way to estiamte jacobian (gradient) since it is a pretty nonlinear function
 
 # %%
