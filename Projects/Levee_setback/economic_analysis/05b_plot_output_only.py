@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -90,6 +90,7 @@ def read_crop_arr_h5(crop, h5_fn):
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
 m_nam = 'input_write_2014_2020'
@@ -100,7 +101,7 @@ scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
 scenario = '_R200' # 200 represents no p_o
 scenario = '_R203' # no p_o and 6x MAR
-scenario = '_R204' # no p_o and 90/20 flloodplain
+# scenario = '_R204' # no p_o and 90/20 flloodplain
 
 # scenario=''
 
