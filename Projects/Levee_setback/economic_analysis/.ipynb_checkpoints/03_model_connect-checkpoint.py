@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -132,6 +132,9 @@ from functions.f_gw_dtw_extract import calc_simple_dtw
 # reload(data_functions)
 from functions.data_functions import read_crop_arr_h5
 
+from functions.data_functions import init_h5
+
+
 # %%
 # import functions.output_processing
 # reload(functions.output_processing)
@@ -201,6 +204,7 @@ well_loc_merge.UniqueID = well_loc_merge.UniqueID.astype(int)
 # should we may the loadpth economic instead of Regional?
 loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
@@ -371,7 +375,6 @@ os.makedirs(join(model_ws,'crop_soilbudget','field_dtw'),exist_ok=True)
 os.makedirs(join(model_ws, 'log'), exist_ok=True)
 sys.stdout = open(join(model_ws, 'log', 'model_connect_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
-
 print(model_ws)
 print(scenario_name)
 print('\n\n')
@@ -381,10 +384,11 @@ print('SW Constraint %.2f' %sw_con, 'inches')
 print('GW Constraint %.2f' %gw_con, 'inches')
 print('\n')
 
-
 swb_ws = join(model_ws, 'rep_crop_soilbudget')
 os.makedirs(join(swb_ws, 'field_SWB'), exist_ok=True)
 os.makedirs(join(swb_ws, 'output'), exist_ok=True)
+# secondary directory for re-run with adjusted irrigation
+os.makedirs(join(model_ws, 'crop_soilbudget_est', 'field_SWB'), exist_ok=True)
 
 # simple code to set dates for april 1
 all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'), parse_dates=['date'])
@@ -520,6 +524,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # save output with only parcel and crop choice
     data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
+    # %%
+    # for the first year of crop prediction copy this backward three years (assume that it was static)
+    # to allow for establishment irrigation code to run
+    if m_per ==1:
+        for n in np.arange(1,4).astype(int):
+            data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year-n)+'.csv'))
+
 # %% [markdown]
 # # Load MF output
 # The depth to water function should sample from the previous model run which may be a year or less long.
@@ -553,16 +564,16 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     #
     crop_in = data_out.merge(pod)
     crop_in = crop_in.rename(columns={'Crop_Choice':'name'})
-    crop_in.to_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'))
+    crop_in.to_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv')) # not sure why I save it again just with POD info
     # crop_in[crop_in.name==crop]
     pred_crops = crop_in.name.unique()
     print(pred_crops)
 
     # add in the crops from previous years
-    for year_previous in np.arange(all_run_dates.date.dt.year.min(), year):
-        crop_in_previous = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
+    for year_previous in np.arange(all_run_dates.date.dt.year.min()-2, year):
+        crop_in_previous = pd.read_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year_previous)+'.csv'), index_col=0)
         # to avoid conflict, add previous years as new columns with convention name_year
-        crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+        crop_in_previous = crop_in_previous[['parcel_id','Crop_Choice']].rename(columns={'Crop_Choice':'name_'+str(year_previous)})
         crop_in = crop_in.merge(crop_in_previous)
 
     # %%
@@ -603,7 +614,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # initialize HDF5 files for the year
-    from functions.data_functions import init_h5
     # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
     # initialize SWB folder
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
@@ -650,38 +660,36 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # load the processed dataframe with all datas
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
-    # this output with the parcel data needs to be saved as well
-    pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
-    irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
-    irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
+    # this output with the parcel data needs to be saved as well - now done after updating below
+    # pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
+    # irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
+    # irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
 
 
 # %% [markdown]
-# # Correct for new crops and apply estimated irrigation to actual field conditions
-
-# %%
-# need to bring in crops from previous years with soil_dict to make sure run_swb can reference to adjust yield/profit
-# and irrigation (can't adjust ETc for all, need to adjust field when changing)
-
-# if we want to accurately represent new recharge for fields that are considered establishing,
-# we do need to re-run the SWB with the assigned irrigation rates
-
-# %%
-irr_est
-
-# %%
-# irr_gw_df_all
-# find crops that change and need alteration to irr
-# in 2016: 230/3900 show changes, good chunk goes to vineyard ~100
-new_crop = crop_in[crop_in.name != crop_in['name_'+(str(year-1))]]
-est_irr_id = new_crop[new_crop.name=='Vineyards'].parcel_id
-irr_gw_df_all[irr_gw_df_all.UniqueID.isin(est_irr_id)]
-# crop_in
+# # Correct for new crops and apply estimated irrigation to actual field conditions for true percolation
+#
+# - For irrigation this involves scaling the currently proposed irrigation rates by the new total divided by the current total.  
+# - For percolation this involves re-running the SWB model for all fields to get new percolation rates.  
+# - For yield, we need to then specify no yield for these years and 1/2 yield for Grape year 3. This could maybe be done in post-processing? Or by reading in hdf5 file and manually correcting based on year and field ID in the loop
+#
+# for simplicity take predicted crops from year 1 and copy backward three years to ease input set up (assume first prediction has no changes from past year)
 
     # %%
     # import functions.summarize_functions
     # reload(functions.summarize_functions)
-    from functions.summarize_functions import format_irr_all
+    # functions related to post-processing updated irrigation
+    from functions.summarize_functions import format_irr_all, adj_irr_rates
+
+    # %%
+    # update irrigation rates to account for establishment where crops change
+    irr_gw_df_all = adj_irr_rates(irr_gw_df_all, year, crop_list, 
+                                  irr_est, crop_in, pred_dict)
+    irr_sw_df_all = adj_irr_rates(irr_sw_df_all, year, crop_list, 
+                                  irr_est, crop_in, pred_dict)
+
+    irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
+    irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
 
     # %%
     # need to get dtw_df (even if just estimated), unlike f_summarize_output modflow hasn't been run yet
@@ -696,38 +704,60 @@ irr_gw_df_all[irr_gw_df_all.UniqueID.isin(est_irr_id)]
     dtw_wide_df.columns = well_dtw.UniqueID
 
     # %%
+    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+        name = join(model_ws,'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name)
+
+    # %%
     print('Re-running SWB with updated irrigation values for fields with establishment irrigation rates')
     # for crop in ['Alfalfa']:
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops:     
             # irr_all is the combination for each crop
             irr_all = format_irr_all(crop, year, crop_in, pred_dict, irr_gw_df_all, irr_sw_df_all)
             # from code f_summarize_output that re-runs SWB at end of each year with true DTW for each field
             # should rename the path so we can have both saved
-            load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget_est'), dtw_df, input_name = input_name, soil_rep = False,
+            load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget_est'), dtw_wide_df, input_name = input_name, soil_rep = False,
                             run_opt=False, irr_all=irr_all, field_id = 'parcels')
 
             sys.stdout.flush()
 
-# %%
-# need to reload updated output to get information on gw irrigation and surface water irrigation
-irr_gw_df_all.UniqueID.unique()
-# may want to use code from plot_output that has read_hdf5  array and assigns UniqueID
-    for var in ['percolation','GW_applied_water', 'SW_applied_water']:
+    # creates the updated irrigation rates so that percolation can be re-calculated
+    # next need to extract out the water budget data to create the updated percolation data
+
+    # %%
+    # may want to use code from plot_output that has read_hdf5  array and assigns UniqueID
+    df_all = pd.DataFrame()
+    for var in ['percolation']: # ,'GW_applied_water', 'SW_applied_water'
         print(var, end=',')
         name = join(model_ws, 'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-            # extract output and convert to dataframe with ID columns
-            arr = read_crop_arr_h5(crop, name)
-            df = pd.DataFrame(arr, columns=dates)
-            # add parcel information back
-            df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
-            # melt to long format for easier appending
-            df = df.melt(var_name='date', id_vars=crop_in.columns)
-            df = df.assign(crop=crop, year=year, var=var)
+        for crop in crop_list:
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+            yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+            yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+            # get the total extent of the irrigation season (calculation period)
+            crop_dates = pd.date_range(yield_start.min(), yield_end.max(), freq='D')
+            # need to account for when crops aren't predicted and skip them
+            if pred_dict[crop] in pred_crops: 
+                # extract output and convert to dataframe with ID columns
+                arr = read_crop_arr_h5(crop, name)
+                df = pd.DataFrame(arr, columns=crop_dates)
+                # add parcel information back
+                df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
+                # melt to long format for easier appending
+                df = df.melt(var_name='date', id_vars=crop_in.columns)
+                df = df.assign(crop=crop, year=year, var=var)
+                df_all = pd.concat((df_all, df))
+
+    # %%
+    # columns for  pc_df_all 'UniqueID', 'dtw_id', 'date', 'rate' is dtw_id needed?
+    pc_df_all = df_all.rename(columns={'parcel_id':'UniqueID', 'value':'rate'})[['UniqueID','date','rate']]
+    pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
+
 
 # %% [markdown]
 # ## RCH input
@@ -915,15 +945,12 @@ irr_gw_df_all.UniqueID.unique()
 # easiest way is likely to call summarize_output as a function or by having it read-in a csv with the year to make a pseudo-function
 #
 
-# %%
-# option 1 is call entire script
-# import subprocess
-    # subprocess.call("03b_summarize_output.py", shell=False)
-
     # %%
     # calculate the actual profit and yield for each parcel then calculate the average
     # to inform next years crop choice
     summarize_output_year(loadpth, m_nam, m_per, parcels, input_name)
+
+    # would need to update yield within this final function to account for establishment irrigation
 
 # %%
 t_final = time.time()
