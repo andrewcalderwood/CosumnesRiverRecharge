@@ -110,7 +110,9 @@ from mf_utility import get_layer_from_elev
 # %%
 # import parcelchoicemodelupdate.f_predict_landuse
 # reload(parcelchoicemodelupdate.f_predict_landuse)
-from parcelchoicemodelupdate.f_predict_landuse import predict_crops
+# from parcelchoicemodelupdate.f_predict_landuse import predict_crops
+# version that applies random sampling
+from parcelchoicemodelupdate.f_predict_landuse import predict_crops_adj
 
 # %%
 import functions.Basic_soil_budget_monthly as swb
@@ -523,6 +525,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
     # save output with only parcel and crop choice
     data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
+
+    # %%
+    # need to check if there are any fields being predicted with an NA or 0 crop class
 
     # %%
     # for the first year of crop prediction copy this backward three years (assume that it was static)

@@ -12,7 +12,7 @@ rem set m_nam=input_write_2014_2020
 rem m_nam=input_write_2014_2020_R3
 rem m_nam=input_write_2014_2020_R4
 
-set m_nam=input_write_2014_2022_R204
+set m_nam=input_write_2014_2022_R203
 
 echo %m_nam%
 
@@ -22,8 +22,8 @@ rem set input_name=static_model_inputs.xlsx
 echo %input_name%
 
 rem CALL conda.bat activate geo_env
-rem call activate geo_env
-call activate geo_env2
+call activate geo_env
+rem call activate geo_env2
 python 03_model_connect.py %2 %m_nam% %input_name%
 rem python 03_model_connect.py %1 %m_nam%
 PAUSE
