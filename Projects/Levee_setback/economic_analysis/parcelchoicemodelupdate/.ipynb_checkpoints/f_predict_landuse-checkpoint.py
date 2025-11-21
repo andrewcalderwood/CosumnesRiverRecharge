@@ -39,6 +39,7 @@ def predict_crops(data, rev_prior_yr_df, logit_coefs):
         return coef
     
     # Calculate predicted probabilities
+    # pasture is the base category that fills the probability toward 1
     data['N.Mixed_pasture'] = 1
     for crop in crops:
         data[f'N.{crop}'] = np.exp(
@@ -109,6 +110,7 @@ def predict_crops_rand(data, rev_prior_yr_df, logit_coefs):
         return coef
     
     # Calculate predicted probabilities
+    # pasture is the base category that fills the probability toward 1
     data['N.Mixed_pasture'] = 1
     for crop in crops:
         data[f'N.{crop}'] = np.exp(
@@ -122,6 +124,13 @@ def predict_crops_rand(data, rev_prior_yr_df, logit_coefs):
             pull_coef(logit_coefs, crop, 'i_pod_wy') * (data['pod'] * data['wy_dc']) +
             pull_coef(logit_coefs, crop, 'dtwfa') * data['dtwfa'] +
             pull_coef(logit_coefs, crop, 'dtwfa2') * (data['dtwfa']**2)
+            # # new coefficients coef of last crop multiplied by 0 or 1 of last crop
+            # pull_coef(logit_coefs, crop, 'pasture_last') * data['pasture_last'] +
+            # pull_coef(logit_coefs, crop, 'misc_grain_last') * data['misc_grain_last'] +
+            # pull_coef(logit_coefs, crop, 'vineyards_last') * data['vineyards_last'] +
+            # pull_coef(logit_coefs, crop, 'alfalfa_last') * data['alfalfa_last']  +
+            # pull_coef(logit_coefs, crop, 'other_last') * data['other_last'] +
+            # pull_coef(logit_coefs, crop, 'fallow_last') * data['fallow_last']
         )
     
     # has all crops listed whiel logit_coefs were missing for pasture
@@ -136,13 +145,11 @@ def predict_crops_rand(data, rev_prior_yr_df, logit_coefs):
     # Calculate predicted probabilities
     for crop in crops_N:
         data[f'PP.{crop}'] = data[f'N.{crop}'] / data['Denominator']
+
+    # rather than assuming pasture has N=1 it might be more logical
+    # to calculate it as the difference of sum of PP and 1
+
     
-    # Find the maximum probability
-    # data['maxprob'] = data[[f'PP.{crop}' for crop in crops]].max(axis=1)
-    
-    # Assign Crop Choice based on maximum probability
-    # conditions = [data[f'PP.{crop}'] == data['maxprob'] for crop in crops]
-    # data['Crop_Choice'] = np.select(conditions, crops, default='Unclassified_fallow')
     # a suggestion by the peer review group was that a farmer may not always
     # select the highest probability, thus a random number should be used to select
     # from the distribution to determine the crop used
