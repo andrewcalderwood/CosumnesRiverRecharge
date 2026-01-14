@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.0
+#       jupytext_version: 1.18.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -13,14 +13,8 @@
 # ---
 
 # %% [markdown]
-# Script to run the code for the crop choice model, irrigation optimizer and modflow in a cycle for the years of interest.
+# Script to to test the crop choice model against stata
 #
-# 1. Run the crop choice model
-# 2. Run the soil water budget optimization
-# 3. Update WEL/RCH packages then run MF
-# 4. Start the next year
-#
-# And run different management and/or recharge scenarios.
 
 # %%
 import sys
@@ -75,6 +69,9 @@ import f_predict_landuse
 reload(f_predict_landuse)
 from f_predict_landuse import predict_crops, predict_crops_rand
 
+# %% [markdown]
+# # load static data
+
 # %%
 # load Sac Valley WYT
 wyt = pd.read_csv(join(proj_dir, 'model_inputs', 'sacramento_WY_types.txt'))
@@ -86,9 +83,9 @@ wyt.loc[wyt['Yr-type'].isin(['C','D']),'wy_dc'] = 1
 # %%
 # expect updated column name for pod
 # add column to POD that was available in previous dataset
-pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
-pod['pod'] = 'No Point of Diversion on Parcel'
-pod.loc[pod.pod_bool==1, 'pod'] = 'Point of Diversion on Parcel'
+# pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
+# pod['pod'] = 'No Point of Diversion on Parcel'
+# pod.loc[pod.pod_bool==1, 'pod'] = 'Point of Diversion on Parcel'
 
 # %%
 
@@ -101,8 +98,117 @@ rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv
 
 
 # %%
-dtw_ft = pd.read_csv("D:/WRDAPP/GWFlowModel/Cosumnes/Economic/input_write_2014_2022_R203/output_clean/dtw_ft_mean_all.csv")
-well_dtw = dtw_ft[dtw_ft.year==year]
+logit_coefs.columns.values[:-3]
+
+# %%
+data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
+# data
+
+# %% [markdown]
+# # Predict crops
+
+# %% [markdown]
+# ##  with the old test data
+#
+# If running old script need to run with old test data as those should have stata results (crop_cat) based on before the crop_cat last was used.
+
+# %%
+data_out_all = pd.DataFrame()
+for year in data.year.unique():
+    stata_in = data[data.year==year]
+    stata_in['wy_dc'] = wyt.loc[wyt.WY==year, 'wy_dc'].values[0]
+
+    data_out = predict_crops(stata_in.reset_index().copy(), rev_prior_yr_df, logit_coefs, return_prob=False)
+    data_out_all = pd.concat((data_out_all, data_out.assign(year=year)))
+
+# %%
+# columns relevant for comparison
+stata_comp = data[['parcel_id','year','crop_cat']]
+
+# %%
+# merge stata input with predicted crop cateogry for quick check
+# need to confirm if crop_cat is predicted by stata or observation
+data_comp = data_out_all.merge(stata_comp)
+
+# shows agreement but some difference
+
+# %% [markdown]
+# ## with new test data
+#
+# compare against stata results that account for crop_cat lats
+
+# %%
+logit_coefs_adj = pd.read_csv(join(crop_choice_dir, 'logit_coefs_last_crop.csv'))
+
+
+# %%
+crop_dict = logit_coefs_adj.set_index('Crop_Eq_new')['Crop_Eq'].to_dict()
+
+# %%
+# load results from stata to confirm python is doing as expected
+stata_df = pd.read_csv(join(proj_dir, "model_results/stata_predicted_probabilities.csv"))
+
+# replace crop name with original
+stata_df = stata_df.replace(crop_dict)
+
+
+# %%
+crop_cat_last_df = stata_df.pivot(index=['parcel_id','year'], values='crop_cat_last', columns='alternatives')
+# look to see if value in row is equal to column
+cat_last_bool_arr = crop_cat_last_df.values==crop_cat_last_df.columns.values
+# convert back to a dataframe for input
+crop_bool_df = crop_cat_last_df.copy()
+crop_bool_df.loc[:,:] = cat_last_bool_arr.astype(int)
+# crop_bool_df
+
+# %%
+# for standard coefs use original input as reference
+stata_use = stata_df[['parcel_id','year']+logit_coefs.columns[1:-3].tolist()]
+stata_parcel = stata_use.groupby(['parcel_id','year']).first().reset_index()
+# add boolean pod
+stata_parcel = stata_parcel.rename(columns={'pod':'pod_str'})
+stata_parcel['pod'] = 1
+stata_parcel.loc[stata_parcel.pod_str=='No Point of Diversion on Parcel','pod'] = 0
+
+# bring in the columns that identify the last crop type
+stata_parcel = stata_parcel.merge(crop_bool_df, on=['parcel_id','year'])
+
+
+# %%
+# name of crop_cat_last columns should be easy to match stata_df and to multiply for calculation of probability
+logit_coefs_adj
+# stata_df output is set up so crop_cat_last is defined for each row rather than with multiple columns
+# crop_cat_last is a string but will need to be converted to a 1 or 0 for the multiplication
+stata_parcel.columns
+
+# %%
+data_out_all = pd.DataFrame()
+# for year in stata_parcel.year.unique():
+for year in [2018]:
+
+    stata_in = stata_parcel[stata_parcel.year==year]
+    data_out = predict_crops_rand(stata_in.reset_index().copy(), rev_prior_yr_df, logit_coefs_adj, return_prob=True)
+    data_out_all = pd.concat((data_out_all, data_out.assign(year=year)))
+
+# %%
+# columns relevant for comparison
+stata_comp = stata_df[['parcel_id','year','crop_cat_last','crop_cat','crop','alternatives', 'chosen', 'pprob_stata']]
+
+# %%
+p_cols = data_out_all.columns[data_out_all.columns.str.contains('PP.')].tolist()
+data_out_long = data_out_all.melt(id_vars=['parcel_id', 'year'], value_vars=p_cols, value_name='pprob_py')
+data_out_long['crop'] = data_out_long.variable.str.replace('PP.','')
+
+data_out_long
+
+# %% [markdown]
+# # Run the crop choice in python
+#
+# Comparing with simulated dtw
+
+# %%
+# dtw_ft = pd.read_csv("D:/WRDAPP/GWFlowModel/Cosumnes/Economic/input_write_2014_2022_R203/output_clean/dtw_ft_mean_all.csv")
+# well_dtw = dtw_ft[dtw_ft.year==year]
 
 # %%
 year=2016
