@@ -257,19 +257,39 @@ if True:
     # save output to speed up reuse
     # sfr_facies_all.reset_index(level='facies').to_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'), key='dt', complevel=4)
 
-# %%
-sfr_3mon_all[sfr_3mon_all.realization==0].head()
+        # %%
+        sfrdf =  clean_sfr_df(model_ws, drop_iseg, dt_ref, 'MF')
+        sfrdf['realization'] = t
+        num_coarse = sfrdf['num_coarse'].mean()
+        # aggregate to seasonal values, since model starts in october it groups as oct-dec, jan-mar, apr-jun, jul-sep
+        sfrdf_mon = sfrdf.resample('3MS').mean(numeric_only=True)
+        sfrdf_mon['realization'] = t
+        sfrdf_mon['num_coarse'] = num_coarse
 
 # %%
 # sfrdf =  clean_sfr_df(base_model_ws, drop_iseg, dt_ref)
 # sfrdf.facies.unique()
 chk = sfr_facies_sum
-# flow exceeds one which indicates the issue
-chk.apply(lambda x: x/chk.num_facies).groupby('dt').sum(numeric_only=True).resample('3MS').mean()
+# flowing exceeds one which indicates the issue
+# looks like after correcting for num_facies then it needs to be divided by 4 to account for the 4 brought together? at least for flowing, etc.
+# still not matching even with that
+chk_3mon = chk.apply(lambda x: x/chk.num_facies).groupby('dt').sum(numeric_only=True).resample('3MS').mean()
+
+# %%
+sfrdf.resample('3MS').mean(numeric_only=True).head()
+
+# %%
+chk_3mon.head()
+
+# %%
+sfr_3mon_all.head()
 
 # %%
 sfr_facies_all = pd.read_hdf(join(out_dir, 'sfrdf_facies_sum.hdf5'))
 # sfr_facies_all = sfr_facies_all.set_index('facies', append=True)
+
+# %%
+(sfr_facies_all.Qaquifer - sfr_facies_all.Qaquifer).abs().sum()
 
 # %%
 # fig,ax = plt.subplots()
@@ -477,6 +497,9 @@ def plt_ts_axes(ax):
 # do I want to come back and change the source since sfr_facies_all results were off from the sfr_3month_all?
 
 # %%
+# sfr_facies_all
+
+# %%
 fig,ax = plt.subplots(3,1, figsize=(10,6.3), sharex=True, sharey=False, layout='constrained',dpi=600)
 
 plt_ts_100(sfr_facies_all, sfr_last_all, ax)
@@ -623,6 +646,26 @@ coarse_ref = sfr_3mon_all.groupby('realization').mean(numeric_only=True)[['num_c
 # coarse_ref.to_csv(join(proj_dir, 'num_sfr_coarse.csv'))
 
 # %%
+from matplotlib import cm
+
+# plt.cmap='gray'
+
+#normalize item number values to colormap by realization (t)
+# norm = mpl.colors.Normalize(vmin=0, vmax=99) 
+#normalize item number values to colormap from min to max num coarse
+norm = mpl.colors.Normalize(vmin=sfr_yr_sum_all.num_coarse.min(), vmax=sfr_yr_sum_all.num_coarse.max())
+
+from matplotlib.lines import Line2D
+
+# custom_lines = [Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.min())), lw=4),
+#                 Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.max())), lw=4)]
+
+# create a ScalarMappable and initialize a data structure
+s_m = cm.ScalarMappable(cmap=cm.gray, norm=norm)
+s_m.set_array([])
+
+
+# %%
 # relating coarse segments to days of flow
 # median, std = coarse_ref.loc[zero_flow.flowing==len(plt_dates)].median(), coarse_ref.loc[zero_flow.flowing==len(plt_dates)].std()
 # print('No flow cessation had %i coarse segments' %median.iloc[0], 'with a std dev of %.2f' %std.iloc[0])
@@ -644,26 +687,6 @@ def flow_summary(flw_frac, dry_frac, zero_flow, coarse_ref, plt_dates):
 flow_summary(.75, 0.75, zero_flow, coarse_ref, plt_dates)
 flow_summary(1, 0.5, zero_flow, coarse_ref, plt_dates)
 
-
-
-# %%
-from matplotlib import cm
-
-# plt.cmap='gray'
-
-#normalize item number values to colormap by realization (t)
-# norm = mpl.colors.Normalize(vmin=0, vmax=99) 
-#normalize item number values to colormap from min to max num coarse
-norm = mpl.colors.Normalize(vmin=sfr_yr_sum_all.num_coarse.min(), vmax=sfr_yr_sum_all.num_coarse.max())
-
-from matplotlib.lines import Line2D
-
-# custom_lines = [Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.min())), lw=4),
-#                 Line2D([0], [0], color=cm.gray(norm(sfr_yr_sum_all.num_coarse.max())), lw=4)]
-
-# create a ScalarMappable and initialize a data structure
-s_m = cm.ScalarMappable(cmap=cm.gray, norm=norm)
-s_m.set_array([])
 
 
 # %%
@@ -887,9 +910,6 @@ wb_cols = ['LAK_IN', 'ET_OUT','GHB_NET']
 corr_matrix_in = pd.concat((corr_matrix_in, wb_avg[wb_cols]), axis=1)
 # need to maybe add new geology characteristics
 # corr_matrix_in.columns = plt_names.loc[corr_matrix_in.columns.values,'name']
-
-# %%
-wb_avg.columns
 
 # %%
 corr = corr_matrix_in.corr('pearson')
@@ -1283,14 +1303,14 @@ for n, param in enumerate(var):
 # ET is very correlated with num coarse because seepage drives ET so this should be shown if we don't include ET in the correlations
 
 # %%
-# sfr_facies_all
-# sum for the seepage
-total_flow = sfr_facies_all.groupby('realization').resample('3MS').sum(numeric_only=True)[['Qbase']]
-total_flow = total_flow.reset_index('realization')
+# # sfr_facies_all
+# # sum for the seepage
+# total_flow = sfr_facies_all.groupby('realization').resample('3MS').sum(numeric_only=True)[['Qbase']]
+# total_flow = total_flow.reset_index('realization')
 
-# homogeneous case
-h_flow = h_sfrdf.resample('3MS').sum(numeric_only=True)[['Qbase']]
-h_conn = h_sfrdf.resample('3MS').mean(numeric_only=True)[['flowing']]
+# # homogeneous case
+# h_flow = h_sfrdf.resample('3MS').sum(numeric_only=True)[['Qbase']]
+# h_conn = h_sfrdf.resample('3MS').mean(numeric_only=True)[['flowing']]
 
 # %%
 
@@ -1562,6 +1582,13 @@ ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_loca
 
 # spatial extent also seems to shift by mainly a few percent, maybe up to 20% in wet years like 2017
 
+# %% [markdown]
+# Cool ET area plot but hard to have a clear takeaway with the 100 realizations.
+
+# %%
+# would a dual histogram with the x-axis as number of coarse and y-axis as the flows be more effective than the standalone bar charts for near values?
+# when comparing ET and streamflow
+
 # %%
 # # similarly strong linear relationship to areal extent and num coarse
 # plt.scatter(coarse_ref.num_coarse,et_perc_gde.mean(axis=1))
@@ -1582,7 +1609,7 @@ et_flow_df = et_flow_df.merge(coarse_ref, on='realization')
 et_flow_df.flowing *= 100
 
 # %%
-# sns.relplot(et_flow_df, x='flowing',y='perc_active_ET', hue='num_coarse', row='wy',col='month', kind='scatter')
+sns.relplot(et_flow_df, x='flowing',y='perc_active_ET', hue='num_coarse', row='wy',col='month', kind='scatter')
 
 # %% [markdown]
 # This is a more useful plot here as it gets at the idea that ET is boosted by coarse cells in the wet season when streamflow is not significantly impacted by the extra losses. And by the dry season when streamflow starts to be imapcted, ET has already dropped generally so it is not compounding the effect on streamflow.
@@ -1631,14 +1658,25 @@ rank_r = rank_filter[rank_filter.agg_rank.isin(rank_quant)]
 # print(rank_r)
 
 # %%
+# something easy to explore the spatial relationship would be to extract the mean or median
+# coarse reach/segment to identify how far downstream vs upstream the effects are
+
+# %%
 rank_r_out = rank_r.reset_index().merge(rank_quant.reset_index().rename(columns={'index':'quantile'}))
 rank_r_out = rank_r_out.merge(rank_df[['perc_active_ET','flowing']], on='realization')
 rank_r_out.to_csv(join(fig_dir, 'coarse_ref_eco_rank_comp.csv'), index=False)
 # rank_r
 
 # %%
-rank_r_out.plot(x='realization',y=['perc_active_ET','flowing'],kind='bar')
+rank_r_out
+
+# %%
+# rank_r_out.plot(x='realization',y=['perc_active_ET','flowing'],kind='bar')
+# shows there is variability around the mean but doesn't show more than that
+rank_r_out.sort_values('num_coarse').plot(x='num_coarse',y=['perc_active_ET','flowing'],kind='bar')
+# this seems to mostly show the shortcomings of the paper, that we didn't quantify spatial relationships due to HCPs
 plt.ylabel('rank')
+
 
 # %%
 # extract hydrologic output to review for final ranked realizations
@@ -1646,3 +1684,6 @@ rank_data = corr_all_in.loc[rank_r.index].copy()
 rank_long = rank_data.melt(id_vars=['dt','month','wy'], ignore_index=False)
 # rank_long
 sns.relplot(rank_long, x='dt',y='value', col='variable', col_wrap=3, hue='realization', facet_kws={'sharey':False},kind='line')
+
+# %% [markdown]
+# the issue with the ET vs streamflow plots is that it feels a little suggestive of a competition. it would likely be better to simply provide some data on ET and demonstrate how the effects are stronger/weaker by season and water year type
