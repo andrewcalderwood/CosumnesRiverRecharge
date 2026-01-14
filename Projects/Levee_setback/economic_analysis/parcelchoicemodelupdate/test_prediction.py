@@ -36,6 +36,8 @@ import geopandas as gpd
 
 from importlib import reload
 
+import seaborn as sns
+
 # %%
 # for batch file case we want to ignore the consant h5py deprecation warning
 import warnings
@@ -84,6 +86,8 @@ wyt['wy_dc'] = 0
 wyt.loc[wyt['Yr-type'].isin(['C','D']),'wy_dc'] = 1
 
 # %%
+crop_choice_dir = './'
+data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
 # expect updated column name for pod
 # add column to POD that was available in previous dataset
 pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
@@ -102,10 +106,10 @@ rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv
 
 # %%
 dtw_ft = pd.read_csv("D:/WRDAPP/GWFlowModel/Cosumnes/Economic/input_write_2014_2022_R203/output_clean/dtw_ft_mean_all.csv")
-well_dtw = dtw_ft[dtw_ft.year==year]
 
-# %%
-year=2016
+
+# %% [markdown]
+# # compare python max prob vs rand sample methods
 
 # %%
 data_out_all = pd.DataFrame()
@@ -120,6 +124,7 @@ for year in np.arange(2016,2022):
     # data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
     data['wy_dc'] = wyt.loc[wyt.WY==year, 'wy_dc'].values[0]
     # update DTW to use simulated value instead of contoured
+    well_dtw = dtw_ft[dtw_ft.year==year]
     well_dtw_merge = well_dtw[['UniqueID','dtw_ft']].rename(columns={'dtw_ft':'dtwfa'})
     data = data.drop(columns=['dtwfa', 'dtwsp'])
     data = data.merge(well_dtw_merge, left_on='parcel_id',right_on='UniqueID')
@@ -132,15 +137,20 @@ for year in np.arange(2016,2022):
     data_out2_all = pd.concat((data_out2_all, data_out2.assign(year=year)))
 
 # %%
-logit_coefs
+out_comp = pd.concat((data_out_all.assign(grp = 'max_p'), data_out2_all.assign(grp='rand')))
 
 # %%
-sns.relplot(data_out_all
-sns.catplot(data_out_all,x='year',y='value', col='crop', row='var', 
-            kind='bar', color='tab:blue',
+comp_count = out_comp.groupby(['Crop_Choice','year','grp'])['parcel_id'].count().reset_index()
+
+# %%
+# sns.relplot(data_out_all
+sns.catplot(comp_count,x='year',y='parcel_id', col='Crop_Choice', col_wrap=3, hue='grp',
+            kind='bar', #color='tab:blue',
             sharey=False
            # facet_kws={'sharey': False, 'sharex': True}
 )
+
+# sns.histplo
 
 
     # %%
@@ -154,4 +164,11 @@ sns.catplot(data_out_all,x='year',y='value', col='crop', row='var',
     # data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
 
+# %% [markdown]
+# # Compare new stata to python
+
 # %%
+stata_new = pd.read_csv(join(proj_dir, "model_results/stata_predicted_probabilities.csv"))
+
+# %%
+stata_new
