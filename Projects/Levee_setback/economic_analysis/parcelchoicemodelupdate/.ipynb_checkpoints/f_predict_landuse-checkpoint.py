@@ -230,14 +230,16 @@ def predict_crops_rand(data, rev_prior_yr_df, logit_coefs, return_prob=False):
             pull_coef(logit_coefs, crop, 'wy_dc') * data['wy_dc'] +
             pull_coef(logit_coefs, crop, 'i_pod_wy') * (data['pod'] * data['wy_dc']) +
             pull_coef(logit_coefs, crop, 'dtwfa') * data['dtwfa'] +
-            pull_coef(logit_coefs, crop, 'dtwfa2') * (data['dtwfa']**2)+
+            pull_coef(logit_coefs, crop, 'dtwfa2') * (data['dtwfa']**2) +
             # # new coefficients coef of last crop multiplied by 0 or 1 of last crop
             pull_coef(logit_coefs, crop, 'Vineyards') * data['Vineyards'] +
             pull_coef(logit_coefs, crop, 'Miscellaneous_grain_and_hay') * data['Miscellaneous_grain_and_hay'] +
             pull_coef(logit_coefs, crop, 'Corn__sorghum_or_Sudan') * data['Corn__sorghum_or_Sudan'] +
             pull_coef(logit_coefs, crop, 'Alfalfa_and_alfalfa_mixtures') * data['Alfalfa_and_alfalfa_mixtures']  +
             pull_coef(logit_coefs, crop, 'Unclassified_fallow') * data['Unclassified_fallow'] +
+            # should there also be one for mixed pasture???
             pull_coef(logit_coefs, crop, 'Other') * data['Other']
+            
         )
     
     # has all crops listed whiel logit_coefs were missing for pasture
