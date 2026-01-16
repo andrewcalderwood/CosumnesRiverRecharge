@@ -163,8 +163,11 @@ stata_df = stata_df.replace(crop_dict)
 
 
 # %%
+
+# chosen is just binary variable to identify the alternative that was planted
 # # when crop_cat == alternatives that is the same as chosen == 1
 # stata_chk = stata_df[stata_df.chosen==1]
+# stata_chk
 # stata_chk[stata_chk.crop_cat != stata_chk.alternatives]
 
 # %%
@@ -222,6 +225,7 @@ for year in stata_parcel.year.unique():
 stata_comp = stata_df[['parcel_id','year','crop_cat_last','crop_cat','crop','alternatives', 'chosen', 'pprob_stata']]
 # stata_comp = stata_df[['parcel_id','year','crop_cat','alternatives','pprob_stata']]
 stata_comp.crop_cat = stata_comp.crop_cat.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
+stata_comp.alternatives = stata_comp.alternatives.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
 
 
 # %%
@@ -240,8 +244,18 @@ data_out_long.alternatives.unique()
 stata_sel = stata_comp[stata_comp.chosen==1][['parcel_id','year','crop_cat']].rename(columns={'crop_cat':'crop_choice_stata'})
 comp_sel = stata_sel.merge(data_out_sel.rename(columns={'Crop_Choice':'crop_choice_python'}))
 
-# comp_sel[comp_sel.crop_choice_stata != comp_sel.crop_choice_python]
 comp_sel.to_csv(join(out_dir, 'selected_crop_stata_python.csv'))
+
+# %%
+# summarize crop count prediction by year and crop
+comp_sel
+
+# %%
+#
+diff_crop = comp_sel[comp_sel.crop_choice_stata != comp_sel.crop_choice_python]
+# diff_crop
+diff_crop.shape[0]/comp_sel.shape[0]
+diff_crop.shape[0]/comp_sel.shape[0]
 
 # %%
 # alternative to looking at where it matches
@@ -252,13 +266,22 @@ stata_max = stata_comp.loc[max_prob.dropna().values]
 
 max_prob = data_out_long.groupby(['parcel_id','year'])['pprob_py'].idxmax()
 py_max = data_out_long.loc[max_prob.dropna().values]
-max_comp = stata_max.rename(columns={'crop_cat':'choice_stata'}).merge(py_max.rename(columns={'alternatives':'choice_py'}))
+# max_comp = stata_max.rename(columns={'crop_cat':'choice_stata'}).merge(py_max.rename(columns={'alternatives':'choice_py'}))
+max_comp = stata_max.rename(columns={'alternatives':'choice_stata'}).merge(py_max.rename(columns={'alternatives':'choice_py'}))
 
-max_comp[max_comp.choice_stata != max_comp.choice_py]
+# diff_max = max_comp[max_comp.choice_stata != max_comp.choice_py]
+# diff_max
+
+diff_max = max_comp[max_comp.crop_cat != max_comp.choice_py]
+diff_max.shape[0]/max_comp.shape[0]
 
 # %%
 prob_comp = stata_comp[['parcel_id','year','crop_cat','alternatives','pprob_stata']].merge(data_out_long)
 
+
+# %%
+prob_comp.alternatives.unique()
+stata_comp.alternatives.unique()
 
 # %%
 prob_comp['error'] = prob_comp.pprob_stata - prob_comp.pprob_py
@@ -278,9 +301,6 @@ plt.savefig(join(out_dir, 'all_PP_error_histogram.png'), bbox_inches='tight')
 
 
 # %%
-# prob_comp
-
-# %%
 # look at parcels where the error is greater than 1% of the 100% distribution, below this it likely isn't
 # making a big difference in random sampling or max selection
 err_01 = prob_comp[prob_comp.error>0.01]
@@ -293,12 +313,9 @@ plt.ylabel('Count of parcels across all years \nwith greater than 1% error')
 plt.savefig(join(out_dir, 'count_1_perc_error_plot.png'), bbox_inches='tight')
 # the error is pretty evenly distributed among the crop type alternatives with the lowest among other
 
-
-
 # %%
 sns.catplot(
     prob_comp,
-    # err_01, 
             x='year',y='error', col='alternatives', col_wrap=3, 
             kind='box',#color='tab:blue',
             sharey=False)

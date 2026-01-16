@@ -249,8 +249,11 @@ def predict_crops_rand(data, rev_prior_yr_df, logit_coefs, return_prob=False):
     # crops_N = logit_coefs['Crop_Eq'].tolist()
     # crops_N = logit_coefs['Crop_Eq'].tolist()
     # Calculate Denominator
-    data['Denominator'] = 1 + data[[f'N.{crop}' for crop in crops_N]].sum(axis=1)
-        
+    # originally developed where crops was not including pasture
+    # data['Denominator'] = 1 + data[[f'N.{crop}' for crop in crops_N]].sum(axis=1) # old version
+    # sum should include 1 + sum of crops not including pivot crop (pasture)
+    data['Denominator'] = data[[f'N.{crop}' for crop in crops_N]].sum(axis=1) # new version
+
     # Calculate predicted probabilities
     for crop in crops_N:
         data[f'PP.{crop}'] = data[f'N.{crop}'] / data['Denominator']
