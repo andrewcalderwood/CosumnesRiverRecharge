@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -202,9 +202,10 @@ well_loc_merge.UniqueID = well_loc_merge.UniqueID.astype(int)
 
 # %%
 # should we may the loadpth economic instead of Regional?
+# should make drive extension more flexible/in batch file
 loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+# loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
 # base_model_ws = loadpth + 'crop_soilbudget'
@@ -418,8 +419,8 @@ sys.stdout.flush()
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [2]:
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+for m_per in [1]:
 # for m_per in [4]:
 
     m_strt = all_run_dates.iloc[m_per].date
@@ -486,7 +487,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     crop_choice_dir = 'parcelchoicemodelupdate'
     # Read logit coefficients
     logit_coefs = pd.read_csv(join(crop_choice_dir, 'logit_coefs.csv'))
-    
+    logit_coefs = pd.read_csv(join(crop_choice_dir, 'logit_coefs_last_crop.csv'))
+    crop_dict = logit_coefs.set_index('Crop_Eq_new')['Crop_Eq'].to_dict()
+
     # the parcel data needs the dtwfa (avg fall dtw in feet for the parcel) and wy_dc (pulled from Sac wy type dataset and switched to dry boolean)
     # missing WY type prediction? 
     # Read parcel data
@@ -515,10 +518,24 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
 
     # %%
+    # need to add columns to data to inform last years crop from loop
+    if m_per == 1:
+        stata_first = pd.read_csv(join(proj_dir, 'model_inputs', 'stata_input_2018.csv'))
+        crop_cat_last = stata_first[['parcel_id','crop_cat_last', 'chosen']].replace(crop_dict)
+        crop_cat_last = crop_cat_last.pivot_table(index='parcel_id',columns='crop_cat_last', values='chosen', fill_value=0)
+
+    else:
+        crop_cat_last =  pd.read_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year-1)+'.csv'), index_col=0)
+        crop_cat_last = crop_cat_last.assign(chosen=1).replace(crop_dict)
+        crop_cat_last = crop_cat_last.pivot_table(index='parcel_id',columns='Crop_Choice', values='chosen', fill_value=0)
+
+
+    # %%
     # crop choice model uses "_" instead of " "
     # the irrigation model set up uses " "
     # data_out = predict_crops(data.copy(), rev_prior_yr_df, logit_coefs)
-    data_out = predict_crops_rand(data.copy(), rev_prior_yr_df, logit_coefs)
+    data_out = predict_crops_rand(data.copy().merge(crop_cat_last.reset_index()), 
+                                  rev_prior_yr_df, logit_coefs)
     data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
     # update naming of Corn
     data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')

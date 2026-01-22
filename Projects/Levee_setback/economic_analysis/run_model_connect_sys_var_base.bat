@@ -21,9 +21,11 @@ rem set input_name=static_model_inputs.xlsx
 
 echo %input_name%
 
-rem CALL conda.bat activate geo_env
-call activate geo_env
-rem call activate geo_env2
+rem dont' use CALL conda.bat activate geo_env
+rem laptop
+rem call activate geo_env
+rem local desktop
+call activate geo_env2
 python 03_model_connect.py %2 %m_nam% %input_name%
 rem python 03_model_connect.py %1 %m_nam%
 PAUSE

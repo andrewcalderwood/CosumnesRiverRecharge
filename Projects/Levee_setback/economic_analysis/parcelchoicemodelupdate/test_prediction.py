@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -194,6 +194,9 @@ stata_parcel = stata_parcel.merge(crop_bool_df, on=['parcel_id','year'])
 # need to convert previous crop columns to int/float from object
 stata_parcel[logit_coefs_adj.Crop_Eq.values] = stata_parcel[logit_coefs_adj.Crop_Eq.values].astype(float)
 
+
+# %%
+crop_bool_df
 
 # %%
 # name of crop_cat_last columns should be easy to match stata_df and to multiply for calculation of probability
