@@ -419,8 +419,8 @@ sys.stdout.flush()
 # %%
 # # this loop was set to run for the years of interest
 # start at 1 instead of 0 to skip first pre-period
-# for m_per in np.arange(1, all_run_dates.shape[0]-1):
-for m_per in [1]:
+for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in [1]:
 # for m_per in [4]:
 
     m_strt = all_run_dates.iloc[m_per].date

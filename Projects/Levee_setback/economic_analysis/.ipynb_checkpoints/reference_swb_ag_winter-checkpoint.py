@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -37,11 +37,13 @@ import geopandas as gpd
 
 
 # %%
-# year = 2016
-# m_nam = 'input_write_2014_2020'
+# year = 2015
+# # m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2022_R203'
+# loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # %%
-def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
+def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020', loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'):
     ''' 
     function to run the SWB for the agricultural fields in the winter
     needs some updates to better represent initial conditions (sample
@@ -80,8 +82,8 @@ def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
     reload(swb)
 
     # %%
-    import functions.swb_functions
-    reload(functions.swb_functions)
+    # import functions.swb_functions
+    # reload(functions.swb_functions)
     from functions.swb_functions import run_swb_model, base_soil_dict
 
     # %%
@@ -111,8 +113,7 @@ def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
     # need to load dataframe which defines native land use type
     # nat_lu = pd.read_csv(join(proj_dir, 'native_parcel_zonalstats','native_land_use.csv'),index_col=0)
 
-    # %%
-    loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+# %%
     
     
     model_ws = join(loadpth, m_nam)
@@ -165,9 +166,11 @@ def run_swb_ag_winter(year, m_nam = 'input_write_2014_2020'):
     # for the crop model we can use standard Kc for default
     # should update with specific Kc except for Fallow pasture
     crop_match = pd.read_csv(join(proj_dir,'data','crop_name_matching.csv'))
-    crop_dict = crop_match.set_index('Crop_original')['Crop_model'].to_dict()
+    # crop_dict = crop_match.set_index('Crop_original')['Crop_model'].to_dict()
+    # extract relevant ET
+    ETc_model = ETc_all[crop_match.Crop_original.values]
     # rename crops for the model
-    ETc_model = ETc_all[crop_match.Crop_original.values].rename(columns = crop_dict)
+    ETc_model.columns = crop_match.Crop_model.values
 
 
     # %%

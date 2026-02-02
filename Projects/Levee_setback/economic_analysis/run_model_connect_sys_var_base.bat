@@ -12,7 +12,10 @@ rem set m_nam=input_write_2014_2020
 rem m_nam=input_write_2014_2020_R3
 rem m_nam=input_write_2014_2020_R4
 
-set m_nam=input_write_2014_2022_R203
+rem version with no p_o
+rem set m_nam=input_write_2014_2022_R204
+rem set m_nam=input_write_2014_2022_R200
+rem set m_nam=input_write_2014_2022_R203
 
 echo %m_nam%
 

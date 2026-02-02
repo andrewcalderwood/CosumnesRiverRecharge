@@ -103,7 +103,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # %%
 # # # # # # testing
-# year = int(2016)
+# year = int(2015)
 # crop='Grape'
 # # # # # crop='Corn'
 # # # crop='Alfalfa'
@@ -111,9 +111,9 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # # # # crop = 'Misc Grain and Hay'
 
 # %%
-# # # # # # # # testing
-# # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# # # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # # # # # # # # testing
+# # # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # # # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # # m_nam = 'input_write_2014_2022'
 # m_nam = 'input_write_2014_2022_R203'
@@ -138,15 +138,15 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # run_opt=True
 # field_id = 'parcels'
 
-# sw_con=125
-# gw_con=125
+# sw_con=100
+# gw_con=100
 # input_name = 'static_model_inputs_no_p_o.xlsx'
-# # # load parcel data for soil_rep=False
-# # # soil_rep=False
+# # # # load parcel data for soil_rep=False
+# # # # soil_rep=False
 
-# # # dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
-# # # dtw_df.index = pd.to_datetime(dtw_df.index)
-# # # dtw_df.columns = dtw_df.columns.astype(int)
+# # # # dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
+# # # # dtw_df.index = pd.to_datetime(dtw_df.index)
+# # # # dtw_df.columns = dtw_df.columns.astype(int)
 
 # %%
 ## simple representative DTW for linear steps 10 ft to 200 ft
