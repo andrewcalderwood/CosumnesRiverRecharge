@@ -49,7 +49,19 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
+
 # %%
+def add_path(fxn_dir):
+    """ Insert fxn directory into first position on path so local functions supercede the global"""
+    if fxn_dir not in sys.path:
+        sys.path.insert(0, fxn_dir)
+# flopy github path - edited
+add_path(doc_dir+'/GitHub/flopy')
+import flopy 
+
+# %%
+add_path('..')
+
 from functions.output_processing import get_wb_by_parcel
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 import functions.Basic_soil_budget_monthly as swb
@@ -64,16 +76,6 @@ from functions.data_functions import init_h5
 # reload(f_rep_swb_profit_opt)
 
 from f_rep_swb_profit_opt import load_run_swb
-
-
-# %%
-def add_path(fxn_dir):
-    """ Insert fxn directory into first position on path so local functions supercede the global"""
-    if fxn_dir not in sys.path:
-        sys.path.insert(0, fxn_dir)
-# flopy github path - edited
-add_path(doc_dir+'/GitHub/flopy')
-import flopy 
 
 
 # %%
@@ -93,13 +95,15 @@ loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
-m_nam = 'input_write_2014_2020'
-# m_nam = 'input_write_2014_2022'
+# m_nam = 'input_write_2014_2020'
+m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
-scenario=''
+# scenario=''
+
+scenario='_R200'
 
 
 model_ws = join(loadpth, m_nam+scenario)
@@ -194,7 +198,7 @@ for year in run_years:
             # add parcel information back
             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
 
-#             df_all = pd.concat((df_all, df))
+            df_all = pd.concat((df_all, df))
 
 
 # correct profit from negative to positive
@@ -205,6 +209,14 @@ df_all = df_all.rename(columns={'parcel_id':'UniqueID'})
 df_econ = df_all.merge(parcels[['UniqueID','acres']])
 # troublshooting for rep version 
 # df_econ = df_all.copy()
+
+# %%
+# check that last crop change results in no profit for certain crops (grape, alfalfa)
+df_all_last = df_all[['UniqueID','crop','year']].copy()
+df_all_last.year +=1
+df_all_check = df_all.merge(df_all_last.rename(columns={'crop':'crop_last'}), how='left')
+df_all_check = df_all_check.dropna(subset='crop_last')
+
 
 # %%
 
