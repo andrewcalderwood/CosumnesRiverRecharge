@@ -689,20 +689,25 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 #
 # - For irrigation this involves scaling the currently proposed irrigation rates by the new total divided by the current total.  
 # - For percolation this involves re-running the SWB model for all fields to get new percolation rates.  
-# - For yield, we need to then specify no yield for these years and 1/2 yield for Grape year 3. This could maybe be done in post-processing? Or by reading in hdf5 file and manually correcting based on year and field ID in the loop
+# - For yield, we need to then specify no yield for these years and 1/2 yield for Grape year 3. This could maybe be done in post-processing? Or by reading in hdf5 file and manually correcting based on year and field ID in the loop (I forgot to update this originally)
 #
 # for simplicity take predicted crops from year 1 and copy backward three years to ease input set up (assume first prediction has no changes from past year)
 
     # %%
-    # import functions.summarize_functions
-    # reload(functions.summarize_functions)
+    import functions.summarize_functions
+    reload(functions.summarize_functions)
     # functions related to post-processing updated irrigation
     from functions.summarize_functions import format_irr_all, adj_irr_rates
 
     # %%
     # update irrigation rates to account for establishment where crops change
+    # does it make sense that these are addressed separately? In the chance there is mixed irrigation then
+    # the total scaling would need to be adjusted
     irr_gw_df_all = adj_irr_rates(irr_gw_df_all, year, crop_list, 
-                                  irr_est, crop_in, pred_dict)
+                                  irr_est, crop_in, pred_dict, report_change=True)
+    # quick way to use existing function to identify change and years back
+    crop_change_info = irr_gw_df_all[['UniqueID','changed','year_offset']].drop_duplicates()
+    irr_gw_df_all = irr_gw_df_all.drop(columns=['changed','year_offset'])
     irr_sw_df_all = adj_irr_rates(irr_sw_df_all, year, crop_list, 
                                   irr_est, crop_in, pred_dict)
 
@@ -722,6 +727,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     dtw_wide_df.columns = well_dtw.UniqueID
 
     # %%
+    # initiate hdf5 files to save outputs
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(model_ws,'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
@@ -749,6 +755,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # may want to use code from plot_output that has read_hdf5  array and assigns UniqueID
+    # irrigation rates are already defined for establishment so only need to read in percolation
     df_all = pd.DataFrame()
     for var in ['percolation']: # ,'GW_applied_water', 'SW_applied_water'
         print(var, end=',')
@@ -775,6 +782,40 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # columns for  pc_df_all 'UniqueID', 'dtw_id', 'date', 'rate' is dtw_id needed?
     pc_df_all = df_all.rename(columns={'parcel_id':'UniqueID', 'value':'rate'})[['UniqueID','date','rate']]
     pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
+
+
+    # %%
+    # need to overwrite yield and profit as 0, be careful in this section as it could repeatedly subtract
+    fn = join(model_ws, 'crop_soilbudget', 'field_SWB', "profit_WY"+str(year)+".hdf5")
+    for crop in crop_list:
+    # for crop in ['Alfalfa']:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+        # identify which parcels had crop changes
+        crop_change = crop_in[crop_in.name==pred_dict[crop]].copy()
+        crop_change = crop_change.merge(crop_change_info.rename(columns={'UniqueID':'parcel_id'}), how='left')
+        # identify integer indexes for referencing with hdf5 files
+        change_inds = np.arange(0, len(crop_change))[crop_change.changed==True]
+        # only apply cost to change in the first year
+        change_cost_inds = np.arange(0, len(crop_change))[crop_change.year_offset==1]    
+        # open file in read/write model
+        with h5py.File(fn, "r+") as f:
+            grp = f['array'] 
+            dset = grp[crop]
+            # grape has 0 profit for the first three years
+            if crop=='Grape':
+                # where the crop was changed make profit 0
+                dset[change_inds] = 0
+            # apply the cost to switch cost to the profit (profit is reverse sign)
+            dset[change_cost_inds] += var_crops['p_d']
+
+        if crop=='Grape':
+            # only need to update yield for Grape
+            with h5py.File(join(model_ws, 'crop_soilbudget', 'field_SWB', "yield_WY"+str(year)+".hdf5"), "r+") as f:
+                grp = f['array'] 
+                dset = grp[crop]
+                # where the crop was changed make yield 0
+                # in year three it could be up to 5 tons but ignore for simlicity
+                dset[change_inds] = 0
 
 
 # %% [markdown]

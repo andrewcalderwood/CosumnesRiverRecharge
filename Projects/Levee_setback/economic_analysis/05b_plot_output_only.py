@@ -100,8 +100,8 @@ scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
 scenario = '_R200' # 200 represents no p_o
-# scenario = '_R203' # no p_o and 6x MAR
-scenario = '_R204' # no p_o and 90/20 flloodplain
+scenario = '_R203' # no p_o and 6x MAR
+# scenario = '_R204' # no p_o and 90/20 flloodplain
 
 # scenario=''
 
@@ -497,21 +497,5 @@ sns.catplot(df_annual_sum[df_annual_sum['var']==var],x='year',y='value', col='cr
 
 plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 
-
-# %% [markdown]
-#
-# ### applied water
-# - for grape we have only SW applied which shows that something is wrong because realistically most vineyards use groundwater
-# - alfalfa shows no groundwater used either
-# - corn is also only surface water
-# - misc grain and hay is only surface water
-#
-# **When going back to 03b_summarize_output.py there should only be gw applied water and no sw so they got mixed up**
-#
-# ### percolation
-# - misc grain and hay has very little percolation except 2017
-# - grape shows a bunch in 2015 then little in the rest except 2017
-# - corn looks good with just a few late season irrigation event causing recharge
-# - alfalfa has recharge in late irrigation events
 
 # %%

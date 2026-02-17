@@ -73,7 +73,7 @@ def format_irr_all(crop, year, crop_in, pred_dict, irr_gw_df_all, irr_sw_df_all)
 
 # %%
 
-def adj_irr_rates(irr_gw_df_all, year, crop_list, irr_est, crop_in, pred_dict):
+def adj_irr_rates(irr_gw_df_all, year, crop_list, irr_est, crop_in, pred_dict, report_change=False):
     """
     Based on data frame of optimized irrigation rates, adjust to account
     for where crop changes require establishment irrigation
@@ -104,6 +104,7 @@ def adj_irr_rates(irr_gw_df_all, year, crop_list, irr_est, crop_in, pred_dict):
                     new_crop = crop_in[crop_change_n & crop_change_n2 & crop_change_n3]
 
                 est_irr_id = new_crop[new_crop.name==pred_dict[crop]].parcel_id
+                # print(est_irr_id)
                 # est_irr_id
                 irr_gw_adj = irr_gw_df_all[irr_gw_df_all.UniqueID.isin(est_irr_id)].copy()
                 # for now assume pre-harvest and post-harvest are together
@@ -117,6 +118,10 @@ def adj_irr_rates(irr_gw_df_all, year, crop_list, irr_est, crop_in, pred_dict):
                 irr_gw_adj = irr_gw_adj.merge(scale_irr_tot, on='UniqueID')
                 # scale individual irrigation events by the new total
                 irr_gw_adj.rate *= irr_gw_adj.irr_adj
-                
+                if report_change:
+                    # add identifier for years of difference and change
+                    irr_gw_adj['changed'] = True
+                    irr_gw_adj['year_offset'] = n
+                # remove parcels from existing dataframe that are being updated
                 irr_gw_df_all = pd.concat((irr_gw_df_all[~irr_gw_df_all.UniqueID.isin(est_irr_id)], irr_gw_adj.drop(columns=['irr_adj'])))
     return(irr_gw_df_all)

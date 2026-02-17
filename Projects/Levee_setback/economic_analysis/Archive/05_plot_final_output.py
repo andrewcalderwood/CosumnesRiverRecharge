@@ -217,6 +217,9 @@ df_all_last.year +=1
 df_all_check = df_all.merge(df_all_last.rename(columns={'crop':'crop_last'}), how='left')
 df_all_check = df_all_check.dropna(subset='crop_last')
 
+df_all_check = df_all_check[df_all_check.crop!=df_all_check.crop_last]
+df_all_check[df_all_check.crop=='Grape']
+
 
 # %%
 
