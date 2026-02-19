@@ -434,6 +434,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     year = m_strt.year
     # crop='Corn'
+    # define whether the year for loading variables should change with year or be static (use average)
+    # year_load_var = None
+    year_load_var = year
 
 # %% [markdown]
 # # Define groundwater elevation sampling
@@ -625,7 +628,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     print(pred_crops)
     for crop in crop_list:
     # for crop in ['Alfalfa']:
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -646,7 +649,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+        # within load_run_swb, these variables are called again specified by year
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops: 
             # to equalize the situation we might use a simple DTW profile
@@ -738,7 +742,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
         # need to account for when crops aren't predicted and skip them
         if pred_dict[crop] in pred_crops:     
             # irr_all is the combination for each crop
@@ -761,7 +765,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         print(var, end=',')
         name = join(model_ws, 'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         for crop in crop_list:
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
             yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
             yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
             # get the total extent of the irrigation season (calculation period)
@@ -787,9 +791,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # need to overwrite yield and profit as 0, be careful in this section as it could repeatedly subtract
     fn = join(model_ws, 'crop_soilbudget', 'field_SWB', "profit_WY"+str(year)+".hdf5")
-    for crop in crop_list:
-    # for crop in ['Alfalfa']:
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, input_name=input_name)
+    # for crop in crop_list:
+    for crop in ['Grape']:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
         # identify which parcels had crop changes
         crop_change = crop_in[crop_in.name==pred_dict[crop]].copy()
         crop_change = crop_change.merge(crop_change_info.rename(columns={'UniqueID':'parcel_id'}), how='left')
@@ -797,25 +801,32 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         change_inds = np.arange(0, len(crop_change))[crop_change.changed==True]
         # only apply cost to change in the first year
         change_cost_inds = np.arange(0, len(crop_change))[crop_change.year_offset==1]    
-        # open file in read/write model
-        with h5py.File(fn, "r+") as f:
-            grp = f['array'] 
-            dset = grp[crop]
-            # grape has 0 profit for the first three years
-            if crop=='Grape':
-                # where the crop was changed make profit 0
-                dset[change_inds] = 0
-            # apply the cost to switch cost to the profit (profit is reverse sign)
-            dset[change_cost_inds] += var_crops['p_d']
-
         if crop=='Grape':
             # only need to update yield for Grape
             with h5py.File(join(model_ws, 'crop_soilbudget', 'field_SWB', "yield_WY"+str(year)+".hdf5"), "r+") as f:
                 grp = f['array'] 
                 dset = grp[crop]
+                # extract yield to subtract revenue below
+                change_yield = dset[change_inds][:]
                 # where the crop was changed make yield 0
                 # in year three it could be up to 5 tons but ignore for simlicity
                 dset[change_inds] = 0
+        # open file in read/write model
+        with h5py.File(fn, "r+") as f:
+            grp = f['array'] 
+            dset = grp[crop]
+            # grape has 0 profit for the first three years
+            # to account for irrigation cost still, we could simply subtract the revenue (yield * $/ton)
+            if crop=='Grape':
+                # where the crop was changed make profit 0
+                # dset[change_inds] = 0
+                # better to instead remove the revenue from yield (profit is negative so need to add to remove the revenue)
+                dset[change_inds] = dset[change_inds][:]  + change_yield*var_crops['p_c']
+                # temp = dset[change_inds][:] + change_yield*var_crops['p_c']
+            # apply the cost to switch cost to the profit (profit is reverse sign)
+            dset[change_cost_inds] += var_crops['p_d']
+
+
 
 
 # %% [markdown]
