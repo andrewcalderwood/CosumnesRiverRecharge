@@ -714,9 +714,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     irr_gw_df_all = irr_gw_df_all.drop(columns=['changed','year_offset'])
     irr_sw_df_all = adj_irr_rates(irr_sw_df_all, year, crop_list, 
                                   irr_est, crop_in, pred_dict)
-
+    # save files for referencing when re-running the SWB to calculate the actual profit after modflow runs
     irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
     irr_sw_df_all.to_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
+    # save crop change info for reference in updating profit/yield
+    crop_change_info.to_csv(join(swb_ws, 'output', 'crop_change_info'+str(year)+'.csv'), index=False)
 
     # %%
     # need to get dtw_df (even if just estimated), unlike f_summarize_output modflow hasn't been run yet
@@ -786,47 +788,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # columns for  pc_df_all 'UniqueID', 'dtw_id', 'date', 'rate' is dtw_id needed?
     pc_df_all = df_all.rename(columns={'parcel_id':'UniqueID', 'value':'rate'})[['UniqueID','date','rate']]
     pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
-
-
-    # %%
-    # need to overwrite yield and profit as 0, be careful in this section as it could repeatedly subtract
-    fn = join(model_ws, 'crop_soilbudget', 'field_SWB', "profit_WY"+str(year)+".hdf5")
-    # for crop in crop_list:
-    for crop in ['Grape']:
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
-        # identify which parcels had crop changes
-        crop_change = crop_in[crop_in.name==pred_dict[crop]].copy()
-        crop_change = crop_change.merge(crop_change_info.rename(columns={'UniqueID':'parcel_id'}), how='left')
-        # identify integer indexes for referencing with hdf5 files
-        change_inds = np.arange(0, len(crop_change))[crop_change.changed==True]
-        # only apply cost to change in the first year
-        change_cost_inds = np.arange(0, len(crop_change))[crop_change.year_offset==1]    
-        if crop=='Grape':
-            # only need to update yield for Grape
-            with h5py.File(join(model_ws, 'crop_soilbudget', 'field_SWB', "yield_WY"+str(year)+".hdf5"), "r+") as f:
-                grp = f['array'] 
-                dset = grp[crop]
-                # extract yield to subtract revenue below
-                change_yield = dset[change_inds][:]
-                # where the crop was changed make yield 0
-                # in year three it could be up to 5 tons but ignore for simlicity
-                dset[change_inds] = 0
-        # open file in read/write model
-        with h5py.File(fn, "r+") as f:
-            grp = f['array'] 
-            dset = grp[crop]
-            # grape has 0 profit for the first three years
-            # to account for irrigation cost still, we could simply subtract the revenue (yield * $/ton)
-            if crop=='Grape':
-                # where the crop was changed make profit 0
-                # dset[change_inds] = 0
-                # better to instead remove the revenue from yield (profit is negative so need to add to remove the revenue)
-                dset[change_inds] = dset[change_inds][:]  + change_yield*var_crops['p_c']
-                # temp = dset[change_inds][:] + change_yield*var_crops['p_c']
-            # apply the cost to switch cost to the profit (profit is reverse sign)
-            dset[change_cost_inds] += var_crops['p_d']
-
-
 
 
 # %% [markdown]

@@ -200,15 +200,23 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
         print(finished_crops)
 
     # %%
-    # load the processed dataframe with all datas
-    pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
-                     crop_in, finished_crops, dtw_simple_df, well_dtw)
+    # load the processed dataframe with all data
+    # this looks back at model_ws, 'field_SWB', where model_ws is swb_ws which is join(model_ws, 'rep_crop_soilbudget')
+    # this is just repeating what is done in the main code then, better to read in csv which have updated values for everything
+    # pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
+    #                  crop_in, finished_crops, dtw_simple_df, well_dtw)
 
     # %%
-    # # this output with the parcel data needs to be saved as well
+    # check to see if the get_wb_by_parcel needs to be run again and why it doesn't just reference the csv files
+    # i think only the csv files are updated with establishment irrigation so need to look for that
+    # it's not clear why I had these commented out
+    irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0)
+    irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0)
+    # we don't actually need this percolation data as it is going to be re-calculated in the SWB anyway
     # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'),index_col=0)
-    # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0)
-    # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0)
+
+    # info on crop change to inform adjustments to profit and yield
+    crop_change_info = pd.read_csv(join(swb_ws, 'output', 'crop_change_info'+str(year)+'.csv'))
 
 # %% [markdown]
 # There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
@@ -329,6 +337,47 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
         sys.stdout.flush()
 
+    # %%
+    print('Updating profit and yield to account for crop change')
+    # need to overwrite yield and profit as 0, be careful in this section as it could repeatedly subtract
+    fn = join(model_ws, 'crop_soilbudget', 'field_SWB', "profit_WY"+str(year)+".hdf5")
+    for crop in crop_list:
+    # for crop in ['Grape']:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year, input_name=input_name)
+        # identify which parcels had crop changes
+        crop_change = crop_in[crop_in.name==pred_dict[crop]].copy()
+        crop_change = crop_change.merge(crop_change_info.rename(columns={'UniqueID':'parcel_id'}), how='left')
+        # identify integer indexes for referencing with hdf5 files
+        change_inds = np.arange(0, len(crop_change))[crop_change.changed==True]
+        # only apply cost to change in the first year
+        change_cost_inds = np.arange(0, len(crop_change))[crop_change.year_offset==1]    
+        if crop=='Grape':
+            # only need to update yield for Grape
+            with h5py.File(join(model_ws, 'crop_soilbudget', 'field_SWB', "yield_WY"+str(year)+".hdf5"), "r+") as f:
+                grp = f['array'] 
+                dset = grp[crop]
+                # extract yield to subtract revenue below
+                change_yield = dset[change_inds][:]
+                # where the crop was changed make yield 0
+                # in year three it could be up to 5 tons but ignore for simlicity
+                dset[change_inds] = 0
+        # open file in read/write model
+        with h5py.File(fn, "r+") as f:
+            grp = f['array'] 
+            dset = grp[crop]
+            # grape has 0 profit for the first three years
+            # to account for irrigation cost still, we could simply subtract the revenue (yield * $/ton)
+            if crop=='Grape':
+                # where the crop was changed make profit 0
+                # dset[change_inds] = 0
+                # better to instead remove the revenue from yield (profit is negative so need to add to remove the revenue)
+                dset[change_inds] = dset[change_inds][:]  + change_yield*var_crops['p_c']
+                # temp = dset[change_inds][:] + change_yield*var_crops['p_c']
+            # apply the cost to switch cost to the profit (profit is reverse sign)
+            dset[change_cost_inds] += var_crops['p_d']
+
+
+
 # %%
 # after running the updated swb for a year then it would make sense to load in the hdf5 for profit to calculate the average value but this could also be done
 # in a secondary script called by model_connect
@@ -349,7 +398,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
             print(finished_crops, end='.')
         for crop in finished_crops:
             # need dates for time series water budget output
-            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year, input_name=input_name)
 
             # extract output and convert to dataframe with ID columns
             arr = read_crop_arr_h5(crop, name)
@@ -357,8 +406,6 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
             # add parcel information back
             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index()),axis=1)
             df_all = pd.concat((df_all, df))
-
-
 
     # correct profit from negative to positive
     df_all.loc[df_all['var']=='profit','value'] *= -1

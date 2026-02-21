@@ -45,7 +45,7 @@ def tprogs_arr_cut_elev(tprogs_elev, dem_data, tprogs_info, **kwargs):
     # the bottom layer of the tprogs model is at -80 m amsl and the top layer is 80 m amsl
     delz = (tprogs_info[0] - tprogs_info[1])/tprogs_info[2]
     for t, k in enumerate(np.arange(tprogs_info[0],tprogs_info[1],-delz)):
-        tprogs_elev[t,dem_data<k]= np.NaN
+        tprogs_elev[t,dem_data<k]= np.nan
 
     masked_tprogs = ma.masked_invalid(tprogs_elev)
     return(masked_tprogs)

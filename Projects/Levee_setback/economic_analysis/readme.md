@@ -15,6 +15,12 @@ The scripts for this include:
 - 02_iterative_irrigation_optimizer which was set up to run the irrigation optimizer over multiple crops for a specific year of interest to save the output for each year of output for percolation and irrigation (gw pumping). The batch file run_irrigation_optimizer.bat was used to help with testing of this.
 
 # Model Running
+## Run/scenario set up
+I improved model set up by adding 03_copy_model_modflow.py which creates a copied and broken up version of the modflow model to reference for different scenarios. It looks like I started the script 03_copy_modflow_to_scenario.py but didn't finish as it is likely simpler to simply copy the whole directory and rename it to the scenario.  
+
+The batch file run_model_connet_sys_var_base.bat allows the user to specify the model run to be ran based on the model workspace name and you can specify which input spreadsheet to use. This allows the user to start a model run by passing the basic parameters to the script 03_model_connect.py and then starting another model run.  
+
+## Connected model set up
 The final connected model was set up with a variety of pre-processed inputs and functions to go from a start year to an end year by using the existing modflow model and re-writing the RCH/WEL inputs using the output from the crop choice to inform the optimized soil water budget plus two more soil water budgets for native and ag fields during winter without optimization.
 
 03_model_connect references the following scripts generally in this order:

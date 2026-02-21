@@ -97,6 +97,8 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 model_nam = 'historical_simple_geology_reconnection'
 model_nam = 'input_write_2014_2020'
 model_nam = 'input_write_2014_2022'
+model_nam = 'input_write_2018_2022' # later scenario to compare with
+
 # model_nam = 'input_write_2000_2022'
 
 base_model_ws = loadpth+model_nam

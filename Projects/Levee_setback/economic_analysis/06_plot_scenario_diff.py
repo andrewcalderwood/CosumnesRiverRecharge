@@ -70,7 +70,7 @@ loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # %%
 # update to different modflow models here
-m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
@@ -81,6 +81,7 @@ scenario = '_R203' # no p_o, 6x MAR
 scenario = '_R204' # no p_o, 90/20 floodplain
 
 s_nam = m_nam+scenario
+# s_nam = 'input_write_2016_2022_R200'
 
 m_version = '' # original baseline with p_o
 m_version = '_R200' # no p_o # specified later?

@@ -88,25 +88,62 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
+# for batch file case we want to ignore the consant h5py deprecation warning
+import warnings
+
+warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
+# %%
+# updated version specifies concept_name and copy_files here so it can be easily
+# seen as these are the main update to make in a script
+in_data = sys.argv
+
+if 'ipykernel' in in_data[0]:
+    # m_nam = 'input_write_2014_2020_R3'
+    # m_nam = 'input_write_2014_2020'
+    m_nam = 'input_write_2014_2022_R203'
+    m_nam = 'input_write_2016_2022_R200'
+
+    # input_name = 'static_model_inputs.xlsx'
+    input_name = 'static_model_inputs_no_p_o.xlsx'
+
+else:
+    m_nam = in_data[1]
+    # added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+    input_name = in_data[2]
+
+
+print('sys.argv[1] (m_nam) is...')
+print(m_nam)
+
+print('sys.argv[2] (input_name) is...')
+print(input_name)
+
+t_start = time.time()
+
+# %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
-m_nam = 'input_write_2014_2020'
-m_nam = 'input_write_2014_2022'
+# m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2022'
 
 scenario = '_R20' # pumping constraint
 scenario = '_R4' # 90/20 floodplain
 # scenario = '_R3' # 6x existing diversion for MAR vineyard
+
 scenario = '_R200' # 200 represents no p_o
-scenario = '_R203' # no p_o and 6x MAR
+# scenario = '_R203' # no p_o and 6x MAR
 # scenario = '_R204' # no p_o and 90/20 flloodplain
 
 # scenario=''
+# m_nam = m_nam+scenario
 
 
-model_ws = join(loadpth, m_nam+scenario)
+model_ws = join(loadpth, m_nam)
 
 
 # %%
@@ -116,6 +153,16 @@ swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
 out_dir = join(model_ws, 'output_clean')
 os.makedirs(out_dir, exist_ok=True)
+
+
+# %%
+# save log by date so we can see old versions
+os.makedirs(join(out_dir, 'log'), exist_ok=True)
+if 'ipykernel' in in_data[0]:
+    print('print to jupyter')
+else:
+    print('printing remaining output to log file')
+    sys.stdout = open(join(out_dir, 'log', 'plot_output_only_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
 
 # %%
@@ -130,6 +177,16 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 # years to sample output
 run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 # run_years = run_years[:-1]
+
+# %%
+# check which files are available and shorten as needed
+files = pd.DataFrame(glob.glob(join(out_dir, 'profit_yield_long_*.csv')), columns=['fn'])
+files['name'] = files.fn.apply(basename)
+files['year'] = files.name.str.extract(r'(\d{4})').astype(int)
+
+# subset run years to those with output
+run_years = run_years[pd.Series(run_years).isin(files.year)]
+# should set up a way to delete old output to avoid mixing old/new in plots
 
 # %%
 # temp for while model is still running
@@ -174,11 +231,14 @@ df_econ_agg.to_csv(join(out_dir, 'annual_profit_yield_long.csv'))
 # )
 
 # %%
+# df_econ_agg
+
+# %%
 # plot the average profit and yield (not-weighted by acreage) 
 # g=sns.relplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
 #            facet_kws={'sharey': False, 'sharex': True})
 
-sns.catplot(df_econ_agg,x='year',y='value', col='crop', row='var', 
+sns.catplot(df_econ_agg,x='year',y='total_value', col='crop', row='var', 
             kind='bar', color='tab:blue',
             sharey=False
            # facet_kws={'sharey': False, 'sharex': True}
@@ -217,7 +277,7 @@ for var in ['profit', 'yield']:
 os.makedirs(join(out_dir,'DTW'), exist_ok=True)
 
 # %%
-crop_name_dict = pd.read_excel(join(proj_dir,'model_inputs','static_model_inputs.xlsx'),sheet_name='Name_dict')
+crop_name_dict = pd.read_excel(join(proj_dir,'model_inputs',input_name),sheet_name='Name_dict')
 
 # %% [markdown]
 # ## spring dtw
@@ -499,3 +559,7 @@ plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 
 
 # %%
+t_final = time.time()
+print('Total time was %.2f hours' %((t_final-t_start)/3600))
+
+sys.stdout.flush()
