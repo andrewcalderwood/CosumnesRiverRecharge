@@ -210,8 +210,8 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
     # check to see if the get_wb_by_parcel needs to be run again and why it doesn't just reference the csv files
     # i think only the csv files are updated with establishment irrigation so need to look for that
     # it's not clear why I had these commented out
-    irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0)
-    irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0)
+    irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0, parse_dates=['date'])
+    irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0, parse_dates=['date'])
     # we don't actually need this percolation data as it is going to be re-calculated in the SWB anyway
     # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'),index_col=0)
 
@@ -336,6 +336,12 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
         load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, input_name = input_name, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
         sys.stdout.flush()
+
+    # %%
+    name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+    with h5py.File(name) as dset:
+        crop_list = list(dset['array'].keys())
+
 
     # %%
     print('Updating profit and yield to account for crop change')

@@ -2,19 +2,13 @@ rem conda init activates a conda shell which is what conda.bat does
 
 rem R3:6x vineyard MAR, R4:90/20 floodplain MAR, R20:pumping constraint
 
-rem set m_nam=input_write_2014_2022
-rem set m_nam=input_write_2014_2022_R20
-rem set m_nam=input_write_2014_2022_R3
-rem m_nam=input_write_2014_2022_R4
-
-
 rem version with no p_o
 set m_nam=input_write_2014_2022_R204
 rem set m_nam=input_write_2014_2022_R200
 rem set m_nam=input_write_2014_2022_R203
 
 rem check to see if different start years have an impact
-rem set m_nam=input_write_2018_2022_R200
+rem set m_nam=input_write_2016_2022_R200
 
 echo %m_nam%
 
