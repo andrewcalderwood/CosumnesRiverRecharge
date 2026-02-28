@@ -78,7 +78,7 @@ scenario = '_R4' # 90/20 floodplain
 scenario = '_R3' # 6x existing diversion for MAR vineyard
 
 scenario = '_R203' # no p_o, 6x MAR
-scenario = '_R204' # no p_o, 90/20 floodplain
+# scenario = '_R204' # no p_o, 90/20 floodplain
 
 s_nam = m_nam+scenario
 # s_nam = 'input_write_2016_2022_R200'

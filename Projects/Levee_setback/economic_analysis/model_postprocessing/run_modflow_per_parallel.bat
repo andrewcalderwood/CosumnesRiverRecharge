@@ -1,0 +1,3 @@
+call activate geo_env
+python 02_run_modflow_per_parallel.py
+PAUSE

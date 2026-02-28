@@ -111,13 +111,14 @@ ss_bool = False # no steady state period
 
 # %%
 # 20 year run
-strt_date = pd.to_datetime('2000-10-01')
-end_date = pd.to_datetime('2022-09-30') # 
-ss_strt = pd.to_datetime('2000-10-01')
-ss_end = pd.to_datetime('2004-09-30')
+# strt_date = pd.to_datetime('2000-10-01')
+# end_date = pd.to_datetime('2022-09-30') # 
+# ss_strt = pd.to_datetime('2000-10-01')
+# ss_end = pd.to_datetime('2004-09-30')
 # standard 4-6 year run for testing
 
 strt_date = pd.to_datetime('2014-10-01')
+strt_date = pd.to_datetime('2018-10-01') # later start to compare impact on simulation
 end_date = pd.to_datetime('2020-09-30')
 end_date = pd.to_datetime('2022-09-30') # for alternate version to show drought years
 ss_strt = pd.to_datetime('2010-10-01')
@@ -2813,4 +2814,31 @@ m.check()
 m.write_input()
 
 
+# %% [markdown]
+# # manual updates to files to correct options
+# - BAS package should have budget file saved with OWHM
+
 # %%
+model_ws
+
+# %%
+# file to change
+input_file_path = join(model_ws, m.name+'.bas')
+output_file_path = join(model_ws, m.name+'.bas.temp')
+# text to change/update
+target_line_content = "FREE"
+replacement_content = "FREE BUDGETDB flow_budget.txt"
+# open existing file and create temporary output file to write to
+with open(input_file_path, 'r') as infile, open(output_file_path, 'w') as outfile:
+    for n, line in enumerate(infile):
+        # only make changes in top rows where the specificed text is present
+        if (n<10)&(target_line_content in line)&(replacement_content not in line):
+            # Modify the line
+            outfile.write(line.replace(target_line_content, replacement_content))
+        else:
+            # Keep the original line
+            outfile.write(line)
+
+# Replace the original file with the new one
+os.replace(output_file_path, input_file_path)
+
