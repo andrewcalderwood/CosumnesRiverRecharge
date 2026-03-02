@@ -142,8 +142,8 @@ def get_dtw(year, model_ws):
     # some wells have relatively static dtw and some show a decline
     # import matplotlib.pyplot as plt
     # plt.plot(dtw[:,2080]);
-    plt.plot(dtw[:,::100]);
-    plt.ylim(0,200)
+    # plt.plot(dtw[:,::100]);
+    # plt.ylim(0,200)
     # dtw.shape
 
     # %%

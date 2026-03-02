@@ -193,6 +193,9 @@ overview_plt(wb_per_all.resample('MS').sum())
 wb_per_all_ann = wb_per_all.resample('YS-OCT').sum()
 wb_ann = wb.resample('YS-OCT').sum()
 
+wb_per_all_mon = wb_per_all.resample('MS').sum()
+wb_mon = wb.resample('MS').sum()
+
 # %%
 overview_plt(wb_per_all_ann)
 overview_plt(wb_ann)
@@ -200,8 +203,29 @@ overview_plt(wb_ann)
 # should create overlay plots of major components, WEL, GHB_IN, RCH_IN, SFR_IN
 # high level overview shows order of magnitude is similar after accounting for difference in recharge due to scenario
 
+# %%
+fig,ax = plt.subplots(3,1)
+
+for n, p in enumerate(['RCH_IN','WEL_OUT', 'SFR_IN']):
+    ax_n = ax[n]
+    wb_per_all_mon.plot(y=p, ax=ax_n, label='Connected')
+    wb_mon.plot(y=p, ax=ax_n, label='Original')
+    ax_n.set_ylabel(p)
+
+# there is a significant drop in recharge estimates in the wet season
+# need to evaluate if due to loss of soil moisture passing or from more efficient irrigation
+
 # %% [markdown]
-# ## sample head time series
+# ## Do more direct comparison of pumping and recharge
+#
+# Want to see if pumping is fairly close and investigate why recharge seems slightly lower. Is this because of the change in irrigation style or because the soil moisture is not passed between runs so it resets and that has to refill before good percolation? Best practice might be to simply add in a way to assign input soil moisture and create simple csv style to save output for each in a subfolder.
+
+# %%
+
+# %%
+
+# %% [markdown]
+# # sample head time series
 #
 # change in storage in baseline shows some gradual decline with upswings from wet periods. need to cross reference with heads between scenarios to see if the scenario has the same pattern. Want to see how much changes in DTW are causing predicted crop to vary from observed.
 #

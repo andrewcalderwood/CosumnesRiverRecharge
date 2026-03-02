@@ -92,6 +92,9 @@ wyt['wy_dc'] = 0
 wyt.loc[wyt['Yr-type'].isin(['C','D']),'wy_dc'] = 1
 
 # %%
+wyt[wyt.WY>2014][['WY','Yr-type','wy_dc']].to_csv(join(proj_dir, 'model_results','stata_comp','WYT_2015_2022.csv'))
+
+# %%
 data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
 # expect updated column name for pod
 # add column to POD that was available in previous dataset
@@ -111,16 +114,9 @@ rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv
 
 
 # %%
+# old input data and test
 data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
 # data
-
-# %% [markdown]
-# # Predict crops
-
-# %% [markdown]
-# ## with new test data
-#
-# compare against stata results that account for crop_cat lats
 
 # %%
 logit_coefs_adj = pd.read_csv(join(crop_choice_dir, 'logit_coefs_last_crop.csv'))
@@ -130,6 +126,8 @@ logit_coefs_adj = pd.read_csv(join(crop_choice_dir, 'logit_coefs_last_crop.csv')
 # %%
 crop_dict = logit_coefs_adj.set_index('Crop_Eq_new')['Crop_Eq'].to_dict()
 
+crop_dict['Mixed pasture'] = 'Mixed_pasture'
+
 # %%
 # load results from stata to confirm python is doing as expected
 stata_df = pd.read_csv(join(proj_dir, "model_results/stata_predicted_probabilities.csv"))
@@ -137,6 +135,114 @@ stata_df = pd.read_csv(join(proj_dir, "model_results/stata_predicted_probabiliti
 # replace crop name with original
 stata_df = stata_df.replace(crop_dict)
 
+
+# %%
+# save revenue as a dataframe for reference
+rev_out = stata_df[stata_df.chosen==1].drop_duplicates(['alternatives','year'])[['alternatives','year','rev_prior_yr']]
+rev_out = rev_out.sort_values(['alternatives','year']).reset_index(drop=True).rename(columns={'alternatives':'crop_cat'})
+rev_out = rev_out.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
+rev_out.to_csv(join(crop_choice_dir, "data_model", 'rev_prior_yr_all.csv'), index=False)
+# this is still missing 2016 information
+
+# %% [markdown]
+# ## depth to water review
+#  Give DTW in fall wasn't explicitly stated, we need to sample it or extract it again from a dataset
+
+# %%
+
+model_nam = 'input_write_2014_2022'
+scen = 'R200'
+# it is probably better to create a slightly different file name then to copy these over for a set scenario
+econ_model_ws = join(loadpth, model_nam+'_'+scen)
+
+all_run_dates = pd.read_csv(join(econ_model_ws, 'crop_modflow', 'all_run_dates.csv'),parse_dates=['date'])
+
+years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year
+
+swb_ws = join(econ_model_ws, 'rep_crop_soilbudget')
+
+
+# %%
+# crop_soilbudget/field_dtw/dtw_ft+crop data has dtw for re-running SWB to get actual costs
+# issue is that it uses a ffill() for the last month before next model is run and it stops at end of irrigation season
+
+# %%
+from f_gw_dtw_extract import sample_dtw, avg_heads
+
+
+# %%
+m_model_ws = join(dirname(dirname(loadpth)), 'Regional', model_nam)
+load_only=['DIS', 'BAS6']
+m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
+                                exe_name='mf-owhm', version='mfnwt',
+                              load_only = load_only)
+m_dim = (m.dis.nlay, m.dis.nrow,  m.dis.ncol)
+
+
+# %%
+parcel_wells = pd.read_csv(join(econ_model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'))
+
+# %%
+well_dtw_all = pd.DataFrame()
+for m_per in np.arange(1, all_run_dates.shape[0]-1):
+    m_strt = all_run_dates.iloc[m_per].date
+    year = m_strt.year
+
+    model_ws_last = join(econ_model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date()))
+    hdobj = flopy.utils.HeadFile(model_ws_last + '/MF.hds')
+
+    # model output dates
+    m_dates = all_run_dates.loc[m_per-1].date+np.array(hdobj.get_times()).astype('timedelta64[D]')
+    m_dates = pd.DataFrame(m_dates, columns=['dates']).set_index('dates')
+    m_dates['kstpkper'] = hdobj.get_kstpkper()
+    # subset to 1 month of output
+    # determine dates for fall sampling
+    fall_dates = m_dates[m_dates.index.month==10]
+    # determine dates for spring sampling
+    spring_dates = m_dates[m_dates.index.month==3]
+
+    # get head value from last 30 days to avoid using extreme single day value
+    fall_heads = avg_heads(fall_dates.kstpkper.values, hdobj, m_dim)
+    
+    # the dtw conversion runs a little slow
+    # get the DTW for the wels in the simulation from the last period
+    well_dtw = sample_dtw(fall_heads, parcel_wells)
+    # need to make integer for join with crop choice
+    well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
+    well_dtw_all = pd.concat((well_dtw_all, well_dtw.assign(year=year)))
+
+# %% [markdown]
+# ## comparison of DTW
+#
+# The histogram of stata DTW shows a range of 10-40 with median around 20. This seems to suggest to me the units are in meters and not feet.
+
+# %%
+# gpd.read_file(join(proj_dir, 'parcel_zonalstats', 'gw_dtw_all.shp'))
+# verifies that dtw was in meters in dataset sent to Yusuke
+
+# %%
+# get just DTW info used in stata
+stata_dtw = stata_df[['parcel_id','year','dtwfa']]
+# compare results in Stata with those in MODFLOW
+dtw_comp = stata_dtw.merge(well_dtw_all.rename(columns={'UniqueID':'parcel_id'}))
+# if the stata dtw is converted to ft then it aligns with the model predicted
+dtw_comp.dtwfa /= 0.3048
+# seems highly likely that stata was used dtw in meters, which is okay because it was consistent
+# that just means that the use of stata in the model needs to do the same
+
+# %%
+fig,ax = plt.subplots(2,1)
+dtw_comp.dtwfa.hist(ax=ax[0])
+
+dtw_comp.dtw_ft.hist( ax=ax[1])
+
+# %% [markdown]
+# # Predict crops
+
+# %% [markdown]
+# ## with new test data
+#
+# compare against stata results that account for crop_cat lats
 
 # %%
 crop_cat_last_df = stata_df.pivot(index=['parcel_id','year'], values='crop_cat_last', columns='alternatives')
@@ -172,6 +278,8 @@ stata_parcel.columns
 
 # %% [markdown]
 # ## prediction based on observation data
+#
+# Could also re-run prediction with new dtw and previous crop to see how different
 
 # %%
 # data_out_all = pd.DataFrame()
@@ -195,18 +303,13 @@ stata_parcel.columns
 # ## load crops predicted by modflow model
 
 # %%
-
-model_nam = 'input_write_2014_2022'
-scen = 'R200'
-# it is probably better to create a slightly different file name then to copy these over for a set scenario
-econ_model_ws = join(loadpth, model_nam+'_'+scen, 'crop_modflow')
-
-all_run_dates = pd.read_csv(join(econ_model_ws, 'all_run_dates.csv'))
-
-
-
-    # %%
+crop_all = pd.DataFrame()
+for year in years:
     crop_in = pd.read_csv(join(swb_ws, 'field_SWB', 'crop_parcels_'+str(year)+'.csv'),index_col=0)
+    crop_all = pd.concat((crop_all, crop_in.assign(year=year)))
+
+# switch to underscores
+crop_all = crop_all.replace(crop_dict)
 
 
 # %% [markdown]
@@ -214,173 +317,51 @@ all_run_dates = pd.read_csv(join(econ_model_ws, 'all_run_dates.csv'))
 
 # %%
 # columns relevant for comparison
-stata_comp = stata_df[['parcel_id','year','crop_cat_last','crop_cat','crop','alternatives', 'chosen', 'pprob_stata']]
+stata_comp = stata_df[['parcel_id','year','crop_cat_last','crop_cat','crop','alternatives', 'chosen', 'dtwfa','wy_dc']]
 # stata_comp = stata_df[['parcel_id','year','crop_cat','alternatives','pprob_stata']]
 stata_comp.crop_cat = stata_comp.crop_cat.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
 stata_comp.alternatives = stata_comp.alternatives.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
 
 
 # %%
-p_cols = data_out_all.columns[data_out_all.columns.str.contains('PP.')].tolist()
-# also need to include which alternative is specified?
-data_out_long = data_out_all.melt(id_vars=['parcel_id', 'year'], value_vars=p_cols, value_name='pprob_py')
-data_out_long['alternatives'] = data_out_long.variable.str.replace('PP.','')
-
-# names for crop are the same between old and new stata except for Mixed_pasture
-
-# %%
-data_out_long.alternatives.unique()
-
-# %%
 # join data on the selected crop from each for the parcel
+# with the connected model we also want to check what crop choice last looked like
 stata_sel = stata_comp[stata_comp.chosen==1][['parcel_id','year','crop_cat']].rename(columns={'crop_cat':'crop_choice_stata'})
-comp_sel = stata_sel.merge(data_out_sel.rename(columns={'Crop_Choice':'crop_choice_python'}))
 
-comp_sel.to_csv(join(out_dir, 'selected_crop_stata_python.csv'))
+comp_sel = stata_sel.merge(crop_all.rename(columns={'name':'crop_choice_MF'}))
+
+# count how many where there is a difference
+comp_sel['diff_crop'] = comp_sel.crop_choice_stata != comp_sel.crop_choice_MF
+# comp_sel.to_csv(join(out_dir, 'selected_crop_stata_python.csv'))
 
 # %%
 # summarize crop count prediction by year and crop
-comp_sel
+comp_sel.groupby(['crop_choice_stata'])[['diff_crop']].sum().to_csv(join(econ_model_ws, 'output_clean','stata_crop_diff.csv'))
 
 # %%
-#
-diff_crop = comp_sel[comp_sel.crop_choice_stata != comp_sel.crop_choice_python]
-# diff_crop
-diff_crop.shape[0]/comp_sel.shape[0]
-diff_crop.shape[0]/comp_sel.shape[0]
-
-# %%
-# alternative to looking at where it matches
-# look where the same crop has the maximum probability
-
-max_prob = stata_comp.groupby(['parcel_id','year'])['pprob_stata'].idxmax()
-stata_max = stata_comp.loc[max_prob.dropna().values]
-
-max_prob = data_out_long.groupby(['parcel_id','year'])['pprob_py'].idxmax()
-py_max = data_out_long.loc[max_prob.dropna().values]
-# max_comp = stata_max.rename(columns={'crop_cat':'choice_stata'}).merge(py_max.rename(columns={'alternatives':'choice_py'}))
-max_comp = stata_max.rename(columns={'alternatives':'choice_stata'}).merge(py_max.rename(columns={'alternatives':'choice_py'}))
-
-# diff_max = max_comp[max_comp.choice_stata != max_comp.choice_py]
-# diff_max
-
-diff_max = max_comp[max_comp.crop_cat != max_comp.choice_py]
-diff_max.shape[0]/max_comp.shape[0]
-
-# %%
-prob_comp = stata_comp[['parcel_id','year','crop_cat','alternatives','pprob_stata']].merge(data_out_long)
+comp_sel.diff_crop.sum()/comp_sel.shape[0]
 
 
 # %%
-prob_comp.alternatives.unique()
-stata_comp.alternatives.unique()
+mf_count = crop_all.groupby(['year','name'])[['parcel_id']].count().reset_index()
+stata_count = stata_sel.groupby(['year','crop_choice_stata'])[['parcel_id']].count().reset_index().rename(columns={'crop_choice_stata':'name'})
+# mf_count = mf_count.rename(columns={'parcel_id':'mf_count'}).reset_index()
+# stata_count = stata_count.rename(columns={'crop_choice_stata':'stata_count'}).reset_index()
+# comp_count = mf_count.merge(stata_count)
 
 # %%
-prob_comp['error'] = prob_comp.pprob_stata - prob_comp.pprob_py
-prob_comp['perc_error'] = prob_comp.error*100/((prob_comp.pprob_stata + prob_comp.pprob_py)/2)
-
-
-prob_comp.to_csv(join(out_dir, 'stata_python_comparison.csv'))
-# want to evaluate the error in probabilities individually to ensure not too significant
-
-# more important test is to ensure that the randomly selected crop is the same
+count_comp = pd.concat((stata_count.assign(grp='stata'), mf_count.assign(grp='mf'))).reset_index()
 
 # %%
-prob_comp.error.hist()
-plt.xlabel('PP Error (Stata - Py)')
-plt.ylabel('Count')
-plt.savefig(join(out_dir, 'all_PP_error_histogram.png'), bbox_inches='tight')
-
+# count_comp[count_comp.duplicated(['year','name','grp'])]
+# # count_comp
 
 # %%
-# look at parcels where the error is greater than 1% of the 100% distribution, below this it likely isn't
-# making a big difference in random sampling or max selection
-err_01 = prob_comp[prob_comp.error>0.01]
-
-print('There are %.2f %% with greater than 1%% error' %(100*err_01.shape[0]/prob_comp.shape[0]))
-
-err_01_count = err_01.groupby('alternatives')['error'].count()
-err_01_count.plot(kind='bar')
-plt.ylabel('Count of parcels across all years \nwith greater than 1% error')
-plt.savefig(join(out_dir, 'count_1_perc_error_plot.png'), bbox_inches='tight')
-# the error is pretty evenly distributed among the crop type alternatives with the lowest among other
-
-# %%
-sns.catplot(
-    prob_comp,
-            x='year',y='error', col='alternatives', col_wrap=3, 
-            kind='box',#color='tab:blue',
-            sharey=False)
-
-plt.savefig(join(out_dir, 'frac_error_box_plot_by_crop_and_year.png'), bbox_inches='tight')
-
-
-# %%
-# compare the selected crop in each case
-
-
-# %% [markdown]
-# # Run the crop choice in python
-#
-# Comparing with simulated dtw
-
-# %%
-dtw_ft = pd.read_csv("D:/WRDAPP/GWFlowModel/Cosumnes/Economic/input_write_2014_2022_R203/output_clean/dtw_ft_mean_all.csv")
-
-
-
-# %% [markdown]
-# # compare python max prob vs rand sample methods
-
-# %%
-data_out_all = pd.DataFrame()
-data_out2_all = pd.DataFrame()
-for year in np.arange(2016,2022):
-# year = 2017
-    # the parcel data needs the dtwfa (avg fall dtw in feet for the parcel) and wy_dc (pulled from Sac wy type dataset and switched to dry boolean)
-    # missing WY type prediction? 
-    # Read parcel data
-    data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
-    # still needs to be updated to auto update DTW and WY type
-    # data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
-    data['wy_dc'] = wyt.loc[wyt.WY==year, 'wy_dc'].values[0]
-    # update DTW to use simulated value instead of contoured
-    well_dtw = dtw_ft[dtw_ft.year==year]
-    well_dtw_merge = well_dtw[['UniqueID','dtw_ft']].rename(columns={'dtw_ft':'dtwfa'})
-    data = data.drop(columns=['dtwfa', 'dtwsp'])
-    data = data.merge(well_dtw_merge, left_on='parcel_id',right_on='UniqueID')
-    
-    
-    data_out = predict_crops(data.copy(), rev_prior_yr_df, logit_coefs)
-    data_out2 = predict_crops_rand(data.copy(), rev_prior_yr_df, logit_coefs)
-    
-    data_out_all = pd.concat((data_out_all, data_out.assign(year=year)))
-    data_out2_all = pd.concat((data_out2_all, data_out2.assign(year=year)))
-
-# %%
-out_comp = pd.concat((data_out_all.assign(grp = 'max_p'), data_out2_all.assign(grp='rand')))
-
-# %%
-comp_count = out_comp.groupby(['Crop_Choice','year','grp'])['parcel_id'].count().reset_index()
-
-# %%
-# sns.relplot(data_out_all
-sns.catplot(comp_count,x='year',y='parcel_id', col='Crop_Choice', col_wrap=3, hue='grp',
+sns.catplot(count_comp,x='year',y='parcel_id', col='name', col_wrap=3, hue='grp',
             kind='bar', #color='tab:blue',
             sharey=False
            # facet_kws={'sharey': False, 'sharex': True}
 )
 
-# sns.histplo
 
-
-    # %%
-    # crop choice model uses "_" instead of " "
-    # the irrigation model set up uses " "
-
-    # data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
-    # # update naming of Corn
-    # data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
-    # # save output with only parcel and crop choice
-    # data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 

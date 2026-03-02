@@ -441,6 +441,10 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
 # %% [markdown]
 # # Define groundwater elevation sampling
+#
+# **The stata coefficients were estimated using DTW in fall that is in meters NOT in feet**  
+#
+# **Fall DTW is for crop choice and should be DTW in meters**
 
     # %%
     model_ws_last = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date()))
@@ -454,8 +458,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # subset to 1 month of output
     # determine dates for fall sampling
     fall_dates = m_dates[m_dates.index.month==10]
-    # determine dates for spring sampling
-    spring_dates = m_dates[m_dates.index.month==3]
+
 
 
 # %% [markdown]
@@ -502,12 +505,25 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # data['wy_dc'] = np.where(data['year'] == 2020, 1, 0) # should be pulled from Sac WY type data instead
     data['wy_dc'] = wyt.loc[wyt.WY==year, 'wy_dc'].values[0]
     # update DTW to use simulated value instead of contoured
-    well_dtw_merge = well_dtw[['UniqueID','dtw_ft']].rename(columns={'dtw_ft':'dtwfa'})
+    well_dtw_merge = well_dtw[['UniqueID','dtw_ft']]
+    # the DTW used in crop choice should be in meters not ft
+    well_dtw_merge['dtwfa'] = well_dtw_merge.dtw_ft * 0.3048
+
     data = data.drop(columns=['dtwfa', 'dtwsp'])
     data = data.merge(well_dtw_merge, left_on='parcel_id',right_on='UniqueID')
     
     # Import prior year revenue data by crop
     rev_prior_yr_df = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr.csv"))
+
+    # TO DO: Yusuke wants this to be to the nearest year
+    rev_prior_yr_all = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr_all.csv"))
+    rev_prior_yr_all = rev_prior_yr_all.rename(columns={'crop_cat':'Crop_Eq'})
+    # identify nearest year to use revenue
+    rev_prior_yr_all['year_offset'] = (rev_prior_yr_all.year-year).abs()
+    # select the year that is closest in and use the lower year in a tie.
+    rev_prior_yr_df = rev_prior_yr_all.sort_values(['year_offset', 'year']).drop_duplicates('Crop_Eq', keep='first')
+    rev_prior_yr_df = rev_prior_yr_df.reset_index(drop=True).drop(columns=['year_offset', 'year'])
+
 
 # %% [markdown]
 # Of note is that the simulated DTW for fall is 4x time greater than the observed so we may see a sharp drop in crops because of this.
@@ -543,6 +559,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     data_out['Crop_Choice'] = data_out.Crop_Choice.str.replace('_',' ')
     # update naming of Corn
     data_out.Crop_Choice = data_out.Crop_Choice.str.replace('Corn  ','Corn, ')
+    # we should include the DTW data point used for comparison
+    # add depth to water information to the output
+    data_out = data_out.merge(well_dtw[['UniqueID','dtw_ft']].rename(columns={'UniqueID':'parcel_id'}))
     # save output with only parcel and crop choice
     data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
@@ -558,6 +577,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # The depth to water function should sample from the previous model run which may be a year or less long.
 #
 # The original get_dtw function was set up assuming a continuous model run which won't be the case.
+#
 
     # %%
     # get head value from last 30 days to avoid using extreme single day value

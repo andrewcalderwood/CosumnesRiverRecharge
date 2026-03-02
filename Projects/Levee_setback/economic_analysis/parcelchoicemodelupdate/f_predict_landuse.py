@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# %%
 """
 Created on Wed Nov  8 16:52:58 2023
 
@@ -85,7 +86,7 @@ def predict_crops(data, rev_prior_yr_df, logit_coefs, return_prob=False):
     # not going to extract probabilities because that should be reviewed/processed elsewhere
     return data[['parcel_id', 'Crop_Choice']]
 
-# %% 
+# %%
 
 def predict_crop_probs(data, rev_prior_yr_df, logit_coefs):
     ''' Predict crop choice based on input variables
@@ -190,7 +191,7 @@ def predict_crops_alt_rand(data):
     data['Crop_Choice'] = np.array(crops_N)[crop_rand]
     return data[['parcel_id', 'Crop_Choice']]
 
-    
+
 # %%
 
 def predict_crops_rand(data, rev_prior_yr_df, logit_coefs, return_prob=False):
