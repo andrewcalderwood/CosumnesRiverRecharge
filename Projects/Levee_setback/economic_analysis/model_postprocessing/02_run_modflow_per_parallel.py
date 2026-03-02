@@ -17,7 +17,7 @@ loadpth = run_dir +'/Cosumnes/Economic/'
 folders = list()
 
 model_nam = 'input_write_2014_2022'
-for scen in ['R200', 'R203']:
+for scen in ['R200']:
 # scen = 'R200'
     # it is probably better to create a slightly different file name then to copy these over for a set scenario
     econ_model_ws = join(loadpth, model_nam+'_'+scen, 'crop_modflow')
@@ -30,7 +30,7 @@ for scen in ['R200', 'R203']:
     # set complete filepaths to have more flexibility on the command
     folders_run = (econ_model_ws+'/'+folders_run).tolist()
 
-folders = folders + folders_run
+    folders = folders + folders_run
 # print(folders, sep='\n')
 
 # %%

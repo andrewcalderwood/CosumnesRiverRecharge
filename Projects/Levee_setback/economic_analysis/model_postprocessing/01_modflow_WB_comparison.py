@@ -112,6 +112,10 @@ strt_date, end_date, dt_ref = get_dates(m.dis, ref='strt')
 
 
 # %%
+dt_ref['totim'] = (dt_ref.dt-dt_ref.dt.iloc[0]).dt.days+1
+
+
+# %%
 # I've only ran the 2014-2020 model now, switch to 2014-2022 later
 
 wb, out_cols, in_cols = clean_wb(base_model_ws, dt_ref)
@@ -133,20 +137,24 @@ def overview_plt(wb):
 
 
 # %%
-overview_plt(wb)
+# overview_plt(wb)
+overview_plt(wb.resample('MS').sum())
 
 
 # %% [markdown]
 # # Iterate over different economic runs
-# There isn't output for the flow budget from OWHM or hob out because I turned them off thinking I wouldn't need to check them.  
-# - turns out it was just because the 2014-2022 base run didn't have the manual edit to the bas file. Should try to add this for future runs.
 #
-# The models take too long to to turn back on and re-run so I should plan to just run zonebudget with the cbc file for periods available and check heads at select locations. Maybe start by sampling heads because this might be faster if I choose just a few representative points. -> look at code that extracts simulated time series for HOB wells in oneto denier stream seepage
+# Goal: 
+# - check change in storage is consistent, i.e., overall mass balance is consistent
+# - check that pumping dynamics are consistent on seasonal and annual basis, timing will be different due to daily vs timed irrigation periods
+# - recharge may be the most affected due to larger irrigation events and also because the SWB is different between native and non-native and that irrigated lands have a simpler SWB run in the winter. Currently soil moisture is reset to field capacity (I think, maybe wilting point) instead of passing the actual soil moisture from previous run end.
+#
+#
 
 # %%
 loadpth = run_dir +'/Cosumnes/Economic/'
 model_nam = 'input_write_2014_2022'
-scen = 'R204'
+scen = 'R200'
 # it is probably better to create a slightly different file name then to copy these over for a set scenario
 econ_model_ws = join(loadpth, model_nam+'_'+scen, 'crop_modflow')
 
@@ -166,7 +174,7 @@ all_run_dates = pd.read_csv(join(econ_model_ws, 'all_run_dates.csv'))
 
 # %%
 wb_per_all = pd.DataFrame()
-for n, d in enumerate(all_run_dates.date[:-3]):
+for n, d in enumerate(all_run_dates.date[:-1]):
     # create locally referenced dt_ref file to avoid reloading dis
     dt_ref_per = dt_ref[(dt_ref.dt<=all_run_dates.date[n+1])&(dt_ref.dt>=d)].copy()
     dt_ref_per.kstpkper = list(zip(np.zeros(len(dt_ref_per),dtype=int), np.arange(len(dt_ref_per))))
@@ -177,17 +185,17 @@ for n, d in enumerate(all_run_dates.date[:-3]):
 # econ_ws_yr
 
 # %%
-overview_plt(wb_per_all)
+# overview_plt(wb_per_all)
+overview_plt(wb_per_all.resample('MS').sum())
 
 
 # %%
 wb_per_all_ann = wb_per_all.resample('YS-OCT').sum()
 wb_ann = wb.resample('YS-OCT').sum()
 
-
 # %%
-# overview_plt(wb_per_all_ann)
-# overview_plt(wb_ann)
+overview_plt(wb_per_all_ann)
+overview_plt(wb_ann)
 
 # should create overlay plots of major components, WEL, GHB_IN, RCH_IN, SFR_IN
 # high level overview shows order of magnitude is similar after accounting for difference in recharge due to scenario
@@ -200,56 +208,131 @@ wb_ann = wb.resample('YS-OCT').sum()
 # Take the hob package from the original run then sample the continuous time series for select wells fromt he original run and baseline model connect run.
 
 # %%
-def nse(targets,predictions):
-    return 1-(np.sum((targets-predictions)**2)/np.sum((targets-np.mean(predictions))**2))
-
-def clean_hob(model_ws):
-    hobout = pd.read_csv(join(model_ws,'MF.hob.out'),delimiter=r'\s+', header = 0,names = ['sim_val','obs_val','obs_nam'],
-                         dtype = {'sim_val':float,'obs_val':float,'obs_nam':object})
-    hobout[['Sensor', 'spd']] = hobout.obs_nam.str.split('p',n=2, expand=True)
-    hobout['kstpkper'] = list(zip(np.full(len(hobout),0), hobout.spd.astype(int)))
-    hobout = hobout.join(dt_ref.set_index('kstpkper'), on='kstpkper')
-    hobout.loc[hobout.sim_val.isin([-1e30, -999.99, -9999]), 'sim_val'] = np.nan
-    hobout = hobout.dropna(subset='sim_val')
-    hobout['error'] = hobout.obs_val - hobout.sim_val
-    hobout['sq_error'] = hobout.error**2
-    
-    return(hobout)
-
-
-# %%
+# load dataset with pre-processed info
 obs_df = pd.read_csv(join(base_model_ws, 'input_data','all_obs_grid_prepared.csv'))
+# find information on just sites
+wlm_cols =  obs_df.columns[obs_df.columns.str.contains('wlm')].tolist()
+sites_df = obs_df.drop_duplicates('site_code').drop(columns=['date','gwe','obs_nam']+wlm_cols)
+obs_sites = sites_df.site_code.unique()
+sites_df.shape
 
-# obs_df.groupby('site_code')['gwe'].count()
-obs_sites = obs_df.site_code.unique()
-obs_sites.shape
+# 1 based row, columns
+# get 0-based index
+sites_df[['i','j','k']] = sites_df[['row','column','layer']] - 1
+# create tuple for time series sampling
+sites_idx = list(zip(sites_df.k, sites_df.i, sites_df.j))
+
+len(sites_idx)
 
 # %%
 hobout = clean_hob(base_model_ws, dt_ref, split_c='.')
 # hobout
 
 # %%
-# # find where lake existed
-# lak_lay, lak_row, lak_col = np.where(lakarr[0]==1)
-# lak_kij = pd.DataFrame(np.transpose(np.where(m.lak.lakarr.array[0]==1)), columns=['k','i','j'])
-# # get first layer below lake cells
-# lak_kij = (lak_kij.groupby(['i','j']).max()+1).reset_index()
-# # create tuples for sampling
-# lak_idx = list(zip(lak_kij.k, lak_kij.i, lak_kij.j))
+from hyd_utility import hob_fit_scatter
 
 # %%
-def get_lak_head(hdobj, lak_idx):
+# hob_fit_scatter(hobout)
+
+# %%
+dt_ref_mon = dt_ref[dt_ref.dt.dt.day==1]
+mon_kper = dt_ref_mon.kstpkper.tolist()
+
+# %%
+# pretty slow to load (<1 min though)
+hdobj = flopy.utils.HeadFile(base_model_ws+'/MF.hds')
+spd_stp = hdobj.get_kstpkper()
+times = hdobj.get_times()
+# cbc = base_model_ws+'/MF.cbc'
+
+# %%
+def get_ts_head(hdobj, cell_idx):
     """
     Return the spatially averaged head for the maximum head at the input locations (idx)
     hdobj: flopy head object
     idx: list of tuples as (layer, row, column)
     """
     # get heads under the lake
-    lak_ts = hdobj.get_ts(lak_idx)
-    lak_ts_df = pd.DataFrame(lak_ts, columns=['totim']+lak_idx)
-    lak_ts_df = lak_ts_df.set_index('totim')
-    lak_ts_df = lak_ts_df.melt(ignore_index=False)
-    lak_ts_df[['k','i','j']] = lak_ts_df.variable.tolist()
-    lak_ts_df = lak_ts_df.drop(columns='variable') # drop to speed up groupby
-    lak_head = lak_ts_df.groupby(['totim','i','j']).max().groupby('totim').mean()
-    return lak_head
+    hd_ts = hdobj.get_ts(cell_idx)
+    hd_ts_df = pd.DataFrame(hd_ts, columns=['totim']+cell_idx)
+    hd_ts_df = hd_ts_df.set_index('totim')
+    hd_ts_df = hd_ts_df.melt(ignore_index=False)
+    hd_ts_df[['k','i','j']] = hd_ts_df.variable.tolist()
+    hd_ts_df = hd_ts_df.drop(columns='variable') # drop to speed up groupby
+    # lak_head = lak_ts_df.groupby(['totim','i','j']).max().groupby('totim').mean()
+    return hd_ts_df
+
+
+# %%
+# might be more effective to sample on a monthly scale if possible
+tic = time.time()
+obs_ts_df = get_ts_head(hdobj, sites_idx)
+toc = time.time()
+print('Time was %.2f min' %((toc-tic)/60))
+# add info on date
+obs_ts_df = obs_ts_df.reset_index().merge(dt_ref)
+
+
+# %%
+
+obs_ts_df_all = pd.DataFrame()
+for n, d in enumerate(all_run_dates.date[:-1]):
+    # create locally referenced dt_ref file to avoid reloading dis
+    dt_ref_per = dt_ref[(dt_ref.dt<=all_run_dates.date[n+1])&(dt_ref.dt>=d)].copy()
+    dt_ref_per.kstpkper = list(zip(np.zeros(len(dt_ref_per),dtype=int), np.arange(len(dt_ref_per))))
+    dt_ref_per['totim'] = (dt_ref_per.dt-dt_ref_per.dt.iloc[0]).dt.days+1
+    
+    econ_ws_yr =join(econ_model_ws, d)
+    hdobj_yr = flopy.utils.HeadFile(econ_ws_yr+'/MF.hds')
+    obs_ts_df_yr = get_ts_head(hdobj_yr, sites_idx)
+    obs_ts_df_yr = obs_ts_df_yr.reset_index().merge(dt_ref_per)
+
+    obs_ts_df_all = pd.concat((obs_ts_df_all, obs_ts_df_yr))
+
+# %% [markdown]
+# ## simulated head comparison
+#
+# Main goal: show connected model is on par with original model.
+#
+# I made a version with observations as well but this isn't directly helpful, it generally shows magnitude is met in most areas but we undersimulate on the lower Cosumnes floodplain area. Should look into the reason why the local model does this better than regional.
+
+# %%
+
+# %%
+obs_comp = obs_ts_df_all.merge(sites_df[['i','j','k','site_code']])
+
+# %%
+# concat obs original and model connect baseline for comparison
+obs_comp = pd.concat((obs_ts_df_all.assign(name='scenario'), 
+           obs_ts_df.assign(name='original')))
+
+obs_comp = obs_comp.merge(sites_df[['i','j','k','site_code']])
+
+# could think about adding in obs heads as wells for comparison
+obs_df_join = obs_df.rename(columns={'date':'dt','gwe':'value'})[['dt','value','site_code']]
+
+# obs_comp = pd.concat((obs_comp, obs_df_join.assign(name='observed')))
+
+# %%
+import seaborn as sns
+# obs_comp
+
+# %%
+# break up hydrographs by region
+sites_df.dem_elev.hist()
+high_sites = sites_df[sites_df.dem_elev>=20].site_code
+mid_sites = sites_df[(sites_df.dem_elev>=10)&(sites_df.dem_elev<20)].site_code
+low_sites = sites_df[sites_df.dem_elev<10].site_code
+
+
+# %%
+sns.relplot(obs_comp[obs_comp.site_code.isin(low_sites)], x='dt', y='value', hue='name',col='site_code',col_wrap=4, kind='line')
+
+
+# %%
+sns.relplot(obs_comp[obs_comp.site_code.isin(mid_sites)], x='dt', y='value', hue='name',col='site_code',col_wrap=4, kind='line')
+
+
+# %%
+sns.relplot(obs_comp[obs_comp.site_code.isin(high_sites)], x='dt', y='value', hue='name',col='site_code',col_wrap=4, kind='line')
+

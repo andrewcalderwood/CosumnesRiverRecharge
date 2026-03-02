@@ -18,9 +18,10 @@
 # 1. Run the crop choice model
 # 2. Run the soil water budget optimization
 # 3. Update WEL/RCH packages then run MF
-# 4. Start the next year
+# 4. Re-run the soil water budget without optimization applying the previous irrigation rates to get the actual profit and to account for crop change
+# 5. Start the next year
 #
-# And run different management and/or recharge scenarios.
+# And run different management and/or recharge scenarios. This is done via the batch file and specifying which model workspace is used.
 
 # %%
 import sys

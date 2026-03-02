@@ -43,7 +43,7 @@ def param_load(model_ws, file_dir, file_name):
     return(params)
 
 
-# %% Post-processing
+# %%
 
 def clean_hob(model_ws, dt_ref, split_c = 'p', obs_id_spd=True):
     """
@@ -71,6 +71,9 @@ def clean_hob(model_ws, dt_ref, split_c = 'p', obs_id_spd=True):
     hobout['sq_error'] = hobout.error**2
     
     return(hobout)
+
+
+# %% Post-processing
 
 
 def get_dates(dis, ref='end'):
@@ -124,6 +127,9 @@ def get_dates(dis, ref='end'):
 
     return(strt_date, end_date, dt_ref)
     
+
+
+# %%
 def clean_wb(model_ws, dt_ref):
     """Give a volumetric water budget output from MF-OWHM,
     return the water budget with a datetime column and 
@@ -157,7 +163,8 @@ def clean_wb(model_ws, dt_ref):
     return(wb, wb_out_cols, wb_in_cols)
     
     
-    
+
+# %%
 def read_gage(gagenam):
     """Load the Lake Gage file """
     gage = pd.read_csv(gagenam, skiprows=1, delimiter = r'\s+', engine='python')
@@ -173,6 +180,9 @@ def read_gage(gagenam):
     gage['In-Out'] = gage.Total_In - gage.Total_Out
     return(gage)
     
+
+
+# %%
     
 def clean_sfr_df(model_ws, dt_ref, pd_sfr=None, name='MF'):
     """Load sfr.out file and create new columns """
