@@ -1,3 +1,4 @@
+# %%
 from os.path import join, basename, dirname, exists
 import pandas as pd
 
@@ -66,30 +67,30 @@ if __name__ == "__main__":
 
 
 # %%
-import subprocess
-import concurrent.futures
-import os
+# import subprocess
+# import concurrent.futures
+# import os
 
-def run_script_in_dir(directory, script_command):
-    """
-    Function to run a shell command in a specific directory.
+# def run_script_in_dir(directory, script_command):
+#     """
+#     Function to run a shell command in a specific directory.
 
-    Args:
-        directory (str): The path to the working directory.
-        script_command (list or str): The command to run (list is safer).
-    """
-    print(f"Starting in {directory}")
-    try:
-        # Use subprocess.run with the cwd argument
-        # 'shell=True' might be needed for some batch file specifics or chained commands (e.g., 'cd X && mycommand')
-        # However, passing the command as a list and using 'cwd' is generally preferred for safety.
-        # For a simple batch file, you might use ['my_script.bat']
-        result = subprocess.run(script_command, cwd=directory, check=True, capture_output=True, text=True, shell=True)
-        print(f"Finished {directory}. Output: {result.stdout}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error in {directory}: {e.stderr}")
-    except Exception as e:
-        print(f"An unexpected error occurred in {directory}: {e}")
+#     Args:
+#         directory (str): The path to the working directory.
+#         script_command (list or str): The command to run (list is safer).
+#     """
+#     print(f"Starting in {directory}")
+#     try:
+#         # Use subprocess.run with the cwd argument
+#         # 'shell=True' might be needed for some batch file specifics or chained commands (e.g., 'cd X && mycommand')
+#         # However, passing the command as a list and using 'cwd' is generally preferred for safety.
+#         # For a simple batch file, you might use ['my_script.bat']
+#         result = subprocess.run(script_command, cwd=directory, check=True, capture_output=True, text=True, shell=True)
+#         print(f"Finished {directory}. Output: {result.stdout}")
+#     except subprocess.CalledProcessError as e:
+#         print(f"Error in {directory}: {e.stderr}")
+#     except Exception as e:
+#         print(f"An unexpected error occurred in {directory}: {e}")
 
 # %%
 

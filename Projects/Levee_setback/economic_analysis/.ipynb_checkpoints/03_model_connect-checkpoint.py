@@ -107,6 +107,9 @@ add_path(join(git_dir,'python_utilities'))
 # %%
 from report_cln import base_round
 from mf_utility import get_layer_from_elev
+import flopy_utilities
+reload(flopy_utilities)
+from flopy_utilities import update_bas_options
 
 # %%
 import parcelchoicemodelupdate.f_predict_landuse
@@ -130,7 +133,7 @@ from functions.f_gw_dtw_extract import calc_simple_dtw
 
 # %%
 # from functions import data_functions
-# reload(data_functions)
+# reload(functions.data_functions)
 from functions.data_functions import read_crop_arr_h5
 
 from functions.data_functions import init_h5
@@ -143,15 +146,15 @@ from functions.output_processing import get_local_data, out_arr_to_long_df
 from functions.output_processing import get_wb_by_parcel
 
 # %%
-# import reference_swb_ag_winter 
-# reload( reference_swb_ag_winter )
+import reference_swb_ag_winter 
+reload( reference_swb_ag_winter )
 from reference_swb_ag_winter import run_swb_ag_winter
 
 
 # %%
 # option 2 is to call a function
-# import f_summarize_output
-# reload(f_summarize_output)
+import f_summarize_output
+reload(f_summarize_output)
 from f_summarize_output import summarize_output_year
 
 # %% [markdown]
@@ -375,7 +378,11 @@ os.makedirs(join(model_ws,'crop_soilbudget','field_dtw'),exist_ok=True)
 
 # save log by date so we can see old versions
 os.makedirs(join(model_ws, 'log'), exist_ok=True)
-sys.stdout = open(join(model_ws, 'log', 'model_connect_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
+if 'ipykernel' in in_data[0]:
+    print('print to jupyter')
+else:
+    print('printing remaining output to log file')
+    sys.stdout = open(join(model_ws, 'log', 'model_connect_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
 print(model_ws)
 print(scenario_name)
@@ -525,10 +532,6 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     rev_prior_yr_df = rev_prior_yr_df.reset_index(drop=True).drop(columns=['year_offset', 'year'])
 
 
-# %% [markdown]
-# Of note is that the simulated DTW for fall is 4x time greater than the observed so we may see a sharp drop in crops because of this.
-# - it leads to an increase in unclassified fallow
-
     # %%
     # expect updated column name for pod
     # add column to POD that was available in previous dataset
@@ -540,9 +543,16 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # need to add columns to data to inform last years crop from loop
     if m_per == 1:
-        stata_first = pd.read_csv(join(proj_dir, 'model_inputs', 'stata_input_2018.csv'))
+        # the STATA data has results for 3726 fields, not the full 4,000 fields
+        # stata_first = pd.read_csv(join(proj_dir, 'model_inputs', 'stata_input_2018.csv'))
+        # the full 4,000 fields comes from a combination of years using the first year where a crop is specified
+        print('Using stata input initial')
+        stata_first = pd.read_csv(join(proj_dir, 'model_inputs', 'stata_input_initial.csv'))
+        # where there is not a crop_cat_last, assume that crop_cat is valid
+        stata_first.loc[stata_first.crop_cat_last.isna(), 'crop_cat_last'] = stata_first.loc[stata_first.crop_cat_last.isna(), 'crop_cat']
         crop_cat_last = stata_first[['parcel_id','crop_cat_last', 'chosen']].replace(crop_dict)
         crop_cat_last = crop_cat_last.pivot_table(index='parcel_id',columns='crop_cat_last', values='chosen', fill_value=0)
+        # if a field is missing from the table then assume it is unclassified fallow?
 
     else:
         crop_cat_last =  pd.read_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year-1)+'.csv'), index_col=0)
@@ -565,6 +575,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # save output with only parcel and crop choice
     data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
+
     # %%
     # for the first year of crop prediction copy this backward three years (assume that it was static)
     # to allow for establishment irrigation code to run
@@ -580,6 +591,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 #
 
     # %%
+    # determine dates for spring sampling
+    spring_dates = m_dates[m_dates.index.month==3]
     # get head value from last 30 days to avoid using extreme single day value
     spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m_dim)
     
@@ -596,10 +609,14 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # %% [markdown]
 # The crop choice model didn't predict any corn.
 # - this submodel may need to be in a separate script to run multiprocessing (parallel) as this re-loads the entire active script each time.
+# - this would involve calling a batch file that then call the python file to do multiprocess of the python script
+# - the alternative would be to simply pre-define the SWB for the maximum possible range of DTW for each year then they would only need to be called instead of re-optimized.
 
     # %%
     crop_list = ['Corn','Alfalfa','Pasture','Misc Grain and Hay', 'Grape']
     # this is set up to essentially skip over Unclassified Fallow since we don't want to calculate the depth to water for it
+    # this is also skipping Other which should be accounted for by pulling the output from the original model
+    # for the crop, or should this be something else?
 
 
     # %%
@@ -661,8 +678,10 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
-    
-    # check profit/yield if annual or daily
+
+    for var in ['swb_output']:
+        name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name, groups=['wc','ETa', 'rp'])
 
 # %%
     
@@ -694,10 +713,10 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # %% [markdown]
 # 1. Load the representative results and sample for each field by crop type to back calculate the irrigation requirements. use the estimated irrigation as an input to the modflow model for pumping and percolation for recharge.
 #     -   use the DTW id to reference to the irrigation in the full array, need to group by SW, GW or mixed.
-#     -   if we wanted we could re-run the SWB one time with the specified irrigation rates to get the exact recharge rates with field specific values
+#     -   if we wanted we could re-run the SWB one time with the specified irrigation rates to get the exact recharge rates with field specific values (this should be done, and is partly implemented from when re-running for establishment irrigation)
 # 2. Run the modflow model to get the resultant DTW profile
 # 3. re-calculate the profit using the irrigation and actual DTW profile on a soil by soil basis (non-optimization) after running the next modflow chunk. Actually the re-run for the true profit could be done if profits aren't needed mid-simulation
-#   - this needs to be done still (active work)
+#
 
     # %%
     # load the processed dataframe with all datas
@@ -758,9 +777,19 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(model_ws,'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
+    # should review and decide if it helps to save this separately or if it is better to overwrite
+    # original files to avoid confusion
+
+    # %%
+    # check profit/yield if annual or daily, they are annual
+    # added hdf5 to track SWB output
+    for var in ['swb_output']:
+        name = join(model_ws,'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name, groups=['wc','ETa', 'rp'])
 
     # %%
     print('Re-running SWB with updated irrigation values for fields with establishment irrigation rates')
+    print('Calculates actual percolation for fields')
     # for crop in ['Alfalfa']:
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
@@ -811,9 +840,41 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
 
 
+    # %%
+    # load in data on init_wc
+    # the best way to save water budget output is likely to put them all in the same hdf5 file
+    # should this be the crop_soilbudget (isn't updated until end) or crop_soilbudget_est (correct dims)? 
+    fn = join(model_ws, 'crop_soilbudget_est', 'field_SWB', "swb_output_WY"+str(year)+".hdf5")
+    init_wc_all = pd.DataFrame()
+    for crop in crop_list:
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
+        yield_start = swb.ymd2dt(year, season.month_start, season.day_start, season.start_adj)
+        yield_end = swb.ymd2dt(year, season.month_end, season.day_end, season.end_adj)
+        # get the total extent of the irrigation season (calculation period)
+        crop_dates = pd.date_range(yield_start.min(), yield_end.max(), freq='D')
+        wc_all = read_crop_arr_h5(crop, fn, group='wc')
+        df = pd.DataFrame(wc_all, columns=crop_dates)
+        # sample the water content from the final time step
+        # init_wc = wc_all[-1,:]
+        init_wc = df[[yield_end.max()]]
+        # add info on UniqueID for ordering parcels
+        init_wc = pd.concat((init_wc,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)[['parcel_id']]),axis=1)
+        init_wc = init_wc.assign(crop=crop, year=year)
+        init_wc_all = pd.concat((init_wc_all, init_wc.melt(id_vars=['crop','year','parcel_id'], var_name='end_date',value_name='init_wc')))
+    # sort values to prepare for using as initial conditions for winter SWB
+    init_wc_all = init_wc_all.sort_values('parcel_id').reset_index(drop=True)
+
+    # for the ag SWB we also need to pull in the WC from fallow fields from the last date to start the next as there won't be irrig 
+    # reuslts for these fields
+
+# %%
+# for testing in function
+# init_wc_all.to_csv('temp_wc.csv', index=False)
+
 # %% [markdown]
 # ## RCH input
 #
+# Should explore to see if this is missing some of the extra recharge I include in the original model to account for floodplain inundation
     # %%
     print('Beginning MODFLOW input update')
 
@@ -827,15 +888,19 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # set date as index for sampling
     rch_df = rch_df.set_index('date')
     # we only need to assign rch when non-zero
-    rch_df = rch_df[rch_df.rch_rate!=0]
+    # rch_df = rch_df[rch_df.rch_rate!=0]
+    # actually need to keep the zero values in place to avoid being overwritten by "winter swb" rates
+
+# %%
+# # TODO: import irrigation and recharge estimates for row, cell (or fields) marked as other for the year
+# and apply input from original model
 
 # %% [markdown]
-# Take the combined dataframe to inform the recharge array with recharge from the irrigation season. The next step is to insert recharge from non-irrigated times and native lands.
+# Take the combined dataframe to inform the recharge array with recharge from the irrigation season. The next step is to insert recharge from non-irrigated times and native lands. The ag recharge was originally defined for the WY which meant recharge during the period of interest was missing, updated to run the same period as each year 4/1 to 3/31 next year.
 
 
-# %% [markdown]
-# run_swb_ag_winter seems to crash after renaming file paths to run model in m_nam subdirectory
-# - it might have been because it was trying to use the old model_ws instead of updated
+# %%
+# sample ending water content from irrigation season
 
     # %%
     ## add off-season (winter recharge) farmlands recharge 
@@ -844,7 +909,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     ## the only difference is that the ETc might need to be resampled
 
     # function that saves a csv with the output by unique field similar to the native land
-    ag_pc_df = run_swb_ag_winter(year, m_nam = m_nam, loadpth = loadpth)
+    ag_pc_df = run_swb_ag_winter(year, m_nam = m_nam, loadpth = loadpth, init_wc = init_wc_all)
 
     # long format to join with row,column
     ag_pc_df_long = ag_pc_df.melt(ignore_index=False, 
@@ -864,11 +929,16 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     ag_pc = ag_pc[ag_pc.rch_rate!=0]
 
 
+# %% [markdown]
+# Identify where the irrigated period SWB already provides percolation data and only provide in fill for the outer period. For fields where the land use is not defined or fallow then this will fill in the entire period. For fields with the irrigation SWB it should only fill in outside of the irrigation period.
+
     # %%
+    # this code seems to not be fully working because there are overlap dates for the same field
+# I accidentally included an inverse boolean term on the right_only statement
     # need to only keep dates with percolation where there is not already data from the optimized swb
     outer_join = rch_df[['UniqueID']].reset_index().merge(ag_pc[['UniqueID']].reset_index(), how = 'outer', indicator = True)
     # identify data that is on the right side only (ag winter recharge) 
-    ag_join = outer_join[~(outer_join._merge == 'right_only')].drop('_merge', axis = 1).drop_duplicates()
+    ag_join = outer_join[(outer_join._merge == 'right_only')].drop('_merge', axis = 1).drop_duplicates()
     
     # filter out the ag winter recharge to join to the dataframe
     ag_pc_include = ag_pc.reset_index().merge(ag_join, how='inner')
@@ -876,7 +946,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     ag_pc_include = ag_pc_include.set_index('date')
 
     # %%
-    ## add native lands recharge
+    ## add native lands recharge and winter ag land precip recharge
     rch_all = pd.concat((rch_df, native_pc, ag_pc_include))
 
     ## add recharge due to MAR or other scenario
@@ -964,11 +1034,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         sp_last = hdobj.get_kstpkper()[-1]
         strt = hdobj.get_data(sp_last)
     
-    # for the first period we use dem as starting point
-    # if solver criteria are not met, the model will continue if model percent error is less than stoperror
+    # re-create basic file with last period heads as new starting heads
     bas_month = flopy.modflow.ModflowBas(model = m_month, ibound=ibound, strt = strt)
     # write bas input with updated starting heads
     bas_month.write_file()
+
+    # update basic input to save flow budget summary
+    update_bas_options(mf_ws, m_month.name, added_options = "BUDGETDB flow_budget.txt")
 
 # %%
 

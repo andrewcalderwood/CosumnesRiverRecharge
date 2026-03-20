@@ -216,6 +216,9 @@ for n, p in enumerate(['RCH_IN','WEL_OUT', 'SFR_IN']):
 # need to evaluate if due to loss of soil moisture passing or from more efficient irrigation
 
 # %% [markdown]
+# After re-running with fixed dtw for crop choice pumping is still fairly close even with more fields which is odd but maybe the added fields were lower usage? Recharge is still too low.
+
+# %% [markdown]
 # ## Do more direct comparison of pumping and recharge
 #
 # Want to see if pumping is fairly close and investigate why recharge seems slightly lower. Is this because of the change in irrigation style or because the soil moisture is not passed between runs so it resets and that has to refill before good percolation? Best practice might be to simply add in a way to assign input soil moisture and create simple csv style to save output for each in a subfolder.
@@ -289,6 +292,8 @@ def get_ts_head(hdobj, cell_idx):
 
 # %%
 # might be more effective to sample on a monthly scale if possible
+
+# took 13 minutes
 tic = time.time()
 obs_ts_df = get_ts_head(hdobj, sites_idx)
 toc = time.time()
@@ -335,7 +340,7 @@ obs_comp = obs_comp.merge(sites_df[['i','j','k','site_code']])
 # could think about adding in obs heads as wells for comparison
 obs_df_join = obs_df.rename(columns={'date':'dt','gwe':'value'})[['dt','value','site_code']]
 
-# obs_comp = pd.concat((obs_comp, obs_df_join.assign(name='observed')))
+obs_comp = pd.concat((obs_comp, obs_df_join.assign(name='observed')))
 
 # %%
 import seaborn as sns
@@ -360,3 +365,5 @@ sns.relplot(obs_comp[obs_comp.site_code.isin(mid_sites)], x='dt', y='value', hue
 # %%
 sns.relplot(obs_comp[obs_comp.site_code.isin(high_sites)], x='dt', y='value', hue='name',col='site_code',col_wrap=4, kind='line')
 
+
+# %%

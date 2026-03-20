@@ -102,8 +102,8 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # m_nam = 'input_write_2014_2020_R3'
     # m_nam = 'input_write_2014_2020'
-    m_nam = 'input_write_2014_2022_R203'
-    m_nam = 'input_write_2016_2022_R200'
+    m_nam = 'input_write_2014_2022_R204'
+    # m_nam = 'input_write_2016_2022_R200'
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
@@ -297,8 +297,10 @@ for n,year in enumerate(run_years):
 
 # %%
 # add info on crops and acreage to spring dtw
-dtw_spring_ref = dtw_spring.merge(parcels[['UniqueID','acres']]).merge(crop_all.rename(columns={'parcel_id':'UniqueID'}))
-# # add simpler crop name
+# there is an issue with crop_all dropping all rows because I added a column to save the dtw_ft used in the crop choice
+dtw_spring_ref = dtw_spring.merge(parcels[['UniqueID','acres']])
+dtw_spring_ref = dtw_spring_ref.merge(crop_all.rename(columns={'parcel_id':'UniqueID','dtw_ft':'dtw_ft_fall'}))
+# # # add simpler crop name
 dtw_spring_ref = dtw_spring_ref.merge(crop_name_dict[['Crop','pred_name']].rename(columns={'pred_name':'name','Crop':'crop'}), how='left')
 # where there is not a short name use the existing
 dtw_spring_ref.loc[dtw_spring_ref.crop.isna(),'crop'] = dtw_spring_ref.loc[dtw_spring_ref.crop.isna(),'name'] 
@@ -313,8 +315,8 @@ dtw_spring_ref.to_csv(join(out_dir, 'dtw_ft_spring_all.csv'))
 # %%
 crops = dtw_spring_ref.crop.unique()
 
-# for crop in crops:
-for crop in crops[[1]]:
+for crop in crops:
+# for crop in crops[[1]]:
     fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
     
     for n,year in enumerate(run_years):

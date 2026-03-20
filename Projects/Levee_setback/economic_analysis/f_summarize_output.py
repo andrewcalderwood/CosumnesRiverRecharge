@@ -66,6 +66,8 @@ from functions.data_functions import init_h5
 
 
 # %%
+import f_rep_swb_profit_opt
+reload(f_rep_swb_profit_opt)
 from f_rep_swb_profit_opt import load_run_swb
 
 
@@ -150,6 +152,10 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
     for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
+
+    for var in ['swb_output']:
+        name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+        init_h5(name, groups=['wc','ETa', 'rp'])
 
     # %%
     model_ws_last = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per-1].date.date()))
@@ -338,7 +344,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
         sys.stdout.flush()
 
     # %%
-    name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+    name = join(model_ws, 'crop_soilbudget', 'field_SWB', 'profit' + '_WY'+str(year)+'.hdf5')
     with h5py.File(name) as dset:
         crop_list = list(dset['array'].keys())
 

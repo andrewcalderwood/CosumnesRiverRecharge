@@ -85,7 +85,9 @@ crop='Corn'
 crop = 'Misc Grain and Hay'
 
 # %%
-var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+# var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year=year)
+
 
 # %%
 
@@ -104,7 +106,7 @@ nper = (end_date-strt_date).days +1
 # the modflow model will be run for the periods between the specified irrigation optimizer dates
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Regional/'
 
-model_ws = loadpth + 'crop_soilbudget/'+crop+'_'+str(strt_date.date())
+# model_ws = loadpth + 'crop_soilbudget/'+crop+'_'+str(strt_date.date())
 
 
 # %%
@@ -120,30 +122,36 @@ Kc_df = swb.get_Kc_dates(Kc_dates_c, Kc_c)
 
 
 # %%
-rain, ETo_df = swb.load_hyd(year, dates)
+rain, ETo_df = swb.load_hyd(dates)
 
 # get the crop ET
 ETc = ETo_df.values*Kc_df.Kc.values
 
 # %%
-## Load crop type predictions
-
-# double check with Yusuke whether crop2016 or crop_cat2016 is the original or predicted
-crop_wide = pd.read_excel(join(proj_dir, 'crop_prediction', 'wide_dataset.xls'))
-# if a dataset has a diversion then enable decision between SW and GW
-# very few parcels are considered to have a POD (0.5%)
-frac_no_pod = (crop_wide.pod=='No Point of Diversion on Parcel').sum()/len(crop_wide)
-print('%.2f parcels have no POD' %(frac_no_pod*100))
-# crop_wide.waterbody_type.unique()
-# filter to relevant columns for SWB
-keep_cols = crop_wide.columns.str.extract(r'(crop\d{4})').dropna().iloc[:,0].tolist()
-crop_wide = crop_wide.set_index(['parcel_id','pod'])[keep_cols]
-# crop_wide = crop_wide.set_index(['parcel_id','pod'])[['crop2016']]
+# updated as wide_dataset.xls isn't on box now?
+stat_pred = pd.read_csv(join(proj_dir,'model_results','stata_predicted_probabilities.csv'))
+crop_chosen = stat_pred[stat_pred.chosen==1]
+crop_long = crop_chosen.rename(columns={'crop':'name'})
 
 # %%
-# long format then filter for year
-crop_long = crop_wide.melt(ignore_index=False,value_name='name', var_name='crop_yr')
-crop_long['year'] = crop_long.crop_yr.str.extract(r'(\d+)').astype(int)
+# ## Load crop type predictions
+
+# # double check with Yusuke whether crop2016 or crop_cat2016 is the original or predicted
+# crop_wide = pd.read_excel(join(proj_dir, 'crop_prediction', 'wide_dataset.xls'))
+# # if a dataset has a diversion then enable decision between SW and GW
+# # very few parcels are considered to have a POD (0.5%)
+# frac_no_pod = (crop_wide.pod=='No Point of Diversion on Parcel').sum()/len(crop_wide)
+# print('%.2f parcels have no POD' %(frac_no_pod*100))
+# # crop_wide.waterbody_type.unique()
+# # filter to relevant columns for SWB
+# keep_cols = crop_wide.columns.str.extract(r'(crop\d{4})').dropna().iloc[:,0].tolist()
+# crop_wide = crop_wide.set_index(['parcel_id','pod'])[keep_cols]
+# # crop_wide = crop_wide.set_index(['parcel_id','pod'])[['crop2016']]
+
+# %%
+# # long format then filter for year
+# crop_long = crop_wide.melt(ignore_index=False,value_name='name', var_name='crop_yr')
+# crop_long['year'] = crop_long.crop_yr.str.extract(r'(\d+)').astype(int)
 
 
 # %%
@@ -202,7 +210,7 @@ gen_dict['irr_days'] = np.arange(0, (n_irr*gap_irr-1), gap_irr).astype(int) # Ca
 
 # %%
 # decide later best way to identify but in future the predicted data will be available for each year
-crop_in = crop_long[crop_long.year==2016].reset_index()
+crop_in = crop_long[crop_long.year==2018].reset_index()
 
 # %%
 avg_irr_eff = pd.read_csv(join(proj_dir, 'model_inputs', 'avg_irr_eff_by_crop.csv'),index_col=0)
@@ -222,9 +230,9 @@ grid_crop = grid_soil.merge(soil_crop[['UniqueID']])
 
 
 # %%
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-model_ws = loadpth+'historical_simple_geology_reconnection'
-model_ws = loadpth+'strhc1_scale'
+loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
+model_ws = loadpth+'input_write_2014_2022'
+# model_ws = loadpth+'strhc1_scale'
 load_only = ['DIS','BAS6']
 m = flopy.modflow.Modflow.load('MF.nam', model_ws=model_ws, 
                                 exe_name='mf-owhm.exe', version='mfnwt', load_only=load_only)
@@ -302,7 +310,7 @@ for n in np.arange(nper):
 # %%
 import swb_functions
 reload(swb_functions)
-from swb_functions import prep_soil_dict, calc_S, calc_pc, calc_yield, calc_profit,  run_swb, mak_irr_con
+from swb_functions import prep_soil_dict, calc_S, calc_pc, calc_yield, calc_profit,  run_swb, mak_irr_con, mak_irr_con_adj
 
 
 # %%
@@ -418,17 +426,44 @@ from scipy.optimize import minimize
 #
 
 # %%
+gw_con = 100
+sw_con = 100
+# over-ride the default sw_con, gw_con with crop specific values and use more stringent of the pair
+# input irrigation constraints to compare against regional constraints
+irr_con_in = var_irr.set_index('irrigation')['depth_total']
+# print(irr_con_in)
+if irr_con_in.loc['GW'] < gw_con:
+    gw_con = irr_con_in.loc['GW']
+if irr_con_in.loc['SW'] < sw_con:
+    sw_con = irr_con_in.loc['SW']
 
 
-bounds = Bounds(lb = 0)
+print(gw_con, sw_con)
 
-linear_constraint = mak_irr_con(soil_ag, n_irr, sw_con=100, gw_con=100)
+# %%
+
+# a scalar indicates it is applied to all variables
+# upper bound here based on crop reasonable upper limit
+bounds = Bounds(lb = 0, ub = (var_irr.depth_max.max()/12)*0.3048)
+
+# to limit based on the actual water that will be applied
+linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con/gen.irr_eff_mult, sw_con = sw_con/gen.irr_eff_mult) 
+
+# %%
+# bounds = Bounds(lb = 0)
+
+# linear_constraint = mak_irr_con(n_irr, sw_con=100, gw_con=100)
+
+
+# %%
 
 # %% [markdown]
 # Test minimizer tolerance for estimating optimal irrigation.
 
 # %%
-for tol in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
+# for tol in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
+for tol in [0.1, 0.01,0.001, 0.0001,  0.00001  ]:
+
     out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr), method='trust-constr',
             constraints = [linear_constraint],
             bounds=bounds,
@@ -450,25 +485,86 @@ out = minimize(run_swb, irr_lvl, args = (soil, gen, rain, ETc, dtw_arr),method='
         tol = tol,
 #          options={'verbose':1}
         )    
+irr_trst_costr = out.x
+# print(out.fun)
 print('Optimization time %.2f sec' %out.execution_time)
 
 # %%
-tol = 0.01
+out.fun
+
+# %%
 t0 = time.time()
 out_new = minimize(run_swb, irr_lvl, args=(soil, gen, rain, ETc, dtw_arr), 
+       # you would need to be able to solve for the function derivative which is not readily possible
+                   # with the non-linear, essentially piece-wise soil water budget
          #jac=func_deriv, 
          constraints=[linear_constraint], 
-         bounds = bounds,
-         tol = 1E-4,
+         # bounds = bounds,
+         tol = 1E-6,
          method='SLSQP', options={'disp': True})
+irr_slsqp = out_new.x
 
 t1 = time.time()
 print('Optimization time %.2f sec' %(t1-t0))
 
+# it seems like the bounds were forcing slsqp to zero for Misc. grain and hay and it went very slow when turned off.
+
+# %%
+irr_slsqp
 
 # %% [markdown]
 # SLSQP runs slightly faster (77 to 58 sec), but requires a tighter tolerance because with 1E-2 it didn't finish solving and at 1E-4 it did (1E-3 was slightly off too). (Pasture)
 # - not a clear way to estiamte jacobian (gradient) since it is a pretty nonlinear function
+# - now when I run SLSQP it runs very quick but is giving back results.
+
+# %%
+from scipy.optimize import differential_evolution
+
+
+# %%
+water_source = 'gw', # 'sw'
+water_source='mixed'
+
+# %%
+# # the linear cosntraint is causing the issue for differential evolution
+# tol = 0.01
+# t0 = time.time()
+
+# out_alt = differential_evolution(
+#     run_swb,
+#     bounds=bounds,
+#     args=(soil, gen, rain, ETc, dtw_arr, water_source),
+#     constraints=[linear_constraint],   # LinearConstraint accepted here
+#     maxiter=600,
+#     tol=0.01,
+#     seed=42,
+#     workers=1,          # see parallelism note below
+#     polish=True,        # runs a local gradient step at end to refine
+#     init='latinhypercube'  # better initial coverage than random
+# )
+# irr_evo = out_alt.x
+
+# t1 = time.time()
+# print('Optimization time %.2f sec' %(t1-t0))
+
+# # this is actually not faster than the constrained trust region when increasing maxiter since it failed before
+# # but it seems like the constraint might not be coming in properly?
+
+# %%
+# out_alt.fun
+# out_alt
+
+# %%
+plt.plot(irr_lvl,label='Original')
+
+plt.plot(irr_trst_costr,label='Trust')
+plt.plot(irr_slsqp,label='SLSQP', linestyle='--')
+# plt.plot(irr_evo,label='Evolutionary', linestyle='--')
+plt.legend()
+
+
+# %% [markdown]
+# Comparing evolutionary (without linear constraint initially) to SLSQP and trust-constr, it takes longer and doesn't produce reasonable results. Also it results in SW when it should be just GW
 
 # %%
 # pi, pc, K_S = run_swb(out.x, soil, gen, rain, ETc, dtw_arr, arrays=True)
@@ -518,6 +614,8 @@ summarize_out(out_new.x)
 # - If we go to parallel solving then the irrigation optimizer can be grouped by crop then major soil group so that the starting irrigation rates are most similar.
 
 # %%
+# from joblib import Parallel, delayed
+
 
 # %%
 t0 = time.time()
@@ -535,8 +633,11 @@ etc_arr = np.zeros((nper))
 for n in np.arange(nper):
     etc_arr[n] = ETc[n]
 
+
 # for ns in np.arange(0,nfield_crop):
 for ns in np.arange(0,10):
+# def optimize_field(ns):
+
     soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
     nfield = soil_ag.shape[0]
 
@@ -576,6 +677,10 @@ for ns in np.arange(0,10):
         t_all[ns] = out.execution_time
     # print final results
     print('Soil ', str(ns),'%.2f' %(-out.fun),'$ ,in %.2f' %(out.execution_time/60),'min')
+    # return(ns, out)
+# didn't run due to error, doesn't seem like it would help much anyway
+# results = Parallel(n_jobs=3)(delayed(optimize_field)(ns) for ns in range(3))
+
 t1 = time.time()
 print('Total time was %.2f min' %((t1-t0)/60))
 

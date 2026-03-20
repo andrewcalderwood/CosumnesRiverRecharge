@@ -84,7 +84,7 @@ from functions.swb_functions import calc_yield, calc_profit, choose_water_source
 from functions.swb_functions import run_swb, mak_irr_con, mak_irr_con_adj
 
 # %%
-from functions.data_functions import init_h5, crop_arr_to_h5
+from functions.data_functions import init_h5, crop_arr_to_h5, read_crop_arr_h5
 
 
 # %%
@@ -103,7 +103,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # %%
 # # # # # # testing
-# year = int(2015)
+# year = int(2018)
 # crop='Grape'
 # # # # # crop='Corn'
 # # # crop='Alfalfa'
@@ -117,7 +117,6 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # # m_nam = 'input_write_2014_2022'
 # m_nam = 'input_write_2014_2022_R203'
-# # m_nam = 'input_write_2014_2020'
 # base_model_ws = join(loadpth, m_nam )
 # swb_ws = join(base_model_ws, 'crop_soilbudget')
 # crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
@@ -128,14 +127,11 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 #     crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
 #     crop_in = crop_in.merge(crop_in_previous)
         
-# # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
-# #                      index_col=0, parse_dates=['dt'])
-# dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
-#                     index_col=0, parse_dates=['date'])
-# dtw_df.columns = dtw_df.columns.astype(int)
 
 # soil_rep = True # True is for the complex dtw_df case
 # run_opt=True
+# soil_rep = False # True is for the complex dtw_df case
+# run_opt=False
 # field_id = 'parcels'
 
 # sw_con=100
@@ -144,9 +140,22 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # # # # load parcel data for soil_rep=False
 # # # # soil_rep=False
 
-# # # # dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
-# # # # dtw_df.index = pd.to_datetime(dtw_df.index)
-# # # # dtw_df.columns = dtw_df.columns.astype(int)
+# if soil_rep:
+#     # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
+#     #                      index_col=0, parse_dates=['dt'])
+#     dtw_df = pd.read_csv(join(base_model_ws, 'rep_crop_soilbudget','field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+#                         index_col=0, parse_dates=['date'])
+#     dtw_df.columns = dtw_df.columns.astype(int)
+# else:
+#     dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
+#     dtw_df.index = pd.to_datetime(dtw_df.index)
+#     dtw_df.columns = dtw_df.columns.astype(int)
+    # from functions.summarize_functions import format_irr_all, adj_irr_rates
+    # irr_gw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget',  'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
+    # irr_sw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
+
+# base_model_ws = swb_ws
+
 
 # %%
 ## simple representative DTW for linear steps 10 ft to 200 ft
@@ -163,9 +172,6 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # dtw_df =  pd.DataFrame(dtw_simple, dtw_avg.index)
 
 # plt.plot(dtw_simple[:,0])
-
-# %% [markdown]
-# Now that we are interested in making this run for the native land use perhaps then it may be time to create a class object to allow flexibility.
 
 # %%
 
@@ -457,6 +463,33 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
 #     #     # 2. save applied water for pumping
 #     #     # 3. save deep percolation
 
+# %% [markdown]
+# it doesn't make sense to insert a new initial water content to the optimized version because we'd have to average across fields. It does make sense to confirm that initial conditions in spring should be field water content after all the rain.  
+#
+# To provide more robust estimates of actual cost, the final SWB run should use the actual initial water content, this might result in slightly lower irrigation demand and/or slightly higher percolation.
+
+    # %%
+    # if the file doesn't exist then assign value of None which function assumes is field water content
+    # load water content from winter SWB module 
+    wc_fn = join(base_model_ws, 'crop_soilbudget', 'ag_non_irr',
+                                  'swb_water_content_'+str(year)+'.csv')
+    if exists(wc_fn):
+        wc_df = pd.read_csv(wc_fn,index_col=0, parse_dates=True)
+        wc_df.columns = wc_df.columns.astype(int)
+        # sample the initial water content for the fields corresponding to the crop
+        crop_wc = wc_df.loc[:,soil_crop['UniqueID'].values].copy()
+        # sample the water content for the date that irrigation run starts
+        crop_wc_init = crop_wc.loc[strt_date].copy()
+    else:
+        # the first year that uses the fall period from MODFLOW needs to assume initial conditions of field water content
+        print('Assuming field water content for initial conditions')
+        crop_wc_init = None
+
+# %%
+# only for script testing 
+# irr_all = format_irr_all(crop, year, crop_in, pred_dict, irr_gw_df_all, irr_sw_df_all)
+
+
     # %%
     # runs relatively quickly
     if (not run_opt) & (irr_all is None):
@@ -464,6 +497,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         print('irr_all not specified for soil water budget')
         print('Assuming no irrigation for all fields')
         irr_all = np.zeros((nfield_crop,2*n_irr))
+    elif (not run_opt) & (irr_all is not None):
+        print('Using input irrigation rates for irr_all')
     print('Calculating true SWB + profit with irrigation efficiency')
     # correct for any irrigation below 0 set by optimization
     irr_all[irr_all<0] = 0
@@ -472,17 +507,37 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     p_true = np.zeros(nfield_crop) 
     Y_A_true = np.copy(p_true)
     pc_all = np.zeros((nfield_crop, gen.nper))
+    wc_all = np.zeros((nfield_crop, gen.nper))
+    ETa_all = np.zeros((nfield_crop, gen.nper))
+    rp_all = np.zeros((nfield_crop, gen.nper))
+
     for ns in np.arange(0,nfield_crop):
         # update variables for each crop
         dtw_arr = crop_dtw[:,ns]
         soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
         soil_dict = prep_soil_dict(soil_ag, etc_arr, var_crops)
         soil = cost_variables(soil_dict)
+        if crop_wc_init is not None:
+            # need to sample to the field that is being run
+            crop_wc_init_field = crop_wc_init.loc[soil_ag.UniqueID.values].values 
+        else:
+            crop_wc_init_field = soil.wc_f
         # run final soil water budget and save output as arrays
-        p_true[ns], pc, K_S, Y_A  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True)
+        # should now add specification of initial water content after end of winter run
+        # it would be good to save the other relevant outputs such as soil moisture
+        p_true[ns], pc, K_S, Y_A, wc, ETa, rp  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True,
+                                                        init_wc = crop_wc_init_field
+                                                        )
         Y_A_true[ns] = Y_A.sum() # yield comes as an array
         # double check this works for the multiple simple dtw version
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
+        wc_all[ns] = wc[1:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
+        ETa_all[ns] = ETa[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
+        rp_all[ns] = rp[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
+
+    # %%
+    # it might also be helpful to simply save the final time step of water content to save time but can 
+    # also post-process this later
 
     # %%
     # break down irrigation into groundwater and surface water time series
@@ -497,6 +552,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     print('Saving output to files')
 
     # need separte hdf5 for each year because total is 300MB, group by crop in array
+    # the current version doesn't get files bigger than 1,300 KB so we could combine years
+    # biggest file is percolation because daily basis instead of seasonal or irrigation cycle
     fn = join(base_model_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
     crop_arr_to_h5(pc_all, crop, fn)
 
@@ -517,3 +574,10 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     
     fn = join(base_model_ws, 'field_SWB', "SW_applied_water_WY"+str(year)+".hdf5")
     crop_arr_to_h5(irr_sw_out, crop, fn)
+
+    # %%
+    # the best way to save water budget output is likely to put them all in the same hdf5 file
+    fn = join(base_model_ws, 'field_SWB', "swb_output_WY"+str(year)+".hdf5")
+    crop_arr_to_h5(wc_all, crop, fn, units='meters/day', group='wc')
+    crop_arr_to_h5(ETa_all, crop, fn, units='meters/day', group='ETa')        
+    crop_arr_to_h5(rp_all, crop, fn, units='meters/day', group='rp')

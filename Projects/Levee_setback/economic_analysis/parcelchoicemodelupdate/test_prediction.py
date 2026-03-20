@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# Script to to test the crop choice model against stata
+# Script to to test the crop choice model against stata, also create reference file to fill in initial conditions
 #
 
 # %%
@@ -142,6 +142,8 @@ data_comp = data_out_all.merge(stata_comp)
 # ## with new test data
 #
 # compare against stata results that account for crop_cat lats
+#
+# Yusuke noted that column identifying chosen is the crop identified by LandIQ and not that selected by Stata.
 
 # %%
 out_dir = join(proj_dir, "model_results", 'stata_comp')

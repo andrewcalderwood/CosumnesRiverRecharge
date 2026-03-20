@@ -80,6 +80,10 @@ from f_predict_landuse import predict_crops, predict_crops_rand
 # # load static data
 
 # %%
+fig_dir = join(proj_dir, "model_results","stata_comp", 'figures')
+os.makedirs(fig_dir, exist_ok=True)
+
+# %%
 run_dir = 'F://WRDAPP/GWFlowModel'
 loadpth = run_dir +'/Cosumnes/Economic/'
 
@@ -143,6 +147,52 @@ rev_out = rev_out.sort_values(['alternatives','year']).reset_index(drop=True).re
 rev_out = rev_out.replace({'Mixed pasture and miscellaneous grasses':'Mixed_pasture'})
 rev_out.to_csv(join(crop_choice_dir, "data_model", 'rev_prior_yr_all.csv'), index=False)
 # this is still missing 2016 information
+
+# %%
+# identify crops specified in LandIQ
+stata_chosen = stata_df[stata_df.chosen==1]
+# identify the full list of parcels
+stata_chosen_init = stata_chosen.sort_values('year').drop_duplicates(['parcel_id']).reset_index()
+stata_chosen_init.to_csv(join(proj_dir, 'model_inputs', 'stata_input_initial.csv'))
+
+# %% [markdown]
+# Review of crops that should fill in other
+
+# %%
+uzf_dir = join(gwfm_dir,'UZF_data')
+
+ag_lu = gpd.read_file(join(uzf_dir,'county_landuse', 'domain_ag_lu_2018.shp'))
+# 5 duplicates in irrigation efficiency
+ag_irr_eff = ag_lu[['geom_id', 'name', 'irr_name', 'Avg_eff']].drop_duplicates()
+# loaded to evaluate if worth using to specify Other, determined best to assign average conditions of most crops
+
+# %%
+ag_irr_eff.name.unique()
+opt_crops = ['Mixed pasture','Grain and hay crops','Miscellaneous grain and hay', 
+             'Corn (field & sweet)','Sudan','Vineyards','Alfalfa & alfalfa mixtures']
+top_count = ag_irr_eff[~ag_irr_eff.name.isin(opt_crops)].groupby('name')['Avg_eff'].count().sort_values(ascending=False)[:12]
+# adding up the top 12 categories is 395 fields
+# the major types are melons, strawberries, rice, tomatoes, clover, walnuts (in grape category), flow nuresry, safflow, misc truck
+
+# %%
+# load in pre-processed array of ETc for all time, m/day
+ETc_long = pd.read_hdf(join(uzf_dir, "dwr_ETc",'long_ETc_all_lu.hdf5'), key='variable')
+# convert to column format
+ETc_all = ETc_long.pivot(columns='variable', values='value')
+
+
+# %%
+# test to review top categories to see which are consistent
+# rep_ETc = ETc_all[top_count.index[top_count.index.isin(ETc_all.columns)]]
+# rep_ETc[rep_ETc.index>'2023-1-1'].plot()
+# remove Mixed deciduous and safflower but the others all follow a fairly consistent trend/magnitude
+other_et_cat = ['Strawberries','Rice','Tomatoes (processing)',
+                'Melons, squahs and cucumbers (all types',
+                'Miscellaneous truck','Flowers nursery & Christmas tree farms']
+# use the subset categories to represent other
+rep_ETc = ETc_all[other_et_cat]
+# use average ET to represent
+rep_ETc['Other'] = rep_ETc.mean(axis=1)
 
 # %% [markdown]
 # ## depth to water review
@@ -233,8 +283,12 @@ dtw_comp.dtwfa /= 0.3048
 # %%
 fig,ax = plt.subplots(2,1)
 dtw_comp.dtwfa.hist(ax=ax[0])
+ax[0].set_title('STATA')
 
 dtw_comp.dtw_ft.hist( ax=ax[1])
+ax[1].set_title('MODFLOW')
+ax[1].set_xlabel('DTW (ft)')
+plt.savefig(join(fig_dir, 'dtw_histogram_stata_modflow.png'), bbox_inches='tight')
 
 # %% [markdown]
 # # Predict crops
@@ -336,7 +390,7 @@ comp_sel['diff_crop'] = comp_sel.crop_choice_stata != comp_sel.crop_choice_MF
 
 # %%
 # summarize crop count prediction by year and crop
-comp_sel.groupby(['crop_choice_stata'])[['diff_crop']].sum().to_csv(join(econ_model_ws, 'output_clean','stata_crop_diff.csv'))
+comp_sel.groupby(['crop_choice_stata'])[['diff_crop']].sum().to_csv(join(fig_dir,'stata_modflow_crop_diff.csv'))
 
 # %%
 comp_sel.diff_crop.sum()/comp_sel.shape[0]
@@ -363,5 +417,5 @@ sns.catplot(count_comp,x='year',y='parcel_id', col='name', col_wrap=3, hue='grp'
            # facet_kws={'sharey': False, 'sharex': True}
 )
 
-
+plt.savefig(join(fig_dir, 'parcel_count_by_crop_stata_modflow.png'), bbox_inches='tight')
 

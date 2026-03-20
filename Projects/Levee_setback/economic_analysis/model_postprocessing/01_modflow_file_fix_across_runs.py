@@ -68,7 +68,7 @@ add_path(py_dir)
 
 from mf_utility import get_layer_from_elev
 from map_cln import gdf_bnds
-
+from flopy_utilities import update_bas_options
 
 
 # %%
@@ -130,31 +130,12 @@ all_run_dates = pd.read_csv(join(econ_model_ws, 'all_run_dates.csv'))
 
 
 # %%
-# for scen in ['R200']:
-#     econ_model_ws = join(loadpth, model_nam+'_'+scen, 'crop_modflow')
+for scen in ['R200', 'R203','R204']:
+    econ_model_ws = join(loadpth, model_nam+'_'+scen, 'crop_modflow')
     
-#     # iterate over all economic model ws and years
-#     for n, d in enumerate(all_run_dates.date[:-1]):
-#         econ_ws_yr =join(econ_model_ws, d)
+    # iterate over all economic model ws and years
+    for n, d in enumerate(all_run_dates.date[:-1]):
+        econ_ws_yr =join(econ_model_ws, d)
     
-#         # file to change
-#         input_file_path = join(econ_ws_yr, m.name+'.bas')
-#         output_file_path = join(econ_ws_yr, m.name+'.bas.temp')
-#         # text to change/update
-#         target_line_content = "FREE"
-#         replacement_content = "FREE BUDGETDB flow_budget.txt"
-#         # open existing file and create temporary output file to write to
-#         with open(input_file_path, 'r') as infile, open(output_file_path, 'w') as outfile:
-#             for n, line in enumerate(infile):
-#                 # only make changes in top rows where the specificed text is present
-#                 if (n<10)&(target_line_content in line)&(replacement_content not in line):
-#                     # Modify the line
-#                     outfile.write(line.replace(target_line_content, replacement_content))
-#                 else:
-#                     # Keep the original line
-#                     outfile.write(line)
-        
-#         # Replace the original file with the new one
-#         os.replace(output_file_path, input_file_path)
-
-
+        # update basic input to save flow budget summary
+        update_bas_options(econ_ws_yr, m.name, added_options = "BUDGETDB flow_budget.txt")

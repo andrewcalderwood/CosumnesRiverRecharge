@@ -232,8 +232,9 @@ def choose_water_source(dtw_arr, gen, mix_fraction = 1):
     
     return(water_source)
 
-# %%
 
+# %%
+# I'm not sure why I still have this version as the run_swb below is the one primarily used
     
 def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
     """
@@ -319,7 +320,7 @@ def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
 # %%
 
     
-def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False):
+def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False, init_wc=None):
     """
     irr_lvl: depth of irrigation to apply
     soil: class object with soil parameter for the given field
@@ -332,7 +333,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
         'sw': array of n_irr with depths for SW 
         'gw: array of n_irr with depths for GW
     arrays: boolean to identify whether output arrays should be returned
-        True: water budget arrays are the output
+        True: water budget arrays are the output + profit and yield
         False: the output is the net profit (used for optimization)
     """
     nper = gen.nper
@@ -370,9 +371,21 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     soildepth = soil.depth
     taw = soil.taw
     
-    # initial water content and root zone depletion are pulled from the last step of the previous run
+    # initial water content and root zone depletion should be pulled from the last step of the previous run
     # -1 starts at IC for BC
     # WC/D starts at 0
+    # at minimum we should assume WC starts at field content following wet season (or wilting point)
+    if init_wc is None:
+        # initial conditions of wilting point water content after irrigation season
+        # wc[0,:] = soil.wc_wp # should not use
+        # a quick test of this shows that using wilting point forces soil to refill unrealistically
+        # might try field content again as recharge estimates are a bit low, as a test to see sensitivity
+        # field content aligns with actual results at end of winter, just slightly lower
+        wc[0,:] = soil.wc_f
+    # it would be best to sample initial conditions from end of winter
+    elif init_wc is not None:
+        wc[0,:] = init_wc
+    
     for ns, n in enumerate(np.arange(-1, nper-1)):
         ## Runoff ##
         S = calc_S(wc[ns+1], soil.Smax, soil.wc_f, soil.por)
@@ -425,7 +438,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
 
     if arrays:
         # for secondary output need to also save deep percolation
-        return(pi, pc, K_S, Y_A)
+        return(pi, pc, K_S, Y_A, wc, ETa, rp)
     return(pi)
 
 
