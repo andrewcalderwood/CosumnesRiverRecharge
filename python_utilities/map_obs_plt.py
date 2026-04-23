@@ -12,6 +12,23 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import flopy
 
+def get_top_active_layer(head_ma):
+    """ Sample the top active value for a 3d array for each row,column
+    head_ma: 3D array of head data with mask applied for dry cells
+    """
+    if head_ma.mask.any():
+        head_loc = pd.DataFrame(np.transpose(np.where(~head_ma.mask)), columns=['k','i','j'])
+        head_loc = head_loc.groupby(['i','j']).min().reset_index()
+        # top active value for each row,column
+        head_top = np.full((head_ma.shape[1], head_ma.shape[2]), np.nan)
+        head_top[head_loc.i, head_loc.j] = head_ma[head_loc.k, head_loc.i, head_loc.j]
+        head_top = np.ma.masked_invalid(head_top)
+    else:
+        # if nothing is masked then the first layer is the maximum
+        head_top = head_ma[0,:,:]
+    return head_top
+
+
 def plt_bc_hk(model, ax, hk=False):
     if 'LPF' in model.get_package_list():
         gel_nam = 'LPF'

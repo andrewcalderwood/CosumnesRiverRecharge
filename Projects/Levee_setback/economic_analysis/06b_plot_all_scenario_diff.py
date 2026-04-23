@@ -213,7 +213,7 @@ for crop in crops:
 
 
 # %%
-dtw_all_scenario.groupby(['year','scen_name']).agg({'acres':'sum','UniqueID':'count'})
+# dtw_all_scenario.groupby(['year','scen_name']).agg({'acres':'sum','UniqueID':'count'})
 # dtw_all_scenario
 # dtw_all_scenario.name.unique()
 
@@ -232,6 +232,9 @@ for scenario in scenarios:
 # could improve with scenario summary sheet
 scenario_names = df_econ_scenario.scen_name.unique()
 df_econ_scenario = df_econ_scenario.drop(columns='index')
+
+# %%
+df_econ_scenario.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_yield_crop_scenarios.csv'))
 
 # %%
 var = 'yield'
@@ -266,6 +269,12 @@ for val in ['total_value', 'value']:
 
 # %%
 df_econ_sum = df_econ_scenario.groupby(['year','var','scen_name','scenario'])[['total_value']].sum().reset_index()
+
+# %%
+# need to correct ordering for plot legend
+df_econ_sum = df_econ_sum.sort_values('scenario')
+
+df_econ_sum.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_yield_summed_scenarios.csv'))
 
 # %%
 for val in ['total_value']:
