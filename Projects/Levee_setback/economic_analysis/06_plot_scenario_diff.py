@@ -73,9 +73,9 @@ loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 # m_nam = 'input_write_2014_2020'
 m_nam = 'input_write_2014_2022'
 
-scenario = '_R20' # pumping constraint
-scenario = '_R4' # 90/20 floodplain
-scenario = '_R3' # 6x existing diversion for MAR vineyard
+# scenario = '_R20' # pumping constraint
+# scenario = '_R4' # 90/20 floodplain
+# scenario = '_R3' # 6x existing diversion for MAR vineyard
 
 scenario = '_R203' # no p_o, 6x MAR
 scenario = '_R204' # no p_o, 90/20 floodplain
@@ -344,50 +344,6 @@ for crop in crops:
 # Adding weighting definitely shifts the results, especially since they are for the actual DTW extent. What doesn't make sense is the PDf still has values with negative they just aren't evaluated.
 # - need to better understand KDE so ask Yusuke -> Yusuke was not very familiar with this so suggested whatever I found made sense.
 
-# %% [markdown]
-# # Move to separate script
-# The code below should mostly be set up to compare all three major scenarios so this should just be moved to a separate script.
-
-# %% [markdown]
-# # DTW - all scenarios
-
-# %%
-# load scenario data at once to simplify plotting 
-scenarios = ['','_R3','_R4']
-scenarios = ['_R200','_R203','_R204']
-
-dtw_all_scenario = pd.DataFrame()
-for scenario in scenarios:
-    dtw_mean_all = pd.read_csv(join(base_model_ws+scenario,'output_clean', 'dtw_ft_spring_all.csv'),index_col=0)
-    dtw_all_scenario = pd.concat((dtw_all_scenario, dtw_mean_all.assign(scenario=scenario, scen_name=scenario_summary.loc[basename(base_model_ws)+scenario, 'plot_name'])))
-
-    # could improve with scenario summary sheet
-scenario_names = dtw_all_scenario.scen_name.unique()
-
-
-# %%
-os.makedirs(join(model_out, 'scenario_comparison'), exist_ok=True)
-
-# %%
-fig,ax = plt.subplots(nrow, ncol, sharey=True, figsize=figsize, layout='constrained', dpi=300)
-# fig,ax = plt.subplots()
-for sn in scenario_names:
-    df_dtw_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].copy()
-    for n,year in enumerate(run_years):
-            if nrow>1:
-                ax_n = ax[int(n/ncol), int(n%ncol)]
-            elif nrow==1:
-                ax_n = ax[int(n%ncol)]
-            df_plt = df_dtw_plt[(df_dtw_plt.year==year)]
-            df_plt.dtw_ft.hist(label=sn, ax=ax_n, weights = df_plt.acres, histtype=u'step',)
-
-ax[0,0].legend()
-fig.supylabel('Field area (acres)')
-
-fig.supxlabel('DTW (ft)')
-plt.savefig(join(model_out, 'scenario_comparison', 'dtw_ft_spring_line_hist_acres_all.png'))
-plt.close()
-
 # %%
 
 # spring average, includes fallow
@@ -419,110 +375,3 @@ for crop in crops:
     plt.savefig(join(model_out, 'scenario_comparison', 'crop_acreage_by_year_'+crop+'.png'))
     plt.close()
 
-
-# %%
-crops = dtw_all_scenario.crop.unique()
-ny = 3
-nx = int(np.ceil(len(crops)/ny))
-fig,ax = plt.subplots(nx, ny, sharey=False, sharex=True, figsize=(12,6), layout='constrained', dpi=300)
-        
-for n,crop in enumerate(crops):
-    if ny==1:
-        ax_n = ax[n]
-    else:
-        ax_n = ax[n%nx, int(n/nx)]
-
-    # df_plt[df_plt.crop==crop].plot(x='year',y=[val+'_m', val+'_s'], ax=ax_n, kind='bar',legend=False)
-    # df_plt[df_plt.crop==crop]
-
-    for sn in scenario_names:
-        df_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].groupby(['year','crop'])[['acres']].sum().reset_index()
-
-        df_plt = df_plt[(df_plt.crop==crop)]
-        df_plt.plot(x='year',y='acres', label=sn, ax=ax_n, legend=False)
-        # df_plt = dtw_count_s[(dtw_count_s.crop==crop)]
-        # df_plt.plot(x='year',y='acres', label='Scenario', ax=ax)
-        # ax.set_ylabel('Number of fields')
-    ax_n.set_ylabel('Total Area (acres)')
-    ax_n.set_title(crop)
-
-    ax_n.set_xlabel('Year')
-ax[0,0].legend( loc='lower right')
-
-plt.savefig(join(model_out, 'scenario_comparison', 'combined_crop_acreage_by_year_'+crop+'.png'))
-plt.close()
-
-# %%
-dtw_all_scenario.groupby(['year','scen_name']).agg({'acres':'sum','UniqueID':'count'})
-# dtw_all_scenario
-# dtw_all_scenario.name.unique()
-
-# %% [markdown]
-# ## plot profit and yield across all scenarios
-
-# %%
-# load scenario data at once to simplify plotting 
-scenarios = ['_R200','_R203','_R204']
-
-df_econ_scenario = pd.DataFrame()
-for scenario in scenarios:
-    df_econ_s = pd.read_csv(join(base_model_ws+scenario,'output_clean', 'annual_profit_yield_long.csv'),index_col=0)
-    df_econ_scenario = pd.concat((df_econ_scenario, df_econ_s.assign(scenario=scenario, scen_name=scenario_summary.loc[basename(base_model_ws)+scenario, 'plot_name'])))
-
-# could improve with scenario summary sheet
-scenario_names = df_econ_scenario.scen_name.unique()
-df_econ_scenario = df_econ_scenario.drop(columns='index')
-
-# %%
-var = 'yield'
-var='profit'
-for val in ['total_value', 'value']:
-    for var in ['yield','profit']:
-        df_plt = df_econ_scenario[df_econ_scenario['var']==var].copy()
-        crops = df_plt.crop.unique()
-        fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
-        
-        for n,crop in enumerate(crops):
-            ax_n = ax[n]
-            # df_plt[df_plt.crop==crop].plot(x='year',y=[val+'_m', val+'_s'], ax=ax_n, kind='bar',legend=False)
-            df_plt[df_plt.crop==crop].pivot(index='year',columns='scenario',values=val).plot(ax=ax_n, kind='bar', legend=False)
-            ax_n.set_title(crop)
-            ax_n.set_xlabel('Year')
-            # ax_n.set_xticks(df_plt.year.unique().astype(str))
-        
-        
-        # df_crop = df_plt[df_plt.crop==crop]
-        # add legend to the last plot
-        # df_plt[df_plt.crop==crop].plot(x='year',y=[val+'_m',val+'_s'], ax=ax_n, kind='bar',legend=True)
-        df_plt[df_plt.crop==crop].pivot(index='year',columns='scenario',values=val).plot(ax=ax_n, kind='bar', legend=True)
-        plt.legend(df_plt.scen_name.unique(), loc='lower right')
-        fig.supylabel(var.capitalize())
-        plt.savefig(join(model_out, 'scenario_comparison', var+'_field_avg_'+val+'.png'), bbox_inches='tight')
-        plt.close()
-
-# %% [markdown]
-# ### plot total profit across all fields
-# Cameron said this is a good check to verify that even if the scenarios reduce profit in some crops that overall the region has higher revenue.
-
-# %%
-df_econ_sum = df_econ_scenario.groupby(['year','var','scen_name','scenario'])[['total_value']].sum().reset_index()
-
-# %%
-for val in ['total_value']:
-    for var in ['yield','profit']:
-        df_plt = df_econ_sum[df_econ_sum['var']==var].copy()
-        fig,ax = plt.subplots(1, 1, sharey=False, figsize=(12,3), layout='constrained', dpi=300)
-        
-        ax_n = ax
-        df_plt.pivot(index='year',columns='scenario',values=val).plot(ax=ax_n, kind='bar', legend=False)
-        ax_n.set_title('Total across crops')
-        ax_n.set_xlabel('Year')
-        ax_n.ticklabel_format(style='plain', axis='y', useOffset=False)
-
-        plt.legend(df_plt.scen_name.unique(), loc='lower left')
-
-        fig.supylabel(var.capitalize())
-        plt.savefig(join(model_out, 'scenario_comparison', var+'_summed_across_crops_'+val+'.png'), bbox_inches='tight')
-        plt.close()
-
-# %%
