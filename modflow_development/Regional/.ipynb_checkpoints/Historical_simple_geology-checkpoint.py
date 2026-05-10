@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -118,9 +118,9 @@ ss_bool = False # no steady state period
 # standard 4-6 year run for testing
 
 strt_date = pd.to_datetime('2014-10-01')
-strt_date = pd.to_datetime('2018-10-01') # later start to compare impact on simulation
-end_date = pd.to_datetime('2020-09-30')
+# end_date = pd.to_datetime('2020-09-30')
 end_date = pd.to_datetime('2022-09-30') # for alternate version to show drought years
+end_date = pd.to_datetime('2025-09-30') # for alternate version to show more years
 ss_strt = pd.to_datetime('2010-10-01')
 ss_end = pd.to_datetime('2014-09-30')
 
@@ -260,7 +260,7 @@ os.makedirs(join(model_ws, 'input_data'), exist_ok=True)
 dis = flopy.modflow.ModflowDis(nrow=nrow, ncol=ncol, 
                                nlay=nlay, delr=delr, delc=delc,
                                model=m, lenuni = 2, itmuni = 4,
-                               xul = xul, yul = yul,rotation=rotation, proj4_str=proj4_str,
+                               xul = xul, yul = yul,rotation=rotation, crs=proj4_str,
                               nper = nper, perlen=perlen, nstp=nstp, steady = steady,
                               start_datetime = strt_date)
 
@@ -285,7 +285,7 @@ grid_elev = gpd.read_file(join(gwfm_dir,'DIS_data','grid_elevation_m_statistics.
 
 # %%
 # get exterior polyline of model grid
-grid_bnd = gpd.GeoDataFrame(pd.DataFrame([0]), geometry = [grid_p.unary_union.exterior], crs=grid_p.crs)
+grid_bnd = gpd.GeoDataFrame(pd.DataFrame([0]), geometry = [grid_p.union_all().exterior], crs=grid_p.crs)
 # find cells that construct the model boundary
 bnd_cells_df = gpd.sjoin(grid_p, grid_bnd)
 bnd_cells = bnd_cells_df[['row','column']] - 1
@@ -2077,6 +2077,7 @@ for file in fn:
     daily_data = pd.concat((daily_data, new_data))
 # units of mm
 data_in = daily_data[daily_data['Stn Name']=='Fair Oaks']
+print('Date range',data_in.index.year.min(), data_in.index.year.max())
 # clean up data so columns are by location, units of Precip are in mm
 rain_in = data_in.pivot_table(index = 'Date', columns = 'Stn Name', values = 'Precip (mm)')
 rain_m = rain_in/1000
@@ -2842,3 +2843,5 @@ with open(input_file_path, 'r') as infile, open(output_file_path, 'w') as outfil
 # Replace the original file with the new one
 os.replace(output_file_path, input_file_path)
 
+
+# %%

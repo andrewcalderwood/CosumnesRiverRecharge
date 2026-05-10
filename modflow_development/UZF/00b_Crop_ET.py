@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -80,7 +80,30 @@ modelgrid = flopy.discretization.StructuredGrid(xoff=xll, yoff=yll, proj4='EPSG:
 # %%
 
 uzf_dir = join(gwfm_dir,'UZF_data')
+crop_path = join(uzf_dir,'county_landuse')
+crop_shp_names = glob.glob(crop_path+'/*.shp')
 
+
+
+# %%
+# land use referencing for DWR data (class, subclass, irrigation)
+lu_class = pd.read_excel(join(uzf_dir,'DWR_landuse_ref.xlsx'), sheet_name = 'class' )
+# clean up file, needed before saved over
+# lu_class.name = lu_class.name.str.split('(', expand=True)[0]
+# lu_class.name = lu_class.name.str.strip()
+
+# files already clean
+lu_subclass = pd.read_excel(join(uzf_dir,'DWR_landuse_ref.xlsx'), sheet_name = 'subclass' )
+lu_irrig = pd.read_excel(join(uzf_dir,'DWR_landuse_ref.xlsx'), sheet_name = 'irrigation' )
+lu_irrig.code = lu_irrig.code.str.strip()
+lu_eff = pd.read_excel(join(uzf_dir,'DWR_landuse_ref.xlsx'), sheet_name = 'irr_efficiency', comment='#')
+# calculate average irrigation efficiency from the range
+lu_eff['Avg_eff'] = (lu_eff.Low_eff + lu_eff.High_eff)/2
+# add irrigation efficiencies to type list
+lu_irrig = lu_irrig.join(lu_eff.set_index('Irrigation Method'), on='irr_eff_name')
+
+# # join with subclass file so if subclass doesn't exist then the bulk class is used
+lu_class = pd.concat((lu_class,lu_subclass))
 
 # %%
 # join all the crop shapefile together

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -104,6 +104,17 @@ periodic = pd.read_csv(ghb_dir+'/periodic_gwl_bulkdatadownload/measurements.csv'
 
 
 # %%
+# need to filter out any measurements with pumping to avoid extreme drawdowns
+# domain_periodic.wlm_qa_detail.unique()
+# need to drop pumping separate from questionable as some missing/good mesaurements are flagged as pumping
+drop_qa_details = ['Pumping', 'Pumped recently','Nearby pump operating']
+periodic = periodic[~periodic.wlm_qa_detail.isin(drop_qa_details)]
+# even if filtering out pumping there are still questionable measurements that show the effect of pumpin
+# so safe to filter out all questionable
+periodic = periodic[periodic.wlm_qa_desc !='Questionable']
+
+
+# %%
 stations_gpd = gpd.GeoDataFrame(stations, geometry = gpd.points_from_xy( stations.longitude, stations.latitude), crs = 'epsg:4326')
 
 # need to use the domain in lat, long crs as some wells may edge in utm zone 11n
@@ -161,13 +172,27 @@ gwe_grp_gpd = gpd.GeoDataFrame(domain_periodic_grp.copy(),
 gwe_grp_gpd = gwe_grp_gpd.set_index(['year','season'])
 
 # %% [markdown]
+# There are 4 wells on the north western boundary in Fall 2022/spring 2023 with exreme low values (>-200 DTW). Check why reported so low. They were flagged as either pumping or questionable so removing these flags fixed the issue.
+
+# %%
+# chk_wells = ['384455N1213533W001']
+# # chk_wells = ['384601N1213562W001']
+# chk_df = domain_periodic[domain_periodic.site_code.isin(chk_wells)].copy()
+# chk_df.plot(y='gwe')
+# # timeseries shows very deep values and shallow values
+# chk_df
+# # they are flagged as questionable measurements and pumping
+# # am I note removing flagged values???
+# # should remove anything with pumping
+
+# %% [markdown]
 # # Save shapefile output
 # **Units** of GWE are still in feet
 
 # %%
 # gwe_grp_gpd.columns
-strt_year = 2022
-end_year = 2024
+strt_year = 2000
+end_year = 2026
 
 # %%
 # gwe_grp_gpd
@@ -249,22 +274,23 @@ plt.ylim(100, 160)
 # %%
 strt_date ='2018-09-01'
 end_date = '2018-11-30'
-fall2018 = domain_periodic.loc[strt_date:end_date]
-pd.unique(fall2018.STN_ID).shape
+fall2018 = domain_periodic.loc[(domain_periodic.index>strt_date)&(domain_periodic.index<end_date)]
+# pd.unique(fall2018.STN_ID).shape
 
 
-domain_periodic.columns
-print('Types of WSE MSMT accuracy:',fall2018.WLM_ACC_DESC.unique())
-fall2018.WLM_ACC_DESC.hist(bins=len(fall2018.WLM_ACC_DESC.unique()))
-plt.xlabel('Periodic Measurement accuracy')
-plt.ylabel('Number of measurements')
-plt.title('From: '+strt_date+' to '+end_date)
+# domain_periodic.columns
+# print('Types of WSE MSMT accuracy:',fall2018.WLM_ACC_DESC.unique())
+# fall2018.WLM_ACC_DESC.hist(bins=len(fall2018.WLM_ACC_DESC.unique()))
+# plt.xlabel('Periodic Measurement accuracy')
+# plt.ylabel('Number of measurements')
+# plt.title('From: '+strt_date+' to '+end_date)
 
 # %%
 strt_date ='2000-01-01'
 end_date = '2020-12-31'
-pivot_wse_2000s = domain_periodic.loc[strt_date:end_date].pivot_table(index='msmt_date',columns='STN_ID',values='WSE')
-monthly_wse_2000s = pivot_wse_2000s.resample('M').mean()
+pivot_wse_2000s = domain_periodic.loc[(domain_periodic.index>strt_date)&(domain_periodic.index<end_date)]
+pivot_wse_2000s = pivot_wse_2000s.pivot_table(index='msmt_date',columns='stn_id',values='gwe')
+monthly_wse_2000s = pivot_wse_2000s.resample('MS').mean()
 
 
 # %%
@@ -277,10 +303,10 @@ plt.savefig('plots/monthly__periodic_wse_2000_to_2020.png',dpi = 600, bbox_inche
 # %%
 strt_date ='2012-01-01'
 end_date = '2019-12-31'
-domain_periodic_2010s = domain_periodic.loc[strt_date:end_date]
-pivot_wse_2010s = domain_periodic_2010s.pivot_table(index='msmt_date',columns='STN_ID',values='WSE')
+domain_periodic_2010s = domain_periodic.loc[(domain_periodic.index>strt_date)&(domain_periodic.index<end_date)]
+pivot_wse_2010s = domain_periodic_2010s.pivot_table(index='msmt_date',columns='stn_id',values='gwe')
 
-pivot_wse_2010s = pivot_wse_2010s.resample('M').mean()
+pivot_wse_2010s = pivot_wse_2010s.resample('MS').mean()
 
 
 # %%
@@ -295,35 +321,33 @@ pivot_wse_2010s.count(axis=1).plot()
 plt.ylabel('Number of data points per month')
 
 # %%
-monthly_wse_2010s = pd.DataFrame(monthly_wse_2010s.stack()).rename(columns={0:'WSE'})
-monthly_wse_2010s = monthly_wse_2010s.reset_index()
+# monthly_wse_2010s = pd.DataFrame(monthly_wse_2010s.stack()).rename(columns={0:'gwe'})
+# monthly_wse_2010s = monthly_wse_2010s.reset_index()
 
 # %%
 # take monthly upscaled data and then rejoin that data to the dwr data based on STN_ID so that kriging can be done
 # need to upscale as pivot table to avoid all station data being lumped together
 
 # set STN_ID as index to use for joining with upscaled monthly data
-monthly_stn_id = domain_periodic_2010s.set_index('STN_ID')
-monthly_stn_id = monthly_stn_id.filter(['site_code','WLM_RPE','WLM_GSE','WLM_ACC','LATITUDE','LONGITUDE','geometry'],axis=1)
+monthly_stn_id = domain_periodic_2010s.set_index('stn_id')
+monthly_stn_id = monthly_stn_id.filter(['site_code','wlm_rpe','wlm_gse','wlm_acc',
+                                        'latitude','longitude','geometry'],axis=1)
 # drop the duplicates for multiple WSE as we are just copying the RPE, station data that doesn't change
 monthly_stn_id = monthly_stn_id.drop_duplicates()
 
 # %%
 # monthly_stn_id has STN_ID as index, monthly_wse has it as a column
-monthly_all = monthly_stn_id.join(monthly_wse_2010s.set_index('STN_ID'), on = 'STN_ID', how = 'left')
+# monthly_all = monthly_stn_id.join(monthly_wse_2010s.set_index('stn_id'), on = 'STN_ID', how = 'left')
 
 
 # %%
-monthly_all
+# monthly_all
 
 # %%
-monthly_all_gpd = gpd.GeoDataFrame(monthly_all, geometry = monthly_all.geometry, crs = 'epsg:32610')
+# monthly_all_gpd = gpd.GeoDataFrame(monthly_all, geometry = monthly_all.geometry, crs = 'epsg:32610')
 
 # %%
-month_dates = monthly_all_gpd.set_index('msmt_date').index.drop_duplicates().sort_values()
-
-# %%
-monthly_all_gpd.msmt_date
+# month_dates = monthly_all_gpd.set_index('msmt_date').index.drop_duplicates().sort_values()
 
 # %%
 t=2

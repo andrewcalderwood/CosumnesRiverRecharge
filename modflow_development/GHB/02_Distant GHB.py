@@ -5,12 +5,15 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# %% [markdown]
+# Goal: sample interpolated results to extract GWL at the designated distances from the boundary to develop the heads for the GHB. Also sample/average the values for each grid cell in the domain to make available for starting heads.
 
 # %%
 # standard python utilities
@@ -190,7 +193,8 @@ for season in ['spring', 'fall']:
 import seaborn as sns
 
 # %%
-sns.relplot(bnd_dist_all[bnd_dist_all.row==1], 
+df_row1 = bnd_dist_all[bnd_dist_all.row==1].reset_index(drop=True)
+sns.relplot(df_row1, 
             x='column', y='wse_ft', hue='year', col='season')
 
 # %%
@@ -206,3 +210,73 @@ pd.DataFrame(bnd_dist_all.drop(columns=['geometry'])).to_csv(join(ghb_dir, 'boun
 # %%
 bnd_dist.plot('wse_ft', legend=True)
 
+
+# %%
+
+# %% [markdown]
+# # for start heads we also want the full array
+
+# %%
+from exactextract import exact_extract
+# runs much faster than zonal_stats
+# alternate option would be to just sample nearest point since raster grid is close to model grid size
+
+# %%
+grid_all = pd.DataFrame()
+
+point = bnd_dist.loc[:,['easting','northing']].values
+for season in ['spring', 'fall']:
+    for y in np.arange(strt_year, end_year+1):
+#     for y in [2012]:
+        raster_name = join(tif_path, season+str(y)+'_kriged.tif')
+
+        with rasterio.open(raster_name) as src:
+            results = exact_extract(src, grid_p, ['mean'], include_cols=['node','row','column'])
+            df_year = pd.DataFrame([f['properties'] for f in results])
+        
+            # save information for all years and seasons
+            df_year['season'] = season
+            df_year['year'] = y
+            grid_all = pd.concat((grid_all, df_year))
+
+# %%
+ghb_dir
+
+# %%
+# now need to go from dataframe to array of data
+nrow = grid_all['row'].max()
+ncol = grid_all['column'].max()
+
+for (year, season), group in grid_all.groupby(['year', 'season']):
+    arr = np.full((nrow, ncol), np.nan)
+    
+    rows = group['row'].to_numpy(dtype=int) - 1
+    cols = group['column'].to_numpy(dtype=int) - 1
+    vals = group['mean'].to_numpy(dtype=float)
+    
+    arr[rows, cols] = vals
+    
+    filename = f"{season}{year}_kriged_WSEL.tsv"
+    np.savetxt(os.path.join(ghb_dir, 'final_WSEL_arrays', filename), arr, delimiter='\t', fmt='%.6f')
+
+# %%
+# we could correct for land surface before saving the data
+dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+
+
+# %%
+# run quick check on old and new
+for season in ['spring', 'fall']:
+    # for year in np.arange(strt_year, end_year+1):
+    for year in [2023]:
+        filename = f"{season}{year}_kriged_WSEL.tsv"
+
+        arr = np.loadtxt(os.path.join(ghb_dir, 'final_WSEL_arrays', filename), delimiter='\t')
+        arr_old = np.loadtxt(os.path.join(ghb_dir, 'final_WSEL_arrays_before_2024', filename), delimiter='\t')
+
+# %%
+# arr[arr>dem_data] = dem_data[arr>dem_data]
+plt.imshow(arr-arr_old)
+plt.colorbar()
+
+# %%
