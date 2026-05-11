@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -86,7 +86,7 @@ data_dir = join(proj_dir, 'model_inputs')
 # %%
 run_dir = 'C:/WRDAPP/GWFlowModel'
 run_dir = 'F:/WRDAPP/GWFlowModel'
-# run_dir = 'D:/WRDAPP/GWFlowModel'
+run_dir = 'D:/WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
 # # model_nam = 'setback_streamflow'
@@ -96,8 +96,7 @@ loadpth = run_dir +'/Cosumnes/Regional/'
 
 model_nam = 'historical_simple_geology_reconnection'
 model_nam = 'input_write_2014_2020'
-model_nam = 'input_write_2014_2022'
-model_nam = 'input_write_2018_2022' # later scenario to compare with
+model_nam = 'input_write_2014_2025'
 
 # model_nam = 'input_write_2000_2022'
 
@@ -466,8 +465,6 @@ rch_month.write_file()
 
 
 success, buff = m_month.run_model()
-
-# %%
 
 # %% [markdown]
 # The previous version that simply rewrote the well and recharge from old inputs will change to use the new soil water budget output for all fields, I may want to write another intermediate script to transfer the soil water budget from by crop to one dataset.

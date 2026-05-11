@@ -2,13 +2,10 @@ rem conda init activates a conda shell which is what conda.bat does
 
 
 rem version with no p_o
-set m_nam=input_write_2014_2022_R200
-rem set m_nam=input_write_2014_2022_R204
-rem set m_nam=input_write_2014_2022_R203
+set m_nam=input_write_2014_2025_R200
+rem set m_nam=input_write_2014_2025_R204
+rem set m_nam=input_write_2014_2025_R203
 
-rem check to see if different start years have an impact
-rem set m_nam=input_write_2016_2022_R200
-rem set m_nam=input_write_2018_2022_R200
 
 echo %m_nam%
 
