@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -102,7 +102,7 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # m_nam = 'input_write_2014_2020_R3'
     # m_nam = 'input_write_2014_2020'
-    m_nam = 'input_write_2014_2022_R204'
+    m_nam = 'input_write_2014_2025_R204'
     # m_nam = 'input_write_2016_2022_R200'
 
     # input_name = 'static_model_inputs.xlsx'
@@ -125,17 +125,17 @@ t_start = time.time()
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
-# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here
 # m_nam = 'input_write_2014_2020'
 # m_nam = 'input_write_2014_2022'
 
-scenario = '_R20' # pumping constraint
-scenario = '_R4' # 90/20 floodplain
-# scenario = '_R3' # 6x existing diversion for MAR vineyard
+# scenario = '_R20' # pumping constraint
+# scenario = '_R4' # 90/20 floodplain
+# # scenario = '_R3' # 6x existing diversion for MAR vineyard
 
-scenario = '_R200' # 200 represents no p_o
+# scenario = '_R200' # 200 represents no p_o
 # scenario = '_R203' # no p_o and 6x MAR
 # scenario = '_R204' # no p_o and 90/20 flloodplain
 
@@ -473,13 +473,17 @@ for year in run_years:
 # %%
 # rename as econ for plotting reference
 df_all = df_all.rename(columns={'parcel_id':'UniqueID'}).merge(parcels[['UniqueID','acres']])
-# scale value rates (1/acre) into totals 
-df_all['total_value'] = df_all['value']*df_all.acres
+# scale value rates (1/acre) into total volumes (m3)
+df_all['total_value'] = df_all['value']*df_all.acres*4046.86
+
 
 # %%
 df_all_out = df_all.copy().drop(columns=['pod_bool','pod'])
-
-df_all_out = df_all_out.groupby(['name','date','var'])[['total_value','value']].agg({'total_value':'sum', 'value':'mean'})
+# aggregate results by crop type
+# add column for acres
+df_all_out = df_all_out.groupby(['name','date','var'])[['total_value','value','acres']].agg({'total_value':'sum', 'value':'mean','acres':'sum'})
+# calculate rate, averaged by acres 
+df_all_out['value_per_area'] = df_all_out.total_value/df_all_out.acres
 # save data for Yusuke
 df_all_out.to_csv(join(out_dir, 'daily_WB_long.csv'))
 
@@ -499,9 +503,6 @@ plt_df = df_all[(df_all['var']=='GW_applied_water')].copy()
 #            facet_kws={'sharey': True, 'sharex': 'col'}, 
 #             kind='line', err_style="bars"
 #            )
-# plt_df
-
-
 
 # %%
 
@@ -543,13 +544,6 @@ var = 'GW_applied_water'
 df_annual_sum = df_all.groupby(['crop','year','name','UniqueID','var','pod']).sum(numeric_only=True).reset_index()
 df_annual_sum = df_annual_sum.groupby(['crop','name','year','var']).mean(numeric_only=True).reset_index()
 
-# sns.relplot(df_annual_sum, x='year',y='value', col='crop',kind='c')
-
-# sns.catplot(df_annual_sum,x='year',y='value', col='crop', row='var', 
-#             kind='bar', color='tab:blue',
-#             sharey=False
-#            # facet_kws={'sharey': False, 'sharex': True}
-# )
 
 sns.catplot(df_annual_sum[df_annual_sum['var']==var],x='year',y='value', col='crop',  
             kind='bar', color='tab:blue',

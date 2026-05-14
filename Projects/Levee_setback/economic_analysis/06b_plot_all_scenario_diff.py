@@ -61,8 +61,9 @@ import flopy
 
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
-# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+
 
 
 # %% [markdown]
@@ -70,7 +71,7 @@ loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # %%
 # update to different modflow models here
-m_nam = 'input_write_2014_2022'
+m_nam = 'input_write_2014_2025'
 
 m_version = '' # original baseline with p_o
 m_version = '_R200' # no p_o # specified later?
@@ -278,7 +279,7 @@ df_econ_sum.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_yield_s
 
 # %%
 for val in ['total_value']:
-    for var in ['yield','profit']:
+    for var in ['profit']: # 'yield', doesn't work because of different units
         df_plt = df_econ_sum[df_econ_sum['var']==var].copy()
         fig,ax = plt.subplots(1, 1, sharey=False, figsize=(12,3), layout='constrained', dpi=300)
         
@@ -292,6 +293,61 @@ for val in ['total_value']:
 
         fig.supylabel(var.capitalize())
         plt.savefig(join(model_out, 'scenario_comparison', var+'_summed_across_crops_'+val+'.png'), bbox_inches='tight')
+        plt.close()
+
+# %% [markdown]
+# # Compare applied water
+
+# %% [markdown]
+#
+
+# %%
+# load scenario data at once to simplify plotting 
+scenarios = ['_R200','_R203','_R204']
+
+df_wb_scenario = pd.DataFrame()
+for scenario in scenarios:
+    df_wb_s = pd.read_csv(join(base_model_ws+scenario,'output_clean', 'daily_WB_long.csv'),index_col=0)
+    df_wb_scenario = pd.concat((df_wb_scenario, df_wb_s.assign(scenario=scenario, scen_name=scenario_summary.loc[basename(base_model_ws)+scenario, 'plot_name'])))
+
+# could improve with scenario summary sheet
+scenario_names = df_wb_scenario.scen_name.unique()
+df_wb_scenario.date = pd.to_datetime(df_wb_scenario.date)
+# df_wb_scenario = df_wb_scenario.drop(columns='index')
+
+# %%
+df_wb_scenario['year'] = df_wb_scenario.date.dt.year
+wb_ann_sum = df_wb_scenario.groupby(['name','var','scenario', 'scen_name', 'year'])[['value','total_value']].sum()
+wb_ann_sum = wb_ann_sum.reset_index()
+plt_var = 'GW_applied_water'
+wb_ann_sum = wb_ann_sum[wb_ann_sum['var']==plt_var]
+
+# %%
+wb_dir = join(model_out, 'scenario_comparison', 'wb_comp')
+os.makedirs(wb_dir, exist_ok=True)
+
+# %%
+
+# %%
+crop_names = wb_ann_sum.name.unique()
+units = ['(meters)', '(cu. m.)']
+for nc, col in enumerate(['value','total_value']):
+    for crop in crop_names:
+        fig,ax = plt.subplots()
+    
+        for sn in scenario_names:
+            df_plt = wb_ann_sum[wb_ann_sum.scen_name==sn]
+    
+            df_plt = df_plt[(df_plt.name==crop)]
+            df_plt.plot(x='year',y=col, label=sn, ax=ax)
+            # df_plt = dtw_count_s[(dtw_count_s.crop==crop)]
+            # df_plt.plot(x='year',y='acres', label='Scenario', ax=ax)
+            # ax.set_ylabel('Number of fields')
+        ax.set_ylabel(plt_var.replace('_',' ')+units[nc])
+        ax.set_title(crop)
+    
+        ax.set_xlabel('Year')
+        plt.savefig(join(wb_dir, plt_var+'_by_year_'+col+'_'+crop+'.png'))
         plt.close()
 
 # %%
