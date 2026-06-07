@@ -42,14 +42,14 @@ def lab_pnt(geom, scale = None, xscale = None, yscale = None):
 #     ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels',
 #                 arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
 #                 bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=2))
-def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10):
+def arr_lab(gdf, text, ax, offset = (0,0), arrow=False, exterior = False, fontsize=10, lw=1, lw_arrow=1):
     xy = gdf.geometry.unary_union.centroid.coords[0]
-    lw = 1
+    # lw = 1
     if exterior:
         xy = gdf.geometry.unary_union.exterior.representative_point().centroid.coords[0]
     if arrow:
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
-                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black'},
+                    arrowprops = {'shrinkA':1,'arrowstyle':'simple', 'color':'black', 'linewidth':lw_arrow},
                     bbox=dict(boxstyle="square,pad=0.3", fc="lightgrey", ec="black", lw=lw))
     else:
         ax.annotate(text=text, xy=xy, ha='center', va = 'bottom', xytext = offset, textcoords='offset pixels', fontsize = fontsize, 
@@ -127,7 +127,7 @@ def make_multi_scale(ax, xoff,yoff, dist = 1E3, scales = [4,2,1], units = 'km'):
         rect = box(lx, ly, lx +dist*adj, ly+height)
         gpd.GeoSeries(rect).plot(color=color, edgecolor='black', ax=ax)
         # round to 1 decimal, and drop decimal if it is only a .0
-        dist_lab = str(np.round(dist*adj/km, 1)).replace('.0','')
+        dist_lab = str(np.round(dist*adj/km, 2)).replace('.0','')
         if n ==0:
             dist_lab += ''+units
 

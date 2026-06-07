@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -381,7 +381,9 @@ from map_cln import plt_cln
 
 # %%
 def get_top_active_layer(head_ma):
-    """ Sample the top active value for a 3d array for each row,column"""
+    """ Sample the top active value for a 3d array for each row,column
+    head_ma: 3D array of head data with mask applied for dry cells
+    """
     if head_ma.mask.any():
         head_loc = pd.DataFrame(np.transpose(np.where(~head_ma.mask)), columns=['k','i','j'])
         head_loc = head_loc.groupby(['i','j']).min().reset_index()

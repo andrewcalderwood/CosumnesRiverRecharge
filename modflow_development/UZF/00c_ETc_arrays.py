@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -27,6 +27,8 @@ import time
 # import shapely
 import geopandas as gpd
 import rasterio
+
+import matplotlib.pyplot as plt
 
 # %%
 doc_dir = os.getcwd()
@@ -314,9 +316,9 @@ coords = coords.to_crs('epsg:32610')
 
 
 # %%
-fig,ax = plt.subplots()
-coords[coords['Stn Name'].isin(['Manteca','Dixon','Fair Oaks', 'Twitchell Island'])].plot(ax=ax)
-m_domain.plot(ax=ax)
+# fig,ax = plt.subplots()
+# coords[coords['Stn Name'].isin(['Manteca','Dixon','Fair Oaks', 'Twitchell Island'])].plot(ax=ax)
+# m_domain.plot(ax=ax)
 
 # fair oaks really is the closest, and ET doesn't vary much between stations anyway. previously I did a little analysis
 # on rainfall data but I remember not a lot being consistently available at eagles nest or having errors

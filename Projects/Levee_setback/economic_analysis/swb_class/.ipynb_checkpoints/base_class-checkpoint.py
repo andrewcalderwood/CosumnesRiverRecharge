@@ -18,7 +18,7 @@ class CropModel:
         self.soil_rep = soil_rep
         self.run_opt = run_opt
         
-        self.var_gen, self.var_crops, self.var_yield, self.season, self.pred_dict, self.crop_dict = swb.load_var(crop)
+        self.var_gen, self.var_crops, self.var_yield, self.season, self.pred_dict, self.crop_dict, self.var_irr = swb.load_var(crop)
         self.yield_start = swb.ymd2dt(year, self.season.month_start, self.season.day_start, self.season.start_adj)
         self.yield_end = swb.ymd2dt(year, self.season.month_end, self.season.day_end, self.season.end_adj)
         self.strt_date = self.yield_start.min()

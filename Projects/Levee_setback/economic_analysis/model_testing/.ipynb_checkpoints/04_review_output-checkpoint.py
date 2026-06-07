@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -88,7 +88,7 @@ def read_crop_arr_h5(crop, h5_fn):
 # %%
 crop='Alfalfa'
 # crop='Pasture'
-crop='Corn'
+# crop='Corn'
 # crop='Grape'
 # crop='Misc Grain and Hay'
 year=2016
@@ -144,7 +144,7 @@ pi = -read_crop_arr_h5(crop, fn)
 # # Save output to table format
 
 # %%
-var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
 
 
 # %%
@@ -176,10 +176,8 @@ out_summary.to_csv(join(model_ws,'output_summary_'+crop+'.csv'))
 
 # %%
 # temporary fix
-out_summary.loc[out_summary.irr_gw_in>50,:] = np.nan
+# out_summary.loc[out_summary.irr_gw_in>50,:] = np.nan
 # out_summary
-
-# %%
 
 # %%
 # temporary fix

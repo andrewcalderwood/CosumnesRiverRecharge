@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -165,7 +165,7 @@ soil_dict = base_soil_dict(soil_ag_all)
 # convert to class for cleaner referencing
 soil = cost_variables(soil_dict)
 # assume baseline depth of 2 meters
-soil.depth = 2
+# soil.depth = 2
 soil.depth = soil_ag_all.SoilDepth.values
 
 # %%
@@ -250,7 +250,8 @@ ax[0].legend()
 
 # %% [markdown]
 # The model results seem to suggest water content is simply not filling enough to support percolation. A quick check shows once water content hits 0.4 then peroclation is quite high.
-# - i had defaulted soildepth to 2 m which appears to have held excessive soil water storage capacity to allow percolation
+# - i had defaulted soildepth to 2 m which appears to have held excessive soil water storage capacity to allow percolation, corrected to actual depth
+# - 
 
 # %% [markdown]
 # From regional model with irrigation:
@@ -277,6 +278,7 @@ pc_df.to_csv( join(proj_dir,'native_parcel_zonalstats',
 # %% [markdown]
 # # check results
 # Something is broken because we see zero percolation even when I set irrigation to extreme values
+# - this is no longer the case, was likely fixed by actual soil depth or was just an issue when trying to run within a function that was missing somethin
 
 # %%
 import matplotlib as mpl
@@ -292,3 +294,5 @@ ax.plot(ETc.mean(axis=1))
 # %%
 
 plt.plot(pc.mean(axis=1))
+
+# %%

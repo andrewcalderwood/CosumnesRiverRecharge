@@ -10,8 +10,8 @@ Author: Andrew Calderwood
 # import geopandas as gpd
 import numpy as np
 import pandas as pd
-# import os
-# from os.path import join, exists
+import os
+from os.path import join, exists
 import flopy
 
 import matplotlib.pyplot as plt
@@ -175,4 +175,31 @@ def plt_rech_vs_pump(pump_rate, rech):
     plt.legend()
     plt.show()
     return None
-    
+
+
+# %%
+def update_bas_options(mf_ws, m_name, added_options = "BUDGETDB flow_budget.txt"):
+    """
+    add options to BAS6 input file in single line format since flopy doesn't natively support
+    temp workaround since a bit odd to update flopy for this
+    """
+    # file to change BAS since flopy doesn't support option natively
+    # should update flopy to more easily allow this
+    input_file_path = join(mf_ws, m_name+'.bas')
+    output_file_path = join(mf_ws, m_name+'.bas.temp')
+    # text to change/update
+    target_line_content = "FREE"
+    replacement_content = "FREE "+added_options
+    # open existing file and create temporary output file to write to
+    with open(input_file_path, 'r') as infile, open(output_file_path, 'w') as outfile:
+        for n, line in enumerate(infile):
+            # only make changes in top rows where the specificed text is present
+            if (n<10)&(target_line_content in line)&(replacement_content not in line):
+                # Modify the line
+                outfile.write(line.replace(target_line_content, replacement_content))
+                print('modified header with options')
+            else:
+                # Keep the original line
+                outfile.write(line)
+    # Replace the original file with the new one
+    os.replace(output_file_path, input_file_path)

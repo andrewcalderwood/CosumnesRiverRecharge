@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -68,10 +68,10 @@ from report_cln import base_round
 dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # %%
-year = int(2015)
-loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
-model_ws = loadpth+'historical_simple_geology_reconnection'
-model_ws = loadpth+'strhc1_scale'
+# year = int(2015)
+# loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Regional/'
+# model_ws = loadpth+'historical_simple_geology_reconnection'
+# model_ws = loadpth+'strhc1_scale'
 
 
 # %%
@@ -142,8 +142,8 @@ def get_dtw(year, model_ws):
     # some wells have relatively static dtw and some show a decline
     # import matplotlib.pyplot as plt
     # plt.plot(dtw[:,2080]);
-    plt.plot(dtw[:,::100]);
-    plt.ylim(0,200)
+    # plt.plot(dtw[:,::100]);
+    # plt.ylim(0,200)
     # dtw.shape
 
     # %%
@@ -162,31 +162,34 @@ def get_dtw(year, model_ws):
 # %%
 
 # %%
-def sample_dtw(end_heads, botm):
+def sample_dtw(end_heads, parcel_wells):
     """
     For a simple function we will insert the heads 
     that have already been sampled
     INPUT:
     end_heads: array of nlay, nrow, ncol with head values for the end
         of a simulatoin period
-    botm: modflow layer bottom elevations
+    botm: modflow layer bottom elevations # deprecated
+    parcel_wells: well data for each parcel that specifies model row,column, layer and DEM
     OUTPUT:
     well_dtw: depth to water for each well for each parcel for
         the given heads input
     """
-    nlay, nrow,ncol = botm.shape
+    # nlay, nrow,ncol = botm.shape
 
 
     # %%
-    # also need shapefile of pumping well locations for each parcel
-    parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
-    frow = parcel_wells.row-1
-    fcol = parcel_wells.column-1
-    # # parcel_wells layers (make 1-based
-    parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
-    # get elevation
-    well_dem = dem_data[parcel_wells.row-1, parcel_wells.column-1]
-    
+    # # also need shapefile of pumping well locations for each parcel
+    # parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
+    # frow = parcel_wells.row-1
+    # fcol = parcel_wells.column-1
+    # # # parcel_wells layers (make 1-based
+    # parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
+    # # get elevation
+    # well_dem = dem_data[parcel_wells.row-1, parcel_wells.column-1]
+    well_dem = parcel_wells.dem.values
+
+
     nfield = parcel_wells.shape[0]
 
     # %%
@@ -206,14 +209,19 @@ def sample_dtw(end_heads, botm):
 
 
 # %%
-def avg_heads(sp_last, hdobj, m):
+def avg_heads(sp_last, hdobj, m_dim):
     """
     Given an array of stress periods, sample the heads
     then take the average
+    INPUT:
+    sp_last: stress periods to sample
+    hdobj: flopy head object
+    m: flopy.modflow.model object to use for dimension # deprecated
+    m_dim: dimensions (nlay, nrow,ncol) of model
     """
     nspd = sp_last.shape[0]
     # allocate an array for the heads
-    end_heads = np.zeros((nspd, m.dis.nlay,m.dis.nrow,m.dis.ncol))
+    end_heads = np.zeros((nspd, m_dim[0], m_dim[1], m_dim[2]))
     # sample the heads for each stress period and insert in the array
     for n in np.arange(nspd):
         end_heads[n] = hdobj.get_data(sp_last[n])

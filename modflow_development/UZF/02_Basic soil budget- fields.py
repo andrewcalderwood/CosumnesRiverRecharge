@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -69,7 +69,7 @@ from swb_utility import calc_S, calc_pc
 # %%
 # water year perspective
 strt_year = 1999
-end_year = 2023
+end_year = 2025
 
 # %%
 # strt_date = pd.to_datetime('2014-10-1')
@@ -383,12 +383,10 @@ def arr_to_h5(arr, h5_fn):
 
 # %%
 # years and array index 
-years = pd.date_range(strt_date,end_date,freq='AS-Oct')
+years = pd.date_range(strt_date,end_date+pd.DateOffset(years=1),freq='AS-Oct')
 yr_ind = (years-strt_date).days
 
 
-# %%
-pc_arr.shape
 
 # %%
 

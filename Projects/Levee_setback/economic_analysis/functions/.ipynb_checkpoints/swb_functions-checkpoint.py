@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -155,13 +155,15 @@ def calc_yield(ETc, K_S, gen):
 # %%
 
        
-def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
+def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays, p_o_bool =True):
     """
     Y_A : actual yield (tons)
     dtw_arr : depth to water (ft)
     irr_gw : groundwater irrigation (m)
     irr_sw : surface water irrigation (m)
     gen : dictionary with cost variables
+    arrays: when False says that the optimization is being run so irrigation efficiency should be used to scale gw cost
+    p_o_bool: boolean whether to remove operating costs or not
     """
     # set up local variables
     p_c = gen.p_c
@@ -169,13 +171,33 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen):
     p_o = gen.p_o # operating cost, $/acre
     p_sw = gen.p_sw # surface water cost, $/acre-in
     phi = gen.phi # energy req to raise unit of water per unit length, kWh/acre-in/ft
+    # when optimizing cost, the irrigation efficiency should increase cost as the farmer expects this
+    # but not in irr for the soil water budget or else it will scale out
+    if not arrays:
+        irr_eff_mult = gen.irr_eff_mult     # irrigation efficiency multiplier
+    else:
+        irr_eff_mult = 1
+    
 
     in_2_m = (1/12)*0.3048 # convert from inches to meters
-    c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0])/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
-    c_swtot = np.multiply(p_sw, irr_sw[:,0])/in_2_m # Calcualte total surface water costs for the season ($/acre)
+    c_gwtot = p_e*phi*(np.multiply(dtw_arr, irr_gw[:,0]*irr_eff_mult)/in_2_m) # Calculate total groundwater pumping costs for the season ($/acre)
+    c_swtot = np.multiply(p_sw, irr_sw[:,0]*irr_eff_mult)/in_2_m # Calcualte total surface water costs for the season ($/acre)
+    # to prevent negative irrigation from being used, remove any negative cost (profit) from putting water back and add a penalty
+    # there were still a few event for misc grain and grape with negative so increasing penalty from 2x to 4x
+    c_gwtot[c_gwtot<0] *= -4
+    c_swtot[c_swtot<0] *= -4
+    # calculate the total cost from irrigation
     cost = c_gwtot+c_swtot
     # calculate profit (daily values must be summed for the seasonal value)
-    pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    # return as a negative for minimization
+    if p_o_bool ==True:
+        pi = -((np.sum(p_c*Y_A - p_o) - np.sum(cost))) # Calculate profit ($/acre)
+    else:
+        pi = -((np.sum(p_c*Y_A) - np.sum(cost))) # Calculate profit ($/acre) without removing static operating costs
+
+    # it would be nice to be able to return both profit and revenue in an alternate scenario
+    # with alternate input file set up, may not need to use the alternate function to not include p_o
+    
     # forced internal boundary to prevent negatives
     # if any(irr_lvl <0):
     #     # set a scalable penalty, assuming p_o would be a sizable penalty
@@ -189,6 +211,8 @@ def choose_water_source(dtw_arr, gen, mix_fraction = 1):
     Determine if GW or SW is more efficient
     dtw_arr : depth to water (ft)
     gen : dictionary with cost variables
+    mix_fraction: scales the price of gw and sw when comparing against the other to allow
+     for a lower threshold, value of 1 means p_gw must be truly <= p_sw
     """
     # set up local variables
     p_e = gen.p_e # energy price, $/kWh
@@ -208,8 +232,9 @@ def choose_water_source(dtw_arr, gen, mix_fraction = 1):
     
     return(water_source)
 
-# %%
 
+# %%
+# I'm not sure why I still have this version as the run_swb below is the one primarily used
     
 def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
     """
@@ -293,57 +318,9 @@ def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
 
 
 # %%
-# after changing this to two scripts it seemed like the optimizatoin
-# was just repeating
-
-# def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False):
-#     """
-#     irr_lvl: depth of irrigation to apply
-#     dtw_arr: 1D array of the depth to groundwater for each step
-#     irr_src: string variable to identify the expected shape of irr_lvl
-#         'both': array of 2*n_irr with depths for GW and SW
-#         'sw': array of n_irr with depths for SW 
-#         'gw: array of n_irr with depths for GW
-#     See function run_swb_model for details of others
-#     """
-#     nfield = soil.nfield
-#     nper = gen.nper
-#     n_irr = gen.n_irr
-#     irr_days = gen.irr_days
-    
-#     irr_sw = np.zeros((nper,nfield))
-#     irr_gw = np.zeros((nper,nfield))
-#     # updated code to correct if irr_lvl is only for one irrigation type
-#     if irr_src=='both':
-#         for i in np.arange(0,n_irr):
-#             irr_sw[irr_days[i]] = irr_lvl[i]
-#             irr_gw[irr_days[i]] = irr_lvl[i+n_irr]
-#     elif irr_src=='sw':
-#         for i in np.arange(0,n_irr):
-#             irr_sw[irr_days[i]] = irr_lvl[i]
-#     elif irr_src=='gw':
-#         for i in np.arange(0,n_irr):
-#             irr_gw[irr_days[i]] = irr_lvl[i]
-#     # run the time series behind the soil water budget model
-#     pc, K_S = run_swb_model(soil, rain, ETc, irr_gw, irr_sw)
-    
-#     ## Calculate yield outcomes 
-#     Y_A = calc_yield(ETc, K_S, gen)
-#     # Y_A = calc_yield(ETc, K_S, K_Y, y_max, yield_ind,  nfield, nper)
-    
-#     ## profit simplified to a function
-#     # pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o)  
-#     pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen)  
-
-#     if arrays:
-#         # for secondary output need to also save deep percolation
-#         return(pi, pc, K_S, Y_A)
-#     return(pi)
-
-# %%
 
     
-def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False):
+def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = False, init_wc=None):
     """
     irr_lvl: depth of irrigation to apply
     soil: class object with soil parameter for the given field
@@ -356,7 +333,7 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
         'sw': array of n_irr with depths for SW 
         'gw: array of n_irr with depths for GW
     arrays: boolean to identify whether output arrays should be returned
-        True: water budget arrays are the output
+        True: water budget arrays are the output + profit and yield
         False: the output is the net profit (used for optimization)
     """
     nper = gen.nper
@@ -394,9 +371,21 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     soildepth = soil.depth
     taw = soil.taw
     
-    # initial water content and root zone depletion are pulled from the last step of the previous run
+    # initial water content and root zone depletion should be pulled from the last step of the previous run
     # -1 starts at IC for BC
     # WC/D starts at 0
+    # at minimum we should assume WC starts at field content following wet season (or wilting point)
+    if init_wc is None:
+        # initial conditions of wilting point water content after irrigation season
+        # wc[0,:] = soil.wc_wp # should not use
+        # a quick test of this shows that using wilting point forces soil to refill unrealistically
+        # might try field content again as recharge estimates are a bit low, as a test to see sensitivity
+        # field content aligns with actual results at end of winter, just slightly lower
+        wc[0,:] = soil.wc_f
+    # it would be best to sample initial conditions from end of winter
+    elif init_wc is not None:
+        wc[0,:] = init_wc
+    
     for ns, n in enumerate(np.arange(-1, nper-1)):
         ## Runoff ##
         S = calc_S(wc[ns+1], soil.Smax, soil.wc_f, soil.por)
@@ -441,14 +430,15 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     # Y_A = calc_yield(ETc, K_S, K_Y, y_max, yield_ind,  nfield, nper)
     
     ## profit simplified to a function
+    # the profit from calc_profit is made negative for minimization
     # pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o)  
-    pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen)  
+    pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen, arrays)  
     if wb_sum.sum(axis=1).mean() > 1E-6:
         print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
 
     if arrays:
         # for secondary output need to also save deep percolation
-        return(pi, pc, K_S, Y_A)
+        return(pi, pc, K_S, Y_A, wc, ETa, rp)
     return(pi)
 
 
@@ -502,34 +492,6 @@ def mak_irr_con_adj(n_irr, sw_con = 100, gw_con = 100):
     if n_wt==2:
         ACON[1,(n_irr):(n_wt*n_irr)] = np.ones(n_irr)
 
-    con_min = np.zeros(len(ACON)) 
-
-    # make constraint
-    linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
-    return linear_constraint
-
-
-# %%
-
-def mak_irr_con_old(soil_ag, n_irr, sw_con = 100, gw_con = 100):
-    """ 
-    Make simple constraints on SW and GW with seasonal limits (inches)
-    The unconstrained version has very high limits (unreachable)
-    """
-    ## for no POD case the SW limit would be 0
-    sw_scale = 1
-    gw_scale = 1
-    if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel'|sw_con==0:
-        sw_scale = 0
-        gw_scale = 2 # give groundwater twice as much availability
-
-    # Total surface water and groundwater available during the season (in)
-    irr_tot = np.array([sw_con*sw_scale, gw_con*gw_scale]) 
-    irr_tot = (irr_tot/12)*0.3048 # convert to meters
-    # Coefficients for inequality constraints (first n_irr columns are for surface water; second n_irr columns are for groundwater)
-    ACON = np.zeros((2,2*n_irr))
-    ACON[0,:n_irr] = np.ones(n_irr)
-    ACON[1,(n_irr):(2*n_irr)] = np.ones(n_irr)
     con_min = np.zeros(len(ACON)) 
 
     # make constraint

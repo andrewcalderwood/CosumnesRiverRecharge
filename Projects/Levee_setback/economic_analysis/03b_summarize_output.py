@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -21,6 +21,8 @@ import os
 from os.path import join, exists, dirname, basename, expanduser
 import glob
 import sys
+import re
+
 import time
 from importlib import reload
 import h5py
@@ -47,6 +49,37 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
 # %%
+# for batch file case we want to ignore the consant h5py deprecation warning
+import warnings
+
+warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
+# %%
+# updated version specifies concept_name and copy_files here so it can be easily
+# seen as these are the main update to make in a script
+
+m_nam = sys.argv[1]
+# added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
+input_name = sys.argv[2]
+
+# m_nam = 'input_write_2014_2022_no_p_o'
+# m_nam = 'input_write_2014_2020_R3'
+# m_nam = 'input_write_2014_2020'
+
+# input_name = 'static_model_inputs.xlsx'
+
+print('sys.argv[1] (m_nam) is...')
+print(m_nam)
+
+print('sys.argv[2] (input_name) is...')
+print(input_name)
+
+t_start = time.time()
+
+# %%
+import functions.output_processing
+reload(functions.output_processing)
 from functions.output_processing import get_wb_by_parcel
 from functions.f_gw_dtw_extract import sample_dtw, avg_heads
 import functions.Basic_soil_budget_monthly as swb
@@ -85,13 +118,21 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
-loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'C:/WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
-# update to different modflow models here, next step is using the 20 year model
-# base_model_ws = loadpth + 'crop_soilbudget'
-m_nam = 'historical_simple_geology_reconnection'
-m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020'
+# m_nam = 'input_write_2014_2020_R1'
+# m_nam = 'input_write_2014_2020_R3'
+
 model_ws = join(loadpth, m_nam)
+
+# simpler way to get base model workspace is remove R\d{1,2} since all should follow this format
+m_nam_base = re.sub(r'_R\d{1,2}', '', m_nam)
+
+
+# %%
+sys.stdout = open(join(model_ws, 'log', 'summarize_output_log_'+str(pd.to_datetime('today').date())+'.txt'), 'w')
 
 
 # %%
@@ -100,32 +141,37 @@ swb_ws = join(model_ws, 'rep_crop_soilbudget')
 os.makedirs(join(swb_ws, 'output'), exist_ok=True)
 
 # %%
+# no longer need to load MODFLOW if we pre-process csv with parcel well and layer
 # define modflow model WS to reference for modflow input
-m_model_ws = join(dirname(loadpth), 'Regional', m_nam)
+m_model_ws = join(dirname(loadpth), 'Regional', m_nam_base)
 
-load_only=['DIS', 'BAS6']
+# load_only=['DIS', 'BAS6']
 
-m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
-                                exe_name='mf-owhm', version='mfnwt',
-                              load_only = load_only)
+# m = flopy.modflow.Modflow.load('MF.nam', model_ws= m_model_ws, 
+#                                 exe_name='mf-owhm', version='mfnwt',
+#                               load_only = load_only)
 
 # %%
 # bottom array is needed for referencing well layer
-botm = m.dis.botm.array
+# botm = m.dis.botm.array
+m_dim = np.loadtxt(join(m_model_ws, 'model_metadata.txt')).astype(int)
+
 
 # %%
-from mf_utility import get_layer_from_elev
-dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
-nlay,nrow,ncol = botm.shape
-# also need shapefile of pumping well locations for each parcel
-parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
-frow = parcel_wells.row-1
-fcol = parcel_wells.column-1
-# # parcel_wells layers (make 1-based
-parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
-# get elevation
-parcel_wells['dem'] = dem_data[parcel_wells.row-1, parcel_wells.column-1]
-parcel_wells = parcel_wells[['UniqueID','dem','layer', 'row','column']]
+# from mf_utility import get_layer_from_elev
+# dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
+# nlay,nrow,ncol = botm.shape
+# # also need shapefile of pumping well locations for each parcel
+# parcel_wells = gpd.read_file(join(gwfm_dir, 'WEL_data', 'parcels_to_wells', 'parcels_to_wells.shp'))
+# frow = parcel_wells.row-1
+# fcol = parcel_wells.column-1
+# # # parcel_wells layers (make 1-based
+# parcel_wells['layer'] = get_layer_from_elev(dem_data[frow,fcol] - parcel_wells.depth_m*0.9, botm[:, frow,fcol], nlay) + 1
+# # get elevation
+# parcel_wells['dem'] = dem_data[parcel_wells.row-1, parcel_wells.column-1]
+# parcel_wells = parcel_wells[['UniqueID','dem','layer', 'row','column']]
+# now have this file pre-created by model_connect since it already estimates layer
+parcel_wells = pd.read_csv(join(model_ws, 'crop_modflow', 'parcel_wells_with_layer.csv'))
 parcel_wells.UniqueID = parcel_wells.UniqueID.astype(int)
 
 
@@ -134,13 +180,14 @@ all_run_dates = pd.read_csv(join(model_ws, 'crop_modflow', 'all_run_dates.csv'),
 
 
 # %% [markdown]
-# Iteration starts here by year and crop
+# Iteration starts here by year and crop lower down
 
 # %%
 
-# crop='Grape'
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
-# for m_per in [1]:
+# for m_per in np.arange(1, all_run_dates.shape[0]-1):
+# for m_per in [all_run_dates.shape[0]-1]:
+for m_per in [6]:
+# for m_per in [4]:
     m_strt = all_run_dates.iloc[m_per].date
     year = m_strt.year
     print(year)
@@ -167,16 +214,23 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # determine dates for spring sampling
     spring_dates = m_dates[m_dates.index.month==3]
     # get head value from last 30 days to avoid using extreme single day value
-    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    # spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m)
+    spring_heads = avg_heads(spring_dates.kstpkper.values, hdobj, m_dim)
     
     # the dtw conversion runs a little slow
     # get the DTW for the wels in the simulation from the last period
-    well_dtw = sample_dtw(spring_heads, botm)
+    # well_dtw = sample_dtw(spring_heads, botm) # old version re-calculated well layer
+    # new version loads the parcel_wells_csv
+    well_dtw = sample_dtw(spring_heads, parcel_wells)
     # need to make integer for join with crop choice
     well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
     # %%
-    # well_dtw = pd.read_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'))
+    # get head value from last 30 days to avoid using extreme single day value
+    # now the csv and code to load produce the same results it seems
+    # well_dtw = pd.read_csv(join(swb_ws,'field_SWB', 'modflow_spring_dtw_ft_WY'+str(year)+'.csv'), index_col=0)
+    # need to make integer for join with crop choice
+    # well_dtw.UniqueID = well_dtw.UniqueID.astype(int)
 
 
     # %%
@@ -202,9 +256,50 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # # this output with the parcel data needs to be saved as well
-    # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
-    # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))
-    # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'))
+    # pc_df_all = pd.read_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'),index_col=0)
+    # irr_gw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0)
+    # irr_sw_df_all = pd.read_csv(join(swb_ws, 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0)
+
+# %% [markdown]
+# There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
+# The model input shows only 182 periods but the get_ts has 183 times, is this because it includes the initial heads?
+
+    # %%
+    # well locations to sample for head
+    wells_idx = list(zip(year_wells.layer-1, year_wells.row-1, year_wells.column-1))
+
+    # the head data loaded here can be generic across all crops then filtered down
+    print('Loading previously simulated heads')
+    hd_ts_all = pd.DataFrame()
+    # iterate over previous and current year to get complete time series (Nov (-1 year) -Dec)
+    for n in [-1,0]:
+        model_ws_year = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per+n].date.date()))
+        hdobj_year = flopy.utils.HeadFile(model_ws_year + '/MF.hds')
+    
+        # model output dates
+        times = hdobj_year.get_times()
+        difftime = np.diff(np.append([0],times) )
+        m_dates_year = all_run_dates.loc[m_per+n].date+np.array(times - difftime).astype('timedelta64[D]')
+        m_dates_year = pd.DataFrame(m_dates_year, columns=['dates']).set_index('dates')
+        m_dates_year['kstpkper'] = hdobj_year.get_kstpkper()
+    
+        # get head time series for the wells across the year
+        # doesn't take too long
+        hd_ts = hdobj_year.get_ts(wells_idx)
+        # convert to dataframe for use in load_run_swb
+        hd_ts_df = pd.DataFrame(hd_ts)
+        # update columns to represent uniqueID
+        hd_ts_df.columns = ['date']+year_wells.UniqueID.tolist()
+        hd_ts_df['date'] = m_dates_year.index
+        hd_ts_all = pd.concat((hd_ts_all, hd_ts_df))
+
+
+    # %%
+    # these all need to be converted to depth to water as they are currently head values (usually in negatives and in meters)
+    dtw_df = hd_ts_all.set_index('date').copy()
+    # calculate the depth to water as dtw_ft = (DEM (m) - WSE (m))/0.3048
+    dtw_df = dtw_df.multiply(-1).add(year_wells.dem.values, axis=1).multiply(1/0.3048)
+    # the function (SWB) expects the head values to be provided for all fields then filters by crop_in for the crop
 
     # %%
     for crop in finished_crops:
@@ -213,7 +308,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         print(crop)
 
         # %%
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict = swb.load_var(crop)
+        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop)
         # need to account for when crops aren't predicted and skip them
         # if pred_dict[crop] in pred_crops: 
         print(crop, ':',pred_dict[crop])
@@ -254,101 +349,43 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         irr_sw_crop_dates = irr_sw_crop_dates.reset_index().pivot_table(columns='date', values='rate',index='UniqueID')
     
         # specify irr_all input
-        irr_all = np.hstack((irr_gw_crop_dates.values,irr_sw_crop_dates.values))
+        # irr_gw goes first then irr_sw
+        irr_all = np.hstack((irr_sw_crop_dates.values,irr_gw_crop_dates.values))
 
 # %%
 # the simulation results show that naturally there is little to no irrigation before april so hold off for now
 # and I guess set a check to use last years head data or backward fill
     # irr_gw_crop_dates.transpose().plot()
 
-# %%
-# dtw_simple_df
-# row for each date in the simulation
-# column for each parcel
-
-# load_run_swb then indexes for the UniqueIDs of the current crop
-# then it indexes for all dates being simulated
-
-# so it would be easiest to simply sample the modflow heads for all dates as time series
-# this might be really slow but it will be needed
-# we can filter parcel_wells by the crops that are simulated
-
-        # %%
-        # well locations to sample for head
-        wells_idx = list(zip(year_wells.layer-1, year_wells.row-1, year_wells.column-1))
-
-# %% [markdown]
-# There is an issue with the very first period running 1 day into the next period. After checking the copy_model_modflow it shows that it ends on 3/31/2016 so it doesn't make sense.  
-# The model input shows only 182 periods but the get_ts has 183 times, is this because it includes the initial heads?
-
-        # %%
-        print('Loading previously simulated heads')
-        hd_ts_all = pd.DataFrame()
-        # iterate over previous and current year to get complete time series (Nov (-1 year) -Dec)
-        for n in [-1,0]:
-            model_ws_year = join(model_ws, 'crop_modflow/'+str(all_run_dates.loc[m_per+n].date.date()))
-            hdobj_year = flopy.utils.HeadFile(model_ws_year + '/MF.hds')
-        
-            # model output dates
-            times = hdobj_year.get_times()
-            difftime = np.diff(np.append([0],times) )
-            m_dates_year = all_run_dates.loc[m_per+n].date+np.array(times - difftime).astype('timedelta64[D]')
-            m_dates_year = pd.DataFrame(m_dates_year, columns=['dates']).set_index('dates')
-            m_dates_year['kstpkper'] = hdobj_year.get_kstpkper()
-        
-            # get head time series for the wells across the year
-            # doesn't take too long
-            hd_ts = hdobj_year.get_ts(wells_idx)
-            # convert to dataframe for use in load_run_swb
-            hd_ts_df = pd.DataFrame(hd_ts)
-            # update columns to represent uniqueID
-            hd_ts_df.columns = ['date']+year_wells.UniqueID.tolist()
-            hd_ts_df['date'] = m_dates_year.index
-            hd_ts_all = pd.concat((hd_ts_all, hd_ts_df))
-
-
-# %%
-# # we also need to sample DTW for each month to represent the cost during the irrigation dates 
-# irr_m_dates = m_dates.loc[irr_dates[irr_dates.isin(m_dates.index)]].kstpkper
-# irr_heads = avg_heads(irr_m_dates.values, hdobj, m)
-
-# # filter well locations to the crop
-# crop_wells = parcel_wells[parcel_wells.UniqueID.isin(crop_df.parcel_id)]
-
-
-# irr_dtw_all = pd.DataFrame()
-# # # hdobj.get_data(irr_m_dates.values[0])?
-# for h in np.arange(0,len(irr_m_dates)):
-#     irr_dtw = crop_wells.copy()
-#     h_arr = hdobj.get_data(irr_m_dates.values[h])
-#     # sample the heads to get dtw for the parcels during the irrigation period
-#     irr_dtw['dtw_m'] = irr_dtw.dem - h_arr[irr_dtw.layer-1, irr_dtw.row-1,irr_dtw.column-1]
-#     irr_dtw['date'] = irr_m_dates.index[h]
-#     irr_dtw_all = pd.concat((irr_dtw_all, irr_dtw))
-
 # %% [markdown]
 # TODO: alfalfa has two irrigation dates that occur before the new modflow run, in theory we shouldn't need DTW in that time as we were going
 # to assume no irrigation or we can sample from the previous year. The actual irrigation estimated is very small in those months so okay for now
 
         # %%
-        # these all need to be converted to depth to water as they are currently head values (usually in negatives and in meters)
-        dtw_df = hd_ts_all.set_index('date').copy()
+        # # filter well locations to the crop
+        # crop_wells = year_wells[year_wells.UniqueID.isin(crop_df.parcel_id)]
+        # save dtw for each crop uniquely for plotting later
         crop_dtw = dtw_df.loc[:,crop_df['parcel_id'].values]
-        dtw_arr = crop_dtw.loc[dates]
-        # dtw_arr.index.drop_duplicates()
-
-        # %%
-        # save output to reference
+        # dtw_arr = crop_dtw.loc[dates]# save output to reference
+        # re-index and forward fill to account for the last year of simulation which will end on 9/30 
+        # but crops like alfalfa need data until 10/4
+        dtw_arr = crop_dtw.reindex(dates).ffill() # save output to reference
         dtw_arr.to_csv(join(model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'))
-
-# %%
-# dtw_df.drop_duplicates().loc[dates].shape
 
         # %%
         print('Running soil water budget with irrigation and updated DTW to re-calculate yield, profit, and percolation')
         # in theory the best function to use if it works
-        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), hd_ts_all.set_index('date'), soil_rep = False,
+        load_run_swb(crop, year, crop_in, join(model_ws,'crop_soilbudget'), dtw_df, input_name = input_name, soil_rep = False,
                         run_opt=False, irr_all=irr_all, field_id = 'parcels')
+        sys.stdout.flush()
+
+# %%
+# after running the updated swb for a year then it would make sense to load in the hdf5 for profit to calculate the average value but this could also be done
+# in a secondary script called by model_connect
+
+# %%
+t_final = time.time()
+print('Total time was %.2f hours' %((t_final-t_start)/3600))
 
 # %% [markdown]
 # # Comparison of output

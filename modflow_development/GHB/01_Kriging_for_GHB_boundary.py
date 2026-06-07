@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -64,10 +64,10 @@ domain_buffered = gpd.GeoDataFrame(data = m_domain.copy(), geometry = m_domain.b
 # These could be set up to auto update based on spring, fall points available
 
 # %%
-# strt_year = 2000
-# end_year = 2010
-strt_year = 2022
-end_year = 2024
+strt_year = 2000
+end_year = 2021
+# strt_year = 2021
+# end_year = 2026
 
 # %%
 fn = ghb_dir+'/Fall_Spring_GWE_Points/*shp'
