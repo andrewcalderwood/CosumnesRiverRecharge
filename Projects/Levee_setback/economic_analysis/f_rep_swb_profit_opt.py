@@ -506,6 +506,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     irr_true = irr_all * irr_eff_mult # one efficiency for each crop type
     p_true = np.zeros(nfield_crop) 
     Y_A_true = np.copy(p_true)
+    cost_true = np.copy(p_true)
     pc_all = np.zeros((nfield_crop, gen.nper))
     wc_all = np.zeros((nfield_crop, gen.nper))
     ETa_all = np.zeros((nfield_crop, gen.nper))
@@ -525,10 +526,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         # run final soil water budget and save output as arrays
         # should now add specification of initial water content after end of winter run
         # it would be good to save the other relevant outputs such as soil moisture
-        p_true[ns], pc, K_S, Y_A, wc, ETa, rp  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True,
+        p_true[ns], pc, K_S, Y_A, wc, ETa, rp, cost  = run_swb(irr_true[ns], soil, gen, rain, ETc, dtw_arr, arrays=True,
                                                         init_wc = crop_wc_init_field
                                                         )
         Y_A_true[ns] = Y_A.sum() # yield comes as an array
+        cost_true[ns] = cost # yield comes as an array
         # double check this works for the multiple simple dtw version
         pc_all[ns] = pc[:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
         wc_all[ns] = wc[1:,0] # original shape meant for multiple fields, but only has one since iteration is over fields
@@ -562,6 +564,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     fn = join(base_model_ws, 'field_SWB', "profit_WY"+str(year)+".hdf5")
     crop_arr_to_h5(p_true, crop, fn)
 
+    fn = join(base_model_ws, 'field_SWB', "cost_WY"+str(year)+".hdf5")
+    crop_arr_to_h5(cost_true, crop, fn)
     # does it make sense to simply create another output file to cover the revenue or create a sub file for it under profit?
     # if a new file then it needs to also be initiated at the start and post-processed in f_summarize_output.py
 

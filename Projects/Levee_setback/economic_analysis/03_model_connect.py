@@ -675,7 +675,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # initialize HDF5 files for the year
     # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
     # initialize SWB folder
-    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
 

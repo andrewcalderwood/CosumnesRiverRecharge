@@ -202,7 +202,8 @@ def calc_profit(Y_A, dtw_arr, irr_gw, irr_sw, gen, arrays, p_o_bool =True):
     # if any(irr_lvl <0):
     #     # set a scalable penalty, assuming p_o would be a sizable penalty
     #     pi = irr_lvl[irr_lvl<0].sum()*-p_o*10
-    return(pi)
+    # also return cost of water
+    return(pi, np.sum(cost))
 
 
 # %%
@@ -231,89 +232,6 @@ def choose_water_source(dtw_arr, gen, mix_fraction = 1):
         water_source = 'mixed'
     
     return(water_source)
-
-
-# %%
-# I'm not sure why I still have this version as the run_swb below is the one primarily used
-    
-def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
-    """
-    soil: class object with soil parameter for the given field
-    gen: class object with the general parameters for the irrigation cost model
-    rain: 1D array of the rainfall depth for each step
-    ETc: 1D array of the crop evapotranspiration depth for each step
-
-    arrays: boolean to identify whether output arrays should be returned
-        True: water budget arrays are the output
-        False: the output is the net profit (used for optimization)
-    """
-    nfield = soil.nfield
-    nper = ETc.shape[0]
-    
-    # m2_ac = (1/0.3048**2)/43560 # convert from m2 to acres
-
-    wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
-    pc = np.zeros((nper, nfield)) # percolation
-    rp = np.zeros((nper, nfield)) # runoff 
-    ETa = np.zeros((nper, nfield)) # actual ET
-    wb_sum= np.zeros((nper, nfield)) # water budget check
-    # time units are days for everything
-
-    D = np.zeros((nper+1, nfield)) # soil depletion, add initial conditions with +1
-    K_S = np.zeros((nper, nfield)) # crop water stress
-
-    # most frequently used variables can be locally defined
-    soildepth = soil.depth
-    if calc_Ks:
-        taw = soil.taw
-    
-    # initial water content and root zone depletion are pulled from the last step of the previous run
-    # -1 starts at IC for BC
-    # WC/D starts at 0
-    for ns, n in enumerate(np.arange(-1, nper-1)):
-        ## Runoff ##
-        S = calc_S(wc[ns+1], soil.Smax, soil.wc_f, soil.por)
-        water_in = rain[n+1] 
-        # calculate runoff only when there is rain, and rain is uniform
-        if (water_in>0).any():
-            rp[n+1] = ((water_in - 0.2*S)**2)/(water_in + 0.8*S)
-        # where rainfall is less than initial abstraction (0.2S) set runoff as 0
-        rp[n+1] = np.where(water_in<0.2*S, 0, rp[n+1])
-        # add in irrigation after runoff (assume farm is set up to avoid runoff for irrigation season)
-        water_in = water_in + irr_sw[n+1] + irr_gw[n+1]
-        ## explicit percolation ##
-        pc[n+1] = calc_pc(wc[ns], soil.por, soil.Ks, soil.m)
-        # stepwise water budget, explicit to avoid iteration
-        # add rain and take away runoff first
-        wc[ns+1] = (wc[ns]*soildepth + (water_in - rp[n+1]))/soildepth
-        # take away ET, add term to prevent going to zero
-        ETa[n+1] = np.where(ETc[n+1] <= wc[ns+1]*soildepth, ETc[n+1], wc[ns+1]*soildepth - 1E-9)
-        wc[ns+1] = wc[ns+1] + (-ETa[n+1])/soildepth
-        # take away percolation
-        pc[n+1] = np.where(pc[n+1] <= wc[ns+1]*soildepth, pc[n+1], wc[ns+1]*soildepth - 1E-9)
-        wc[ns+1] = wc[ns+1] + (-pc[n+1])/soildepth
-        # check water budget error
-        wb_sum[n+1] = (wc[ns]-wc[ns+1])*soildepth + water_in - rp[n+1] - ETa[n+1] - pc[n+1] 
-        if (wb_sum[n+1]>1E-3).any()|(wb_sum[n+1]<-1E-3).any():
-            print('WB error exceeds 1E-3',n )
-            ## additional code for optimizing irrigation
-        if calc_Ks:
-            # calculate soil depletion for irrigation decision (must use ETc to see how much should be depleted)
-            D[ns+1] = D[ns] - water_in + ETc[n+1] + rp[n+1] + pc[n+1] 
-            # root zone depletion can't be greater than TAW 
-            D[ns+1] = np.min([D[ns+1], taw], axis=0)
-            # root zone depletion should be greater than 0
-            D[ns+1] = np.where(D[ns+1]<0,0, D[ns+1])
-            # default value of water stress is 1 (none): # potentially unnecessary just fill in 1
-            K_S[n+1] = 1
-            # where rootzone depletion is greater than RAW there is water stress
-            K_S_ws = (taw - D[ns+1])/((1 - soil.P[n+1])*taw);
-            K_S[n+1] = np.where(D[ns+1]>soil.raw[n+1], K_S_ws, K_S[n+1])
-        # check for any water budget error
-        if wb_sum.sum(axis=1).mean() > 1E-6:
-            print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
-        return(pc, K_S)
-
 
 
 
@@ -432,13 +350,13 @@ def run_swb(irr_lvl, soil, gen, rain, ETc, dtw_arr, irr_src='both', arrays = Fal
     ## profit simplified to a function
     # the profit from calc_profit is made negative for minimization
     # pi = calc_profit(Y_A, p_c, p_e, phi, dtw_arr, irr_gw, p_sw, irr_sw, p_o)  
-    pi = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen, arrays)  
+    pi, cost = calc_profit(Y_A, dtw_arr, irr_gw,irr_sw, gen, arrays)  
     if wb_sum.sum(axis=1).mean() > 1E-6:
         print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
 
     if arrays:
         # for secondary output need to also save deep percolation
-        return(pi, pc, K_S, Y_A, wc, ETa, rp)
+        return(pi, pc, K_S, Y_A, wc, ETa, rp, cost)
     return(pi)
 
 
@@ -497,3 +415,88 @@ def mak_irr_con_adj(n_irr, sw_con = 100, gw_con = 100):
     # make constraint
     linear_constraint = LinearConstraint(ACON, list(con_min), list(irr_tot))
     return linear_constraint
+
+
+# %%
+# I'm not sure why I still have this version as the run_swb below is the one primarily used
+    
+def run_swb_model(soil, rain, ETc, irr_gw, irr_sw, calc_Ks=True):
+    """
+    soil: class object with soil parameter for the given field
+    gen: class object with the general parameters for the irrigation cost model
+    rain: 1D array of the rainfall depth for each step
+    ETc: 1D array of the crop evapotranspiration depth for each step
+
+    arrays: boolean to identify whether output arrays should be returned
+        True: water budget arrays are the output
+        False: the output is the net profit (used for optimization)
+    """
+    nfield = soil.nfield
+    nper = ETc.shape[0]
+    
+    # m2_ac = (1/0.3048**2)/43560 # convert from m2 to acres
+
+    wc = np.zeros((nper+1, nfield)) # water content, add initial conditions with +1
+    pc = np.zeros((nper, nfield)) # percolation
+    rp = np.zeros((nper, nfield)) # runoff 
+    ETa = np.zeros((nper, nfield)) # actual ET
+    wb_sum= np.zeros((nper, nfield)) # water budget check
+    # time units are days for everything
+
+    D = np.zeros((nper+1, nfield)) # soil depletion, add initial conditions with +1
+    K_S = np.zeros((nper, nfield)) # crop water stress
+
+    # most frequently used variables can be locally defined
+    soildepth = soil.depth
+    if calc_Ks:
+        taw = soil.taw
+    
+    # initial water content and root zone depletion are pulled from the last step of the previous run
+    # -1 starts at IC for BC
+    # WC/D starts at 0
+    for ns, n in enumerate(np.arange(-1, nper-1)):
+        ## Runoff ##
+        S = calc_S(wc[ns+1], soil.Smax, soil.wc_f, soil.por)
+        water_in = rain[n+1] 
+        # calculate runoff only when there is rain, and rain is uniform
+        if (water_in>0).any():
+            rp[n+1] = ((water_in - 0.2*S)**2)/(water_in + 0.8*S)
+        # where rainfall is less than initial abstraction (0.2S) set runoff as 0
+        rp[n+1] = np.where(water_in<0.2*S, 0, rp[n+1])
+        # add in irrigation after runoff (assume farm is set up to avoid runoff for irrigation season)
+        water_in = water_in + irr_sw[n+1] + irr_gw[n+1]
+        ## explicit percolation ##
+        pc[n+1] = calc_pc(wc[ns], soil.por, soil.Ks, soil.m)
+        # stepwise water budget, explicit to avoid iteration
+        # add rain and take away runoff first
+        wc[ns+1] = (wc[ns]*soildepth + (water_in - rp[n+1]))/soildepth
+        # take away ET, add term to prevent going to zero
+        ETa[n+1] = np.where(ETc[n+1] <= wc[ns+1]*soildepth, ETc[n+1], wc[ns+1]*soildepth - 1E-9)
+        wc[ns+1] = wc[ns+1] + (-ETa[n+1])/soildepth
+        # take away percolation
+        pc[n+1] = np.where(pc[n+1] <= wc[ns+1]*soildepth, pc[n+1], wc[ns+1]*soildepth - 1E-9)
+        wc[ns+1] = wc[ns+1] + (-pc[n+1])/soildepth
+        # check water budget error
+        wb_sum[n+1] = (wc[ns]-wc[ns+1])*soildepth + water_in - rp[n+1] - ETa[n+1] - pc[n+1] 
+        if (wb_sum[n+1]>1E-3).any()|(wb_sum[n+1]<-1E-3).any():
+            print('WB error exceeds 1E-3',n )
+            ## additional code for optimizing irrigation
+        if calc_Ks:
+            # calculate soil depletion for irrigation decision (must use ETc to see how much should be depleted)
+            D[ns+1] = D[ns] - water_in + ETc[n+1] + rp[n+1] + pc[n+1] 
+            # root zone depletion can't be greater than TAW 
+            D[ns+1] = np.min([D[ns+1], taw], axis=0)
+            # root zone depletion should be greater than 0
+            D[ns+1] = np.where(D[ns+1]<0,0, D[ns+1])
+            # default value of water stress is 1 (none): # potentially unnecessary just fill in 1
+            K_S[n+1] = 1
+            # where rootzone depletion is greater than RAW there is water stress
+            K_S_ws = (taw - D[ns+1])/((1 - soil.P[n+1])*taw);
+            K_S[n+1] = np.where(D[ns+1]>soil.raw[n+1], K_S_ws, K_S[n+1])
+        # check for any water budget error
+        if wb_sum.sum(axis=1).mean() > 1E-6:
+            print('Avg WB error was %.2E m' % wb_sum.sum(axis=(1)).mean())
+        return(pc, K_S)
+
+
+

@@ -559,3 +559,37 @@ t_final = time.time()
 print('Total time was %.2f hours' %((t_final-t_start)/3600))
 
 sys.stdout.flush()
+
+# %%
+# check to explore if there is a clear relationsihp between
+# applied water and DTW
+# crop = 'Grape'
+# var = 'GW_applied_water'
+# # plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
+# # df_all
+
+# %%
+# df_annual_sum = plt_df.groupby(['UniqueID','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+
+# %%
+# check on outliers for irrigation
+df_annual_sum.value.describe()
+df_annual_sum.value.quantile([0,0.05,0.25,0.5,0.75,0.95,1])
+# the majority of fields 90% + are in the normal range
+# but we see a value at 0 and almost double the median (at max value)
+# suggesting the SWB with optimization might fail occasionally
+
+# %%
+# # in addition to grouping by crop, need to group by field on some level to confirm
+# # field properties aren't impacting
+# # plt_df.plot(x='dtw_ft',y='value', kind='scatter')
+# # df_annual_sum.plot(x='dtw_ft',y='value', kind='scatter')
+# chk_id = df_annual_sum.UniqueID.unique()
+# n=600
+# df_chk = df_annual_sum[df_annual_sum.UniqueID==chk_id[n]]
+
+# # df_chk.plot(x='dtw_ft',y='value', kind='scatter')
+
+# # it seems like most fields have a small range of AW values
+# # but no big connection to DTW in any case
+# # a few seem to show errors with too big of differences

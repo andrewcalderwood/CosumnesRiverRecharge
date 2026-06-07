@@ -149,7 +149,7 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
 
     # initialize SWB folder
     os.makedirs(join(model_ws, 'crop_soilbudget', 'field_SWB'), exist_ok=True)
-    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
 
