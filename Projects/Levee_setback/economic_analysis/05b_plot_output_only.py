@@ -465,7 +465,13 @@ for year in run_years:
             df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
             # melt to long format for easier appending
             df = df.melt(var_name='date', id_vars=crop_in.columns)
+            df['date'] = pd.to_datetime(df['date'])
             df = df.assign(crop=crop, year=year, var=var)
+            # specify where there were irrigation events
+            irr_dates = pd.date_range(yield_start.min(), yield_end.max(), freq=str(int(var_crops.gap_irr))+'D')
+            irr_dates = pd.DataFrame(irr_dates, columns=['date'])
+            irr_dates['irr'] = True
+            df = df.merge(irr_dates, how='left')
             # concat to existing data
             df_all = pd.concat((df_all, df))
 
@@ -473,6 +479,8 @@ for year in run_years:
 # %%
 # rename as econ for plotting reference
 df_all = df_all.rename(columns={'parcel_id':'UniqueID'}).merge(parcels[['UniqueID','acres']])
+# for applied water we we want to drop the days that are not irrigated
+
 # scale value rates (1/acre) into total volumes (m3)
 df_all['total_value'] = df_all['value']*df_all.acres*4046.86
 
@@ -483,7 +491,8 @@ df_all_out = df_all.copy().drop(columns=['pod_bool','pod'])
 # add column for acres
 df_all_out = df_all_out.groupby(['name','date','var'])[['total_value','value','acres']].agg({'total_value':'sum', 'value':'mean','acres':'sum'})
 # calculate rate, averaged by acres 
-df_all_out['value_per_area'] = df_all_out.total_value/df_all_out.acres
+# this is the same as value but mutliplied by the 4046 scaling factor
+# df_all_out['value_per_area'] = df_all_out.total_value / (df_all_out.acres*4046.86)
 # save data for Yusuke
 df_all_out.to_csv(join(out_dir, 'daily_WB_long.csv'))
 
@@ -593,3 +602,4 @@ df_annual_sum.value.quantile([0,0.05,0.25,0.5,0.75,0.95,1])
 # # it seems like most fields have a small range of AW values
 # # but no big connection to DTW in any case
 # # a few seem to show errors with too big of differences
+

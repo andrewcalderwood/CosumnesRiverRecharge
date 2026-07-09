@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -48,7 +48,7 @@ doc_dir = os.getcwd()
 while basename(doc_dir) != 'Documents':
     doc_dir = dirname(doc_dir)
 # dir of all gwfm data
-gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'se
+gwfm_dir = dirname(doc_dir)+'/Box/research_cosumnes/GWFlowModel'
 gwfm_dir
 
 
@@ -77,7 +77,7 @@ data_dir = join(proj_dir, 'model_inputs')
 # %%
 run_dir = 'C:/WRDAPP/GWFlowModel'
 run_dir = 'F://WRDAPP/GWFlowModel'
-# run_dir = 'D://WRDAPP/GWFlowModel'
+run_dir = 'D://WRDAPP/GWFlowModel'
 
 # loadpth = run_dir +'/Cosumnes/levee_setback/streamflow/'
 # # model_nam = 'setback_streamflow'
@@ -133,9 +133,11 @@ grid_p = gpd.read_file(gwfm_dir+'/DIS_data/grid/grid.shp')
 inflow = pd.read_csv(join(gwfm_dir, 'SFR_data', 'MB_daily_flow_cfs.csv'), index_col = 'datetime', parse_dates = True)
 # covnert flow from cubic feet per second to cubic meters per day
 inflow['flow_cmd'] = inflow.flow_cfs * (86400/(3.28**3))
+inflow = inflow.dropna(how='all', axis=1)
 
 # save tabfiles dict to variable for reference
 # tabfiles_dict = m.sfr.tabfiles_dict
+print('Inflow MB data', inflow.index.min(), inflow.index.max())
 
 # %%
 # deer creek doesn't flow in dry-season
@@ -155,6 +157,7 @@ all_end_date = all_dates[-1]
 print(all_strt_date, all_end_date)
 months = pd.date_range(all_strt_date, all_end_date, freq='MS')
 years = pd.date_range(all_strt_date, all_end_date, freq='YS').year.values
+# the model dates aren't actually needed here as we use the maximum range of streamflow data
 
 # %% [markdown]
 #
@@ -194,8 +197,6 @@ vineyards_grid = vineyards_grid[vineyards_grid.geometry.area>(200*200*0.5)]
 
 
 # %%
-
-# %%
 # scale the total recharge flux by the area to get the average rate
 mar['rch_rate'] = mar.rch/vineyards_grid.geometry.area.sum()
 # convert mar to grid level
@@ -232,7 +233,7 @@ def plt_rch(mar):
     mar.resample('AS-Oct')['rch_cfs'].sum().multiply(86400/43560).plot(ax=ax3a)
     ax3a.set_ylabel('acre-feet')
     
-    plt.xlim('2014-10-1','2020-9-30')
+    plt.xlim('2014-10-1','2025-9-30')
     plt.xlabel('Date')
     # mar
 
@@ -286,18 +287,22 @@ fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
 # scale the total recharge flux by the area to get the average rate
 fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
 
+fp_mar_old = fp_mar.copy()
+
 # %%
+# outdated?? this is overwritten below anyway
+code below does the proper diversion criteria on daily basis
 
 # convert mar to grid level
 # need date as index, row, column, rch_rate (m/day)
 fp_mar_grid = fp_mar[['rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
 fp_mar_grid_out = fp_mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
-fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
+# fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
 
 
 
 # %%
-floodplain.drop(columns=0).to_file(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_outline.shp'))
+# floodplain.drop(columns=0).to_file(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_outline.shp'))
 
 # %% [markdown]
 # ## second floodplain scenario - more refined
@@ -323,20 +328,20 @@ fp_mar['day'] = fp_mar.index.day
 flow_90 = fp_mar.groupby(['month','day'])[['flow_cfs']].quantile(0.9).reset_index().rename(columns={'flow_cfs':'flow_90'})
 # print('The 90th percentile is %.2e cfs' %flow_90)
 # add in 90th percentile flows to verify conditions
-fp_mar = fp_mar.merge(flow_90)
-fp_mar
-# fp_mar.loc[fp_mar.flow_cfs>flow_90, 'rch_cfs'] = fp_mar.loc[fp_mar.flow_cfs>flow_90, 'flow_cfs']*0.2
+fp_mar = fp_mar.reset_index().merge(flow_90)
+# calculate the recharge as 20% of daily flow when exceeding the 90th daily percentile
+fp_mar.loc[fp_mar.flow_cfs>fp_mar.flow_90, 'rch_cfs'] = fp_mar.loc[fp_mar.flow_cfs>fp_mar.flow_90, 'flow_cfs']*0.2
 # # calculate recharge recharge rate in m3/day
-# fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
+fp_mar['rch'] = fp_mar.rch_cfs*86400*0.3048**3
 
-# # scale the total recharge flux by the area to get the average rate
-# fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
+# # # scale the total recharge flux by the area to get the average rate
+fp_mar['rch_rate'] = fp_mar.rch/floodplain_grid.geometry.area.sum()
 
 # %%
 
 # convert mar to grid level
 # need date as index, row, column, rch_rate (m/day)
-fp_mar_grid = fp_mar[['rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
+fp_mar_grid = fp_mar[['datetime','rch_rate']].assign(id=0).reset_index().merge(floodplain_grid.assign(id=0)).drop(columns=['id'])
 fp_mar_grid_out = fp_mar_grid[['datetime','row','column','rch_rate']].rename(columns={'datetime':'date'})
 fp_mar_grid_out.to_csv(join(proj_dir, 'scenarios', 'R4_floodplain_MAR_90_20_diversion.csv'),index=False)
 
@@ -356,6 +361,13 @@ floodplain_clean.plot(ax=ax, color='None', edgecolor='blue')
 # cr_buf.plot(ax=ax, color='None', edgecolor='blue')
 ctx.add_basemap(ax, source = ctx.providers.Esri.WorldImagery, crs='epsg:26910', alpha = 0.8, attribution=False)
 
+
+# %%
+fig,ax = plt.subplots()
+fp_mar.set_index('datetime').plot(y='rch_rate', ax=ax)
+fp_mar_old.plot(y='rch_rate', ax=ax,linestyle='--')
+ax.set_xlim('2010-1-1','2026-1-1')
+# not big differences between the approaches
 
 # %% [markdown]
 # ## plot climate

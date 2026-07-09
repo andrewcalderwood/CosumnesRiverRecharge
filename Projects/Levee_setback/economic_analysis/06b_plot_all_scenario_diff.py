@@ -267,6 +267,7 @@ for val in ['total_value', 'value']:
 # %% [markdown]
 # ### plot total profit across all fields
 # Cameron said this is a good check to verify that even if the scenarios reduce profit in some crops that overall the region has higher revenue.
+# Need to plot total revenue, not profit.
 
 # %%
 df_econ_sum = df_econ_scenario.groupby(['year','var','scen_name','scenario'])[['total_value']].sum().reset_index()
@@ -297,9 +298,6 @@ for val in ['total_value']:
 
 # %% [markdown]
 # # Compare applied water
-
-# %% [markdown]
-#
 
 # %%
 # load scenario data at once to simplify plotting 
@@ -349,5 +347,9 @@ for nc, col in enumerate(['value','total_value']):
         ax.set_xlabel('Year')
         plt.savefig(join(wb_dir, plt_var+'_by_year_'+col+'_'+crop+'.png'))
         plt.close()
+
+# %% [markdown]
+# ## econ review
+#
 
 # %%

@@ -73,11 +73,13 @@ if 'ipykernel' in in_data[0]:
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
+    year_load_var_in = False
 
 else:
     m_nam = in_data[1]
     # added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
     input_name = in_data[2]
+    year_load_var_in = int(in_data[3])
 
 
 print('sys.argv[1] (m_nam) is...')
@@ -85,6 +87,9 @@ print(m_nam)
 
 print('sys.argv[2] (input_name) is...')
 print(input_name)
+
+print('sys.argv[3] (year_load_var_in) is...')
+print(year_load_var_in)
 
 t_start = time.time()
 
@@ -444,7 +449,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # crop='Corn'
     # define whether the year for loading variables should change with year or be static (use average)
     # year_load_var = None
-    year_load_var = year
+    if year_load_var_in == False:
+        year_load_var = year
+    else:
+        year_load_var = year_load_var_in
+    print('Using',str(year_load_var_in),'for crop variables')
 
 # %% [markdown]
 # # Define groundwater elevation sampling
