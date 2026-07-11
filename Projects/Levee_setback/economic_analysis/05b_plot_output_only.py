@@ -148,9 +148,7 @@ model_ws = join(loadpth, m_nam)
 
 # %%
 # provide representative soil water budget folder
-# swb_ws = join(model_ws, 'rep_crop_soilbudget')
-# we should be assessing the final clean output
-swb_ws = join(model_ws, 'crop_soilbudget')
+swb_ws = join(model_ws, 'rep_crop_soilbudget')
 
 out_dir = join(model_ws, 'output_clean')
 os.makedirs(out_dir, exist_ok=True)
@@ -441,6 +439,9 @@ plt.close()
 # up until june 2026 this code appears to have been referencing the rep_crop_soilbudget which
 # is not correct, it should reference the clean final soil budget
 
+# could look at why I don't save a simpler version with only irrigation rates
+# even csv's have every value saved
+
 # %%
 df_all = pd.DataFrame()
 for year in run_years:
@@ -450,6 +451,7 @@ for year in run_years:
     print('\n', year, end=' - ')
     for var in ['percolation','GW_applied_water', 'SW_applied_water']:
         print(var, end=',')
+        # need to call final crop_soilbudget not rep value
         name = join(model_ws, 'crop_soilbudget', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         with h5py.File(name) as dset:
             finished_crops = list(dset['array'].keys())
@@ -485,7 +487,6 @@ for year in run_years:
 # %%
 # rename as econ for plotting reference
 df_all = df_all.rename(columns={'parcel_id':'UniqueID'}).merge(parcels[['UniqueID','acres']])
-# for applied water we we want to drop the days that are not irrigated
 
 # scale value rates (1/acre) into total volumes (m3)
 df_all['total_value'] = df_all['value']*df_all.acres*4046.86
@@ -493,6 +494,12 @@ df_all['total_value'] = df_all['value']*df_all.acres*4046.86
 
 # %%
 df_all_out = df_all.copy().drop(columns=['pod_bool','pod'])
+
+# for applied water we we want to drop the days that are not irrigated
+# remove AW where there is no irrigation event planned (not if 0 zero irrigation)
+df_all_out = df_all_out.loc[~((df_all_out['var'].str.contains('applied_water'))&(df_all_out.irr!=True))]
+# based on a test review, there is no impact of this on the mean
+
 # aggregate results by crop type
 # add column for acres
 df_all_out = df_all_out.groupby(['name','date','var'])[['total_value','value','acres']].agg({'total_value':'sum', 'value':'mean','acres':'sum'})

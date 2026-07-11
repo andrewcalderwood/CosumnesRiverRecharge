@@ -325,8 +325,6 @@ wb_dir = join(model_out, 'scenario_comparison', 'wb_comp')
 os.makedirs(wb_dir, exist_ok=True)
 
 # %%
-
-# %%
 crop_names = wb_ann_sum.name.unique()
 units = ['(meters)', '(cu. m.)']
 for nc, col in enumerate(['value','total_value']):
