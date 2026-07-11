@@ -79,7 +79,9 @@ else:
     m_nam = in_data[1]
     # added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
     input_name = in_data[2]
-    year_load_var_in = int(in_data[3])
+    year_load_var_in = in_data[3]
+    if year_load_var_in != "False":
+        year_load_var_in = int(year_load_var_in)
 
 
 print('sys.argv[1] (m_nam) is...')
@@ -449,7 +451,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # crop='Corn'
     # define whether the year for loading variables should change with year or be static (use average)
     # year_load_var = None
-    if year_load_var_in == False:
+    if year_load_var_in == "False":
         year_load_var = year
     else:
         year_load_var = year_load_var_in

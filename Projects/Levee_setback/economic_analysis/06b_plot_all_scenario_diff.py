@@ -74,7 +74,7 @@ loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
 m_nam = 'input_write_2014_2025'
 
 m_version = '' # original baseline with p_o
-m_version = '_R200' # no p_o # specified later?
+m_version = '_R300' # no p_o # specified later?
 # need to specify base version for easier scenario switching
 base_model_ws = join(loadpth, m_nam)
 
@@ -126,6 +126,7 @@ figsize= (4*ncol, 3*nrow)
 # load scenario data at once to simplify plotting 
 scenarios = ['','_R3','_R4']
 scenarios = ['_R200','_R203','_R204']
+scenarios = ['_R300', '_R304']
 
 dtw_all_scenario = pd.DataFrame()
 for scenario in scenarios:
@@ -223,7 +224,6 @@ for crop in crops:
 
 # %%
 # load scenario data at once to simplify plotting 
-scenarios = ['_R200','_R203','_R204']
 
 df_econ_scenario = pd.DataFrame()
 for scenario in scenarios:
@@ -301,7 +301,6 @@ for val in ['total_value']:
 
 # %%
 # load scenario data at once to simplify plotting 
-scenarios = ['_R200','_R203','_R204']
 
 df_wb_scenario = pd.DataFrame()
 for scenario in scenarios:

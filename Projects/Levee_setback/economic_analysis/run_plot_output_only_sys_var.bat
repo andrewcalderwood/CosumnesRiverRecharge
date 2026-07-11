@@ -9,7 +9,7 @@ rem set m_nam=input_write_2014_2025_R203
 
 rem version with no p_o and 2019 variables
 rem set m_nam=input_write_2014_2025_R300
-rem set m_nam=input_write_2014_2025_R304
+set m_nam=input_write_2014_2025_R304
 
 
 echo %m_nam%

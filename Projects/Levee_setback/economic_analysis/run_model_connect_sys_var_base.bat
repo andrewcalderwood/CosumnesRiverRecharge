@@ -8,8 +8,8 @@ rem set m_nam=input_write_2014_2025_R203
 rem set m_nam=input_write_2014_2025_R204
 
 rem version with no p_o and 2019 variables
-set m_nam=input_write_2014_2025_R300
-set m_nam=input_write_2014_2025_R304
+rem set m_nam=input_write_2014_2025_R300
+rem set m_nam=input_write_2014_2025_R304
 
 
 echo %m_nam%
@@ -22,7 +22,7 @@ echo %input_name%
 rem for model versions 300 we use 2019 values
 set year_load_var_in=2019
 rem for variable pricing we use false
-rem set year_load_var_in=False
+set year_load_var_in=False
 
 echo %year_load_var_in%
 
