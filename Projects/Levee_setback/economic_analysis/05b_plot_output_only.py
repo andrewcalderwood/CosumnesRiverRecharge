@@ -148,8 +148,9 @@ model_ws = join(loadpth, m_nam)
 
 # %%
 # provide representative soil water budget folder
-swb_ws = join(model_ws, 'rep_crop_soilbudget')
-# os.makedirs(join(swb_ws, 'output'), exist_ok=True)
+# swb_ws = join(model_ws, 'rep_crop_soilbudget')
+# we should be assessing the final clean output
+swb_ws = join(model_ws, 'crop_soilbudget')
 
 out_dir = join(model_ws, 'output_clean')
 os.makedirs(out_dir, exist_ok=True)
@@ -434,6 +435,11 @@ plt.close()
 # At minimum need to start showing irrigation on a sub-annual scale for an average field or average of fields
 #
 # Percolation is really only important to the modflow side of things so probably don't need to plot.
+
+# %%
+
+# up until june 2026 this code appears to have been referencing the rep_crop_soilbudget which
+# is not correct, it should reference the clean final soil budget
 
 # %%
 df_all = pd.DataFrame()
