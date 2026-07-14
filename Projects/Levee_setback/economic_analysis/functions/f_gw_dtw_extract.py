@@ -249,7 +249,7 @@ def calc_simple_dtw(well_dtw, year,
     # calculate dates for DTW decline, shouldn't really go longer than a year since it 
     # will be run at least once per year
     dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
-    dtw_avg = dtw_avg.assign(decline = 0).set_index('date')
+    dtw_avg = dtw_avg.assign(decline = 0.0).set_index('date')
     # dates where a decline date is specified
     decline_dates = dtw_avg.index[dtw_avg.index >=str(year)+'-6-1']
     decline = np.cumsum(np.full(len(decline_dates), decline_total/len(decline_dates)))

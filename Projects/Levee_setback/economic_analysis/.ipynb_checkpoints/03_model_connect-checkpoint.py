@@ -73,7 +73,7 @@ if 'ipykernel' in in_data[0]:
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
-    year_load_var_in = False
+    year_load_var_in = "False"
 
 else:
     m_nam = in_data[1]
@@ -583,6 +583,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # we should include the DTW data point used for comparison
     # add depth to water information to the output
     data_out = data_out.merge(well_dtw[['UniqueID','dtw_ft']].rename(columns={'UniqueID':'parcel_id'}))
+    # TODO static crop/AW: if skipping crop choice, would not write and instead read in this 
     # save output with only parcel and crop choice
     data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
 
@@ -685,6 +686,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # initialize HDF5 files for the year
     # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
+    # TODO static crop/AW: if skipping SWB optimization then don't need to intialize these
     # initialize SWB folder
     for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
         name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
@@ -697,6 +699,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 # %%
     
     # for crop in ['Alfalfa']:
+    # TODO static crop/AW: if skipping SWB optimize then skip this
     for crop in crop_list:
         # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
         # variables, this would be useful for comparing against baseline while future should use average
@@ -730,6 +733,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 #
 
     # %%
+    # TODO static crop/AW: if skipping crop optimize then should skip this
     # load the processed dataframe with all datas
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
@@ -755,6 +759,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     from functions.summarize_functions import format_irr_all, adj_irr_rates
 
     # %%
+    # TODO static crop/AW: if skipping previous step then need to skip this as well
     # update irrigation rates to account for establishment where crops change
     # does it make sense that these are addressed separately? In the chance there is mixed irrigation then
     # the total scaling would need to be adjusted
