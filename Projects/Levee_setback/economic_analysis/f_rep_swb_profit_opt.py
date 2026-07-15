@@ -201,8 +201,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     # need to specify year to get specify year values or nearest available
     var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year=year, input_name = input_name)
 
-
-
     # %%
     # over-ride the default sw_con, gw_con with crop specific values and use more stringent of the pair
     # input irrigation constraints to compare against regional constraints
@@ -222,10 +220,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     end_date = yield_end.max()
     dates = pd.date_range(strt_date, end_date, freq='D')
     nper = (end_date-strt_date).days +1
+    print('\n')
+    print('########## Load run SWB ##########')
     print('Start', strt_date.date(), ', End', end_date.date(),', No. days', nper)
-    # not use, base_model_ws is better since all files have the year attached
-    # model_ws = join(base_model_ws, crop+'_'+str(strt_date.date()))
-
+    print(base_model_ws)
+    
     # %%
     Kc, Kc_dates = swb.load_Kc(year)
     

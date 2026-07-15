@@ -14,15 +14,28 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SOURCE_BASE = Path(r"F:/WRDAPP/GWFlowModel/Cosumnes/Economic")
-DEST_BASE   = Path(r"C:/Users/andrew/Box/SESYNC_paper1/model_results/2026_3_20")
+SOURCE_BASE = Path(r"D:/WRDAPP/GWFlowModel/Cosumnes/Economic")
+import os
+usr_dir = os.path.expanduser('~')
+DEST_BASE   = Path(usr_dir+r"/Box/SESYNC_paper1/model_results/2026_7_14")
+print(DEST_BASE)
+
+# +
+# MODEL_RUNS = [
+#     "input_write_2014_2022_R200",
+#     "input_write_2014_2022_R203",
+#     "input_write_2014_2022_R204",
+#     "input_write_2016_2022_R200",
+#     "input_write_2018_2022_R200",
+# ]
+# -
 
 MODEL_RUNS = [
-    "input_write_2014_2022_R200",
-    "input_write_2014_2022_R203",
-    "input_write_2014_2022_R204",
-    "input_write_2016_2022_R200",
-    "input_write_2018_2022_R200",
+    "input_write_2014_2025_R200",
+    "input_write_2014_2025_R203",
+    "input_write_2014_2025_R204",
+    "input_write_2014_2025_R300",
+    "input_write_2014_2025_R304",
 ]
 
 OUTPUT_SUBFOLDER = "output_clean"
@@ -79,3 +92,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     copy_output_clean(dry_run=args.dry_run)
+
+
+
+

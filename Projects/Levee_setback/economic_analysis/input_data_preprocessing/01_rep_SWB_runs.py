@@ -121,6 +121,7 @@ print('swb version:',swb_version)
 # %%
 swb_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
 os.makedirs(swb_ws, exist_ok=True)
+os.makedirs(join(swb_ws,'field_SWB'), exist_ok=True)
 
 # %%
 # save log by date so we can see old versions
@@ -275,11 +276,11 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # TODO static crop/AW: if skipping SWB optimization then don't need to intialize these
     # initialize SWB folder
     for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
-        name = join(swb_ws,  var + '_WY'+str(year)+'.hdf5')
+        name = join(swb_ws, 'field_SWB',  var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
 
     for var in ['swb_output']:
-        name = join(swb_ws, var + '_WY'+str(year)+'.hdf5')
+        name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name, groups=['wc','ETa', 'rp'])
 
     # %%

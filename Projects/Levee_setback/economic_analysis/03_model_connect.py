@@ -56,10 +56,6 @@ uzf_dir = join(gwfm_dir,'UZF_data')
 
 proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 
-# %%
-# reset stdout
-# sys.stdout = sys.__stdout__
-# sys.stdout
 
 # %%
 # updated version specifies concept_name and copy_files here so it can be easily
@@ -69,11 +65,16 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # m_nam = 'input_write_2014_2020_R3'
     # m_nam = 'input_write_2014_2020'
-    m_nam = 'input_write_2014_2022_R203'
+    m_nam = 'input_write_2014_2025_R300'
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
     year_load_var_in = "False"
+    year_load_var_in = 2019
+    # identify which method for using/creating the optimized SWB
+    # new_local, existing_local, existing_shared
+    # and another option existing_local_and_crop to not write predict crop
+    create_rep_swb = "new_local"
 
 else:
     m_nam = in_data[1]
@@ -82,6 +83,8 @@ else:
     year_load_var_in = in_data[3]
     if year_load_var_in != "False":
         year_load_var_in = int(year_load_var_in)
+    create_rep_swb =  in_data[4]
+
 
 
 print('sys.argv[1] (m_nam) is...')
@@ -92,6 +95,9 @@ print(input_name)
 
 print('sys.argv[3] (year_load_var_in) is...')
 print(year_load_var_in)
+
+print('sys.argv[4] (create_rep_swb) is...')
+print(create_rep_swb)
 
 t_start = time.time()
 
@@ -219,7 +225,6 @@ loadpth = 'F:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'D:/WRDAPP/GWFlowModel/Cosumnes/Economic'
 
 # update to different modflow models here, next step is using the 20 year model
-# base_model_ws = loadpth + 'crop_soilbudget'
 # m_nam = 'historical_simple_geology_reconnection'
 # m_nam = 'input_write_2014_2020'
 
@@ -537,7 +542,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     rev_prior_yr_all = pd.read_csv(join(crop_choice_dir, "data_model/rev_prior_yr_all.csv"))
     rev_prior_yr_all = rev_prior_yr_all.rename(columns={'crop_cat':'Crop_Eq'})
     # identify nearest year to use revenue
-    rev_prior_yr_all['year_offset'] = (rev_prior_yr_all.year-year).abs()
+    # should do the same for crop parameters and use year_load_var
+    rev_prior_yr_all['year_offset'] = (rev_prior_yr_all.year - year_load_var).abs()
     # select the year that is closest in and use the lower year in a tie.
     rev_prior_yr_df = rev_prior_yr_all.sort_values(['year_offset', 'year']).drop_duplicates('Crop_Eq', keep='first')
     rev_prior_yr_df = rev_prior_yr_df.reset_index(drop=True).drop(columns=['year_offset', 'year'])
@@ -685,35 +691,41 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # initialize HDF5 files for the year
-    # base_model_ws = join(loadpth, 'rep_crop_soilbudget')
-    # TODO static crop/AW: if skipping SWB optimization then don't need to intialize these
+    # if skipping SWB optimization then don't need to intialize these
     # initialize SWB folder
-    for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
-        name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-        init_h5(name)
-
-    for var in ['swb_output']:
-        name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
-        init_h5(name, groups=['wc','ETa', 'rp'])
+    if create_rep_swb in ['existing_local', 'existing_local_and_crop', 'existing_shared']:
+        print('Using existing hdf5 files for SWB optimization')
+    else:
+        print('Initiating new hdf5 files for SWB optimization')
+        for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+            name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+            init_h5(name)
+    
+        for var in ['swb_output']:
+            name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
+            init_h5(name, groups=['wc','ETa', 'rp'])
 
 # %%
-    
-    # for crop in ['Alfalfa']:
-    # TODO static crop/AW: if skipping SWB optimize then skip this
-    for crop in crop_list:
-        # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
-        # variables, this would be useful for comparing against baseline while future should use average
-        # within load_run_swb, these variables are called again specified by year
-        var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
-        # need to account for when crops aren't predicted and skip them
-        if pred_dict[crop] in pred_crops: 
-            # to equalize the situation we might use a simple DTW profile
-            load_run_swb(crop, year, crop_in, swb_ws,
-                         dtw_simple_df, 
-                         soil_rep=True,
-                         sw_con=sw_con, gw_con=gw_con,
-                         input_name = input_name
-                         ) 
+    # if skipping SWB optimize then skip this
+    if create_rep_swb in ['existing_local', 'existing_local_and_crop', 'existing_shared']:
+        print('Using existing optimized SWB  results')
+    else:
+        print('Calculating new optimized SWB results')
+        # for crop in ['Alfalfa']:
+        for crop in crop_list:
+            # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
+            # variables, this would be useful for comparing against baseline while future should use average
+            # within load_run_swb, these variables are called again specified by year
+            var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
+            # need to account for when crops aren't predicted and skip them
+            if pred_dict[crop] in pred_crops: 
+                # to equalize the situation we might use a simple DTW profile
+                load_run_swb(crop, year, crop_in, swb_ws,
+                             dtw_simple_df, 
+                             soil_rep=True,
+                             sw_con=sw_con, gw_con=gw_con,
+                             input_name = input_name
+                             ) 
         sys.stdout.flush()
 
     # %%
@@ -721,6 +733,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     print('Crops with SWB results')
     with h5py.File(fn) as dset:
         finished_crops = list(dset['array'].keys())
+        # arr = dset['array']['Corn'][:]
         print(finished_crops)
     # only grape was completed?
 
@@ -735,6 +748,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # TODO static crop/AW: if skipping crop optimize then should skip this
     # load the processed dataframe with all datas
+    # this is where we could specify the pre-calculated optimized SWB output
+    # instead of swb_ws specify the path on box
+    swb_version = input_name.replace('static_model_inputs','').replace('.xlsx','')
+    if year_load_var_in != "False":
+        swb_version += '_'+year_load_var
+    swb_rep_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
+
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
                      crop_in, finished_crops, dtw_simple_df, well_dtw)
     # this output with the parcel data needs to be saved as well - now done after updating below
@@ -790,7 +810,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
 
     # %%
     # initiate hdf5 files to save outputs
-    for var in ['profit', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
+    for var in ['profit', 'yield', 'cost','percolation','GW_applied_water', 'SW_applied_water']:
         name = join(model_ws,'crop_soilbudget_est', 'field_SWB', var + '_WY'+str(year)+'.hdf5')
         init_h5(name)
     # should review and decide if it helps to save this separately or if it is better to overwrite
