@@ -65,7 +65,7 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # m_nam = 'input_write_2014_2020_R3'
     # m_nam = 'input_write_2014_2020'
-    m_nam = 'input_write_2014_2025_R300'
+    m_nam = 'input_write_2014_2025_R200'
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
@@ -73,7 +73,8 @@ if 'ipykernel' in in_data[0]:
     year_load_var_in = 2019
     # identify which method for using/creating the optimized SWB
     # new_local, existing_local, existing_shared
-    # and another option existing_local_and_crop to not write predict crop
+    # and another option existing_local_and_local_crop to not write predict crop
+    # existing_shared_and_local_crop as well
     create_rep_swb = "new_local"
 
 else:
@@ -591,7 +592,15 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     data_out = data_out.merge(well_dtw[['UniqueID','dtw_ft']].rename(columns={'UniqueID':'parcel_id'}))
     # TODO static crop/AW: if skipping crop choice, would not write and instead read in this 
     # save output with only parcel and crop choice
-    data_out.to_csv(join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv'))
+    crop_fn = join(swb_ws, 'field_SWB', 'parcel_crop_choice_'+str(year)+'.csv')
+    if 'local_crop' in create_rep_swb:
+        print('Not writing out crop choice, using existing crop choice files in run folder')
+        # it might be worth allowing the files to be referenced from another directory?
+        # or I can write a script to copy them in
+        data_out = pd.read_csv(crop_fn, index_col=0)
+    else:
+        print('Saving crop choice output')
+        data_out.to_csv(crop_fn)
 
 
     # %%
@@ -693,7 +702,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # initialize HDF5 files for the year
     # if skipping SWB optimization then don't need to intialize these
     # initialize SWB folder
-    if create_rep_swb in ['existing_local', 'existing_local_and_crop', 'existing_shared']:
+    if ('existing_local' in create_rep_swb)|('existing_shared' in create_rep_swb):
         print('Using existing hdf5 files for SWB optimization')
     else:
         print('Initiating new hdf5 files for SWB optimization')
@@ -705,9 +714,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
             name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
             init_h5(name, groups=['wc','ETa', 'rp'])
 
-# %%
+    # %%
     # if skipping SWB optimize then skip this
-    if create_rep_swb in ['existing_local', 'existing_local_and_crop', 'existing_shared']:
+    if ('existing_local' in create_rep_swb)|('existing_shared' in create_rep_swb):
         print('Using existing optimized SWB  results')
     else:
         print('Calculating new optimized SWB results')
@@ -750,9 +759,13 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # load the processed dataframe with all datas
     # this is where we could specify the pre-calculated optimized SWB output
     # instead of swb_ws specify the path on box
+    # if 'local_crop' in create_rep_swb:
+        # print('Not re-calculating field level SWB',
+        #       'using existing crop choice files in run folder')
+        
     swb_version = input_name.replace('static_model_inputs','').replace('.xlsx','')
     if year_load_var_in != "False":
-        swb_version += '_'+year_load_var
+        swb_version += '_'+str(year_load_var)
     swb_rep_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
 
     pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 

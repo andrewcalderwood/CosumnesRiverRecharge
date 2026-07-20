@@ -17,7 +17,7 @@ from pathlib import Path
 SOURCE_BASE = Path(r"D:/WRDAPP/GWFlowModel/Cosumnes/Economic")
 import os
 usr_dir = os.path.expanduser('~')
-DEST_BASE   = Path(usr_dir+r"/Box/SESYNC_paper1/model_results/2026_7_14")
+DEST_BASE   = Path(usr_dir+r"/Box/SESYNC_paper1/model_results/2026_7_16")
 print(DEST_BASE)
 
 # +
@@ -31,9 +31,9 @@ print(DEST_BASE)
 # -
 
 MODEL_RUNS = [
-    "input_write_2014_2025_R200",
-    "input_write_2014_2025_R203",
-    "input_write_2014_2025_R204",
+    # "input_write_2014_2025_R200",
+    # "input_write_2014_2025_R203",
+    # "input_write_2014_2025_R204",
     "input_write_2014_2025_R300",
     "input_write_2014_2025_R304",
 ]

@@ -229,7 +229,7 @@ all_run_dates=all_run_dates.sort_values(0).reset_index(drop=True).rename(columns
 all_run_dates.to_csv(join(swb_ws, 'all_run_dates.csv'))
 
 # %%
-for m_per in np.arange(1, all_run_dates.shape[0]-1):
+for m_per in np.arange(2, 3):
 # for m_per in [1]:
 # for m_per in [4]:
 

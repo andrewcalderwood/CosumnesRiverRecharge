@@ -14,6 +14,6 @@ echo %year_load_var_in%
 
 
 call activate geo_env
-python 01_rep_SWB_runs.py %2 %input_name% %year_load_var_in%
-rem python 03_model_connect.py %1 %m_nam%
+rem python 01_rep_SWB_runs.py %2 %input_name% %year_load_var_in%
+python 01_rep_SWB_runs-Copy1.py %2 %input_name% %year_load_var_in%
 PAUSE
