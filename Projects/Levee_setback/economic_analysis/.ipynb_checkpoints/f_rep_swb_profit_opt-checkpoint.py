@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -113,15 +113,15 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # %%
 # # # # # # # # # testing
 # # # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# # # # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
+# # loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # # m_nam = 'input_write_2014_2022'
-# m_nam = 'input_write_2014_2022_R203'
+# m_nam = 'input_write_2014_2025_R203'
 # base_model_ws = join(loadpth, m_nam )
 # swb_ws = join(base_model_ws, 'crop_soilbudget')
 # crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
 # # add in the crops from previous years
-# for year_previous in np.arange(2014, year):
+# for year_previous in np.arange(2015, year):
 #     crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
 #     # to avoid conflict, add previous years as new columns with convention name_year
 #     crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
@@ -150,16 +150,16 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 #     dtw_df = pd.read_csv(join(base_model_ws,'crop_soilbudget','field_dtw', 'dtw_ft_'+crop+'_'+str(year)+'.csv'),index_col=0)
 #     dtw_df.index = pd.to_datetime(dtw_df.index)
 #     dtw_df.columns = dtw_df.columns.astype(int)
-    # from functions.summarize_functions import format_irr_all, adj_irr_rates
-    # irr_gw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget',  'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
-    # irr_sw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
+#     from functions.summarize_functions import format_irr_all, adj_irr_rates
+#     irr_gw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget',  'output', 'irr_gw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
+#     irr_sw_df_all = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'output', 'irr_sw_all'+str(year)+'.csv'),index_col=0,parse_dates=['date'])
 
 # base_model_ws = swb_ws
 
 
 # %%
-## simple representative DTW for linear steps 10 ft to 200 ft
-## with a 5 ft decline from June to December based on observed data
+# # simple representative DTW for linear steps 10 ft to 200 ft
+# # with a 5 ft decline from June to December based on observed data
 # dtw_avg = pd.DataFrame(pd.date_range(str(year-1)+'-11-1', str(year)+'-12-31'), columns=['date'])
 # dtw_avg = dtw_avg.assign(decline = float(0)).set_index('date')
 # # dates where a decline date is specified
@@ -171,7 +171,7 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # dtw_simple = dtw_simple + np.reshape(dtw_avg.decline, (-1,1))
 # dtw_df =  pd.DataFrame(dtw_simple, dtw_avg.index)
 
-# plt.plot(dtw_simple[:,0])
+# # plt.plot(dtw_simple[:,0])
 
 # %%
 
@@ -224,7 +224,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     print('########## Load run SWB ##########')
     print('Start', strt_date.date(), ', End', end_date.date(),', No. days', nper)
     print(base_model_ws)
-    
+
     # %%
     Kc, Kc_dates = swb.load_Kc(year)
     
@@ -389,6 +389,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
             if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel':
                 sw_con = 0
                 n_irr_type=1
+                water_source='gw'
             if water_source=='gw':
                 sw_con = 0
                 n_irr_type=1

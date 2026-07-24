@@ -260,10 +260,26 @@ sns.catplot(df_annual_sum[df_annual_sum['var']==var],x='year',y='value', col='cr
 plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 
 
+# %% [markdown]
+# We don't need to show each year so much as showing the dtw profile. The importance of by year is that hotter years will require greater irrigation. Maybe we should simply have DTW 50-150 by 20 ft then average.
+#
+# Another issue is that pod_bool False or True lets SW irrigation occurred. At least with pod_bool = True there is typically much less irrigation from GW but that shows there is still an issue in the code for optimization.
+#
+# The choose_water_source is agnostic of pod_bool, it is purely based on cost of DTW vs cost of surface water. It is after that where the sw_con is set to 0 if no POD is available. The issue is that after this gw_con and sw_con are set to 0 for whatever the cheaper cost is which would result in a zero irrigation total if pod_bool is False and surface water is cheaper.
+#
+# Fixed the water_source issue with no pod by adding fix to make only gw. The other issue with water source conflicting with con is that the wrong values would be written in.
+#
+# Alfalfa shows stronger declines but is more problematic as there are break points then it levels off/rises indicating it is sensitive on a larger scale but not a smaller scale.
+# Corn is totally flat. Pasture has a sig decrease from 0-60 ft then totally flat which means that it would be flat as most DTW is >60 ft (same pattern for misc grain and hay).
+# **Takeaway is that below the actual depths in the basin the irrigation totals are constant**
+
+# %%
+crops
+
 # %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
-crop = 'Grape'
+crop = 'Misc Grain and Hay'
 var = 'GW_applied_water'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
 plt_df = plt_df[plt_df['pod_bool']==False]

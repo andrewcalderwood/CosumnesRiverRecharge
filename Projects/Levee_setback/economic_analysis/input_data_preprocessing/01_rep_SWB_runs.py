@@ -253,7 +253,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # beyond this point as quite a few wells are 200-300 ft
     well_dtw = pd.DataFrame([0,300], columns=['dtw_ft'])
     # and applies a simple 5 ft decline from spring outward
-    dtw_simple_df = calc_simple_dtw(well_dtw, year, dtw_step = 10)
+    dtw_simple_df = calc_simple_dtw(well_dtw, year, dtw_step = 20)
     # for simplicity it may be better to simply use constant DTW values for each year
 
     # %%
