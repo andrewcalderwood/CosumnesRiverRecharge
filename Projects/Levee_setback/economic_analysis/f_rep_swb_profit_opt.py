@@ -297,7 +297,11 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         # with one for a point of diversion and one without
         soil_crop = soil_crop.groupby('pod').mean(numeric_only=True).reset_index()
         # repeat soil_crop data to iterate over different DTW profiles
-        soil_crop = pd.concat([soil_crop]*dtw_df.shape[1])
+        # soil_crop = pd.concat([soil_crop]*dtw_df.shape[1]) # old version that fails to sort
+        # repeat data no POD first as the output_processing scripts expect this
+        soil_crop = pd.concat((pd.concat([soil_crop[soil_crop.pod_bool==0]]*dtw_df.shape[1]),
+                 pd.concat([soil_crop[soil_crop.pod_bool==1]]*dtw_df.shape[1])))
+
         
     # another option instead of looping over texture classes would be to sort by texture
     # then the data would be ordered to reference the nearest similar texture
@@ -420,7 +424,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
             linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con/gen.irr_eff_mult, sw_con = sw_con/gen.irr_eff_mult) 
             # for the linear dtw the start tol (0.01) was too coarse
             # with representative case it makes to use 0.001 tolerance for all and not force positive values
-            tol = 0.01  
+            tol = 0.001  
             # continue optimizing until profit is positive (p is negative and means positive profit)
             # this step may no longer be necessary as several crops are
             # expected to have negative profits (200-400 dollar losses), lower limit to avoid >-1000 dollars
@@ -543,6 +547,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
 
     # %%
     # break down irrigation into groundwater and surface water time series
+    # here we assume the series goes surface water first then groundwater
     irr_sw_out = np.zeros((nfield_crop, gen.nper))
     irr_sw_out[:, irr_days] = irr_true[:, :n_irr] # SW out
     

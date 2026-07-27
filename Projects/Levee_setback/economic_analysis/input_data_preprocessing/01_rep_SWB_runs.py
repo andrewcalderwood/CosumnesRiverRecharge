@@ -93,8 +93,8 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
-    year_load_var_in = "False"
-    # year_load_var_in = '2019'
+    # year_load_var_in = "False"
+    year_load_var_in = '2019'
 
 else:
     # added option to specify different static_model_inputs to allow easier adjustment of operating costs, revenue
@@ -255,6 +255,8 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # and applies a simple 5 ft decline from spring outward
     dtw_simple_df = calc_simple_dtw(well_dtw, year, dtw_step = 20)
     # for simplicity it may be better to simply use constant DTW values for each year
+    dtw_simple_df.to_csv(join(swb_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'))
+
 
     # %%
     print(crop_list)

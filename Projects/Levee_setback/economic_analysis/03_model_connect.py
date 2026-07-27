@@ -65,17 +65,17 @@ in_data = sys.argv
 if 'ipykernel' in in_data[0]:
     # m_nam = 'input_write_2014_2020_R3'
     # m_nam = 'input_write_2014_2020'
-    m_nam = 'input_write_2014_2025_R200'
+    m_nam = 'input_write_2014_2025_R303'
 
     # input_name = 'static_model_inputs.xlsx'
     input_name = 'static_model_inputs_no_p_o.xlsx'
-    year_load_var_in = "False"
+    # year_load_var_in = "False"
     year_load_var_in = 2019
     # identify which method for using/creating the optimized SWB
     # new_local, existing_local, existing_shared
     # and another option existing_local_and_local_crop to not write predict crop
     # existing_shared_and_local_crop as well
-    create_rep_swb = "new_local"
+    create_rep_swb = "existing_shared"
 
 else:
     m_nam = in_data[1]
@@ -703,9 +703,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # if skipping SWB optimization then don't need to intialize these
     # initialize SWB folder
     if ('existing_local' in create_rep_swb)|('existing_shared' in create_rep_swb):
-        print('Using existing hdf5 files for SWB optimization')
+        print('\n\nUsing existing hdf5 files for SWB optimization')
     else:
-        print('Initiating new hdf5 files for SWB optimization')
+        print('\nInitiating new hdf5 files for SWB optimization')
         for var in ['profit', 'cost', 'yield', 'percolation','GW_applied_water', 'SW_applied_water']:
             name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
             init_h5(name)
@@ -714,12 +714,32 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
             name = join(swb_ws, 'field_SWB', var + '_WY'+str(year)+'.hdf5')
             init_h5(name, groups=['wc','ETa', 'rp'])
 
+# %%
+        
+    swb_version = input_name.replace('static_model_inputs','').replace('.xlsx','')
+    if year_load_var_in != "False":
+        swb_version += '_'+str(year_load_var)
+    swb_rep_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
+    if ('existing_shared' in create_rep_swb):
+        existing_shared = True
+        # print('Using existing optimized SWB  results')
+        # for down scaling, need to switch to rep_ws when it is existing_shared
+        dtw_simple_df = pd.read_csv(join(swb_rep_ws,'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+                                   index_col = 0, parse_dates=['date'])
+        # the issue is that this will write the output to the wrong location??
+        swb_ws_downscale = swb_rep_ws
+    else:
+        # print('Calculating new optimized SWB results')
+        existing_shared = False
+        # if using existing local or creating then keep local space
+        swb_ws_downscale = swb_ws
+
     # %%
     # if skipping SWB optimize then skip this
     if ('existing_local' in create_rep_swb)|('existing_shared' in create_rep_swb):
-        print('Using existing optimized SWB  results')
+        print('\n\nUsing existing optimized SWB  results')
     else:
-        print('Calculating new optimized SWB results')
+        print('\nCalculating new optimized SWB results')
         # for crop in ['Alfalfa']:
         for crop in crop_list:
             # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
@@ -738,13 +758,12 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         sys.stdout.flush()
 
     # %%
-    fn = join(swb_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+    fn = join(swb_ws_downscale, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
     print('Crops with SWB results')
     with h5py.File(fn) as dset:
         finished_crops = list(dset['array'].keys())
         # arr = dset['array']['Corn'][:]
         print(finished_crops)
-    # only grape was completed?
 
 # %% [markdown]
 # 1. Load the representative results and sample for each field by crop type to back calculate the irrigation requirements. use the estimated irrigation as an input to the modflow model for pumping and percolation for recharge.
@@ -763,13 +782,9 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
         # print('Not re-calculating field level SWB',
         #       'using existing crop choice files in run folder')
         
-    swb_version = input_name.replace('static_model_inputs','').replace('.xlsx','')
-    if year_load_var_in != "False":
-        swb_version += '_'+str(year_load_var)
-    swb_rep_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
-
-    pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws, year, 
-                     crop_in, finished_crops, dtw_simple_df, well_dtw)
+    # no output is written these are just returned directly
+    pc_df_all, irr_gw_df_all, irr_sw_df_all = get_wb_by_parcel(swb_ws_downscale, year, 
+                     crop_in, finished_crops, dtw_simple_df, well_dtw, existing_shared)
     # this output with the parcel data needs to be saved as well - now done after updating below
     # pc_df_all.to_csv(join(swb_ws, 'output', 'pc_all'+str(year)+'.csv'))
     # irr_gw_df_all.to_csv(join(swb_ws, 'output', 'irr_gw_all'+str(year)+'.csv'))

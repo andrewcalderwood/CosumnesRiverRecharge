@@ -117,7 +117,8 @@ def downscale_dtw_summary(out_summary):
 
     # %%
     # fairly constant across crops
-def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
+def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all, 
+                   existing_shared=False):
     """
     Using the representative soil budget output
     transfer the irrigation and percolation rates to individual fields
@@ -129,7 +130,7 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
     """
     dtw_df_mean = dtw_simple_df.mean().values
     # if fields constains both with and without pod then double to account alternate run
-    if (crop_ref.pod_bool==1).any()&(crop_ref.pod_bool==0).any():
+    if ((crop_ref.pod_bool==1).any()&(crop_ref.pod_bool==0).any())|existing_shared:
         dtw_df_mean = np.hstack([dtw_df_mean]*2)
         pod_bool = np.repeat([0, 1], int(len(irr_gw)/2))
     elif (crop_ref.pod_bool==1).all():
@@ -252,7 +253,8 @@ def get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all):
 
 # %%
 def get_wb_by_parcel(model_ws, year,
-                     crop_in, crop_list, dtw_simple_df, well_dtw):
+                     crop_in, crop_list, dtw_simple_df, well_dtw,
+                    existing_shared = False):
     """ 
     Complete function to take representative soil budget output
     and translate it to each parcel by crop type
@@ -296,7 +298,8 @@ def get_wb_by_parcel(model_ws, year,
         
         # return the array that references DTW to the irr and pc for each represetnative
         # soil water budget
-        out_lin, out_summary = get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all)
+        out_lin, out_summary = get_local_data(dtw_simple_df, well_dtw, crop_ref, irr_gw, irr_sw, pc_all,
+                                             existing_shared)
         
         # create a dataframe with the irr or pc for each UniqueID parcel
         pc_df_long = out_arr_to_long_df(pc_all, out_lin, strt_date, end_date, out_summary)

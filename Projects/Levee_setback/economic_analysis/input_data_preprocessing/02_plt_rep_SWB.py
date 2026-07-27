@@ -93,7 +93,7 @@ proj_dir = join(dirname(doc_dir),'Box','SESYNC_paper1')
 data_dir = join(proj_dir, 'model_inputs')
 
 # %%
-swb_version = '_no_p_o'
+swb_version = '_no_p_o_2019'
 swb_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
 print(swb_ws)
 
@@ -168,7 +168,7 @@ for year in run_years:
 # %%
 # distinguishing column for rep with and without pod
 df_all['pod_bool'] = False
-df_all.loc[df_all.dtw_id>29, 'pod_bool'] = True
+df_all.loc[df_all.dtw_id>14, 'pod_bool'] = True
 
 # %%
 # rename as econ for plotting reference
@@ -239,9 +239,10 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 # df_all
 
 # %%
-df_all['dtw_ft'] = df_all.dtw_id*10
+# I updated to do 0-300 with 20 ft steps
+df_all['dtw_ft'] = df_all.dtw_id*20
 df_all.loc[df_all.pod_bool, 'dtw_ft'] -= 300
-# df_all
+df_all
 
 # %%
 # check the average budget that it meets constraints
@@ -274,32 +275,31 @@ plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 # **Takeaway is that below the actual depths in the basin the irrigation totals are constant**
 
 # %%
-crops
-
-# %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
-crop = 'Misc Grain and Hay'
+crop = 'Grape'
 var = 'GW_applied_water'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
 plt_df = plt_df[plt_df['pod_bool']==False]
-plt_df = plt_df[plt_df['year']==2019]
 
-df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+
 
 # %%
-# check on outliers for irrigation
-# df_annual_sum.value.describe()
-# df_annual_sum.value.quantile([0,0.05,0.25,0.5,0.75,0.95,1])
-# the majority of fields 90% + are in the normal range
-# but we see a value at 0 and almost double the median (at max value)
-# suggesting the SWB with optimization might fail occasionally
+df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
+# df_annual_sum
 
 # %%
 # # in addition to grouping by crop, need to group by field on some level to confirm
 # # field properties aren't impacting
 # plt_df.plot(x='dtw_ft',y='value', kind='scatter')
-df_annual_sum.plot(x='dtw_ft',y='value', kind='scatter')
+fig, ax_n = plt.subplots()
+# for y in run_years:
+#     plt_df_y = plt_df[plt_df['year']==y]
+    
+#     df_annual_sum = plt_df_y.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+# df_annual_sum.plot(x='dtw_ft',y='value', ax=ax_n, kind='scatter')
+df_annual_sum.plot( ax=ax_n, )
 # chk_id = df_annual_sum.UniqueID.unique()
 # n=600
 # df_chk = df_annual_sum[df_annual_sum.UniqueID==chk_id[n]]
@@ -313,8 +313,51 @@ df_annual_sum.plot(x='dtw_ft',y='value', kind='scatter')
 
 
 # %% [markdown]
+# After correction for POD sorting in 2019 version it becomes clear that the water year has a bigger impact on irrigation optimization than the actual DTW. Essentially farmers are likely to irrigate to maximize their profit and bigger changes will occur due to crop choices between years.
+
+# %% [markdown]
+# Notes from the 2019 version.  
+# Misc grain and hay had worse error as in 2019 there is a massive drop where the optimizer goes to zero for several DTW before recovering. Either we need to force a range of irrigation total for the season then the optimizer is primarily adjusting rates between events. One way might be to simply look at the expected irrigation deficit ignoring soil moisture to set irrigation but this would honestly be just as far off as soil water is significant.
+
+# %% [markdown]
+# Notes from year variable version.
 # Plotting the annual total for irrigation seems problematic when comparing with DTW in ft for a couple reasons.
 # 1. pod_bool seems like it's broken because for True there is hardly any GW AW for all DTW then for False it is mostly GW AW up to 150 ft then switches which indicates an issue because POD bool = False means no SW should be utilized.
 # 2. There is still no clear negative trend with increasing DTW and less irrigation unless it is obscured between years. Plotting an individua year shows problematic results as the overall trend is decreasing but there are anomalies where irrigation increases with DTW or where it spikes up to crazy values.
 #
 # Overal it seems that the SWB optimization is what is being problematic.
+
+# %%
+var = 'SW_applied_water'
+plt_df = df_all[(df_all['var']==var)]
+
+plt_df = plt_df[plt_df['pod_bool']==True]
+
+crops = plt_df.crop.unique()
+fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
+
+for n,crop in enumerate(crops):
+    plt_df_c = plt_df[(plt_df.crop==crop)]
+
+    df_annual_sum = plt_df_c.groupby(['dtw_id','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+    df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
+    ax_n = ax[n]
+    df_annual_sum.plot( ax=ax_n,legend=False )
+    ax_n.set_title(crop)
+
+ax[0].legend()
+fig.supylabel(var.capitalize())
+
+plt.savefig(join(out_dir, 
+                 var+'_year_total_by_crop_pod'+str(plt_df.pod_bool.iloc[0])+'.png'), 
+                 bbox_inches='tight')
+
+
+# %% [markdown]
+# Looking across the broader range of crops it's clearer that there are certain break points in each crop but generally they remain within a certain range that is about equal to WY impacts.
+#
+# These results to Yusuke might actually reverse the decision to keep in place the DTW variable adjustment since it appears that a code error was causing hte issue.
+#
+# Should update code to properly reference the pre-processed SWB profile in all cases to better complete this.
+
+# %%

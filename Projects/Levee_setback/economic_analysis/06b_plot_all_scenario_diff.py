@@ -345,8 +345,4 @@ for nc, col in enumerate(['value','total_value']):
         plt.savefig(join(wb_dir, plt_var+'_by_year_'+col+'_'+crop+'.png'))
         plt.close()
 
-# %% [markdown]
-# ## econ review
-#
-
 # %%
