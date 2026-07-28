@@ -1136,7 +1136,7 @@ for m_per in np.arange(1, all_run_dates.shape[0]-1):
     # %%
     # calculate the actual profit and yield for each parcel then calculate the average
     # to inform next years crop choice
-    summarize_output_year(loadpth, m_nam, m_per, parcels, input_name)
+    summarize_output_year(loadpth, m_nam, m_per, parcels, input_name, finished_crops)
 
     # would need to update yield within this final function to account for establishment irrigation
 

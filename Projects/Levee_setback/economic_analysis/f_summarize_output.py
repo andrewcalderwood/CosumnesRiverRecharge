@@ -93,12 +93,13 @@ def read_crop_arr_h5(crop, h5_fn):
 
 
 # %%
-def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
+def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name, finished_crops):
     '''
     INPUT:
     m_nam: model name
     m_per: the integer index of the current model period (1 = year 1)
     parcels: geopandas dataframe with UniqueID geometry to allow area calculation
+    finished_crops: list of crops that should be used
     '''
     parcels['acres'] = parcels.area_m2/(43560*0.3048**2)
     parcels.UniqueID = parcels.UniqueID.astype(int)
@@ -199,11 +200,12 @@ def summarize_output_year(loadpth, m_nam, m_per, parcels, input_name):
     year_wells = parcel_wells[parcel_wells.UniqueID.isin(crop_in_irr.parcel_id)]
 
     # %%
-    fn = join(swb_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
-    print('Crops with SWB results')
-    with h5py.File(fn) as dset:
-        finished_crops = list(dset['array'].keys())
-        print(finished_crops)
+    # use input instead
+    # fn = join(swb_ws, 'field_SWB', "percolation_WY"+str(year)+".hdf5")
+    # print('Crops with SWB results')
+    # with h5py.File(fn) as dset:
+    #     finished_crops = list(dset['array'].keys())
+    #     print(finished_crops)
 
     # %%
     # load the processed dataframe with all data
