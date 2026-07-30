@@ -126,7 +126,7 @@ figsize= (4*ncol, 3*nrow)
 # load scenario data at once to simplify plotting 
 scenarios = ['','_R3','_R4']
 scenarios = ['_R200','_R203','_R204']
-scenarios = ['_R300', '_R304']
+scenarios = ['_R300', '_R303', '_R304']
 
 dtw_all_scenario = pd.DataFrame()
 for scenario in scenarios:

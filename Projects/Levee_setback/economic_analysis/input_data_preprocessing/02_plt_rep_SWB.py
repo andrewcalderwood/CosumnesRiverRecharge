@@ -94,6 +94,8 @@ data_dir = join(proj_dir, 'model_inputs')
 
 # %%
 swb_version = '_no_p_o_2019'
+# swb_version = '_no_p_o'
+
 swb_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
 print(swb_ws)
 
@@ -115,6 +117,10 @@ run_years = all_run_dates[all_run_dates.use=='irrigation'].date.dt.year.values
 #
 # There is also no crop or parcel info involved because we allow equal chance.
 #
+
+# %%
+# only load one year as it is static
+dtw_df = pd.read_csv(join(swb_ws, 'field_SWB', 'dtw_ft_WY2015.csv'), index_col=0)
 
 # %% [markdown]
 # # Process water budget
@@ -149,11 +155,11 @@ for year in run_years:
             # extract output and convert to dataframe with ID columns
             arr = read_crop_arr_h5(crop, name)
             df = pd.DataFrame(arr, columns=dates)
-            df['dtw_id'] = np.arange(0,len(df))
+            df['dtw_id_in'] = np.arange(0,len(df))
             # add parcel information back
             # df = pd.concat((df,crop_in[crop_in.name==pred_dict[crop]].reset_index(drop=True)),axis=1)
             # melt to long format for easier appending
-            df = df.melt(var_name='date', id_vars='dtw_id')
+            df = df.melt(var_name='date', id_vars='dtw_id_in')
             df['date'] = pd.to_datetime(df['date'])
             df = df.assign(crop=crop, year=year, var=var)
             # specify where there were irrigation events
@@ -168,7 +174,12 @@ for year in run_years:
 # %%
 # distinguishing column for rep with and without pod
 df_all['pod_bool'] = False
-df_all.loc[df_all.dtw_id>14, 'pod_bool'] = True
+df_all['dtw_id'] = df_all['dtw_id_in']
+# it would nice to make the dtw_id part more automatic
+max_dtw_id = dtw_df.columns.astype(int).max()
+print('max dtw id', max_dtw_id)
+df_all.loc[df_all.dtw_id>max_dtw_id, 'pod_bool'] = True
+df_all.loc[df_all.dtw_id>max_dtw_id, 'dtw_id'] -= max_dtw_id
 
 # %%
 # rename as econ for plotting reference
@@ -239,10 +250,11 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 # df_all
 
 # %%
-# I updated to do 0-300 with 20 ft steps
-df_all['dtw_ft'] = df_all.dtw_id*20
-df_all.loc[df_all.pod_bool, 'dtw_ft'] -= 300
-df_all
+# create dataframe to identify dtw_id to dtw_ft at starting point
+dtw_by_id = dtw_df.iloc[[0]].transpose().reset_index()
+dtw_by_id.columns=['dtw_id','dtw_ft']
+dtw_by_id = dtw_by_id.dtw_id.astype(int)
+df_all = df_all.merge(dtw_by_id)
 
 # %%
 # check the average budget that it meets constraints
@@ -277,7 +289,7 @@ plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 # %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
-crop = 'Grape'
+crop = 'Corn'
 var = 'GW_applied_water'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
 plt_df = plt_df[plt_df['pod_bool']==False]
@@ -288,6 +300,12 @@ plt_df = plt_df[plt_df['pod_bool']==False]
 df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
 df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
 # df_annual_sum
+
+# %%
+# plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
+plt_chk = plt_df[(plt_df.year==2018)].copy()
+plt_chk = plt_chk[plt_chk.irr==True]
+sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
 
 # %%
 # # in addition to grouping by crop, need to group by field on some level to confirm
@@ -329,28 +347,30 @@ df_annual_sum.plot( ax=ax_n, )
 
 # %%
 var = 'SW_applied_water'
-plt_df = df_all[(df_all['var']==var)]
-
-plt_df = plt_df[plt_df['pod_bool']==True]
-
-crops = plt_df.crop.unique()
-fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
-
-for n,crop in enumerate(crops):
-    plt_df_c = plt_df[(plt_df.crop==crop)]
-
-    df_annual_sum = plt_df_c.groupby(['dtw_id','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
-    df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
-    ax_n = ax[n]
-    df_annual_sum.plot( ax=ax_n,legend=False )
-    ax_n.set_title(crop)
-
-ax[0].legend()
-fig.supylabel(var.capitalize())
-
-plt.savefig(join(out_dir, 
-                 var+'_year_total_by_crop_pod'+str(plt_df.pod_bool.iloc[0])+'.png'), 
-                 bbox_inches='tight')
+for var in ['SW_applied_water','GW_applied_water']:
+    plt_df1 = df_all[(df_all['var']==var)]
+    for pod_bool in [True, False]:
+        plt_df = plt_df1[plt_df1['pod_bool']==pod_bool]
+        
+        crops = plt_df.crop.unique()
+        fig,ax = plt.subplots(1, len(crops), sharey=False, figsize=(12,3), layout='constrained', dpi=300)
+        
+        for n,crop in enumerate(crops):
+            plt_df_c = plt_df[(plt_df.crop==crop)]
+        
+            df_annual_sum = plt_df_c.groupby(['dtw_id','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+            df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
+            ax_n = ax[n]
+            df_annual_sum.plot( ax=ax_n,legend=False )
+            ax_n.set_title(crop)
+        
+        ax[0].legend()
+        fig.supylabel(var.capitalize())
+        
+        plt.savefig(join(out_dir, 
+                         var+'_year_total_by_crop_pod'+str(plt_df.pod_bool.iloc[0])+'.png'), 
+                         bbox_inches='tight')
+        plt.close()
 
 
 # %% [markdown]

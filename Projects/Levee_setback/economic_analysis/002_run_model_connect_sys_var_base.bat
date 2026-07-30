@@ -9,9 +9,8 @@ rem R3:6x vineyard MAR, R4:90/20 floodplain MAR, R20:pumping constraint
 
 rem version with no p_o and 2019 variables
 set m_nam=input_write_2014_2025_R300
+rem set m_nam=input_write_2014_2025_R303
 rem set m_nam=input_write_2014_2025_R304
-rem use 303 for test with exist_shared
-set m_nam=input_write_2014_2025_R303
 
 rem version no p_o and use crop/SWB from R200
 rem set m_nam=input_write_2014_2025_R404
