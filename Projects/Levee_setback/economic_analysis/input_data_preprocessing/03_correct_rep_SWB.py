@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -14,6 +14,10 @@
 
 # %% [markdown]
 # Script to load pre-processed SWB to correct relationship of AW, DTW and profit make sense.
+#
+# After discussing with Yusuke, we will hold on these corrections as we don't expect them to have a significant impact and we will wait to see if a review or co-author is concerned.
+#
+# TODO: move back code for reading in cost/profit into plt script and save intermediate csv if needed?
 
 # %%
 import sys
@@ -231,9 +235,6 @@ df_cost = add_pod_info(df_cost, dtw_df)
 # df_cost.columns
 
 # %%
-# df_cost[(df_cost['var']=='profit')]
-
-# %%
 var='profit'
 pod_bool=False
 sns.relplot(df_cost[(df_cost['var']==var)&(df_cost.pod_bool==pod_bool)],
@@ -258,9 +259,41 @@ plt_df = plt_df[plt_df['pod_bool']==False]
 
 
 # %%
-df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
-df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
+df_annual_sum_long = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+df_annual_sum = df_annual_sum_long.pivot(columns='year',values='value', index=['dtw_ft'])
 # df_annual_sum
+
+# %%
+cost_var = pd.read_excel(join(data_dir, 'static_model_inputs_no_p_o.xlsx'), sheet_name = 'General')
+# cost per acre-in
+p_sw = cost_var[(cost_var.variable=='p_sw')&(cost_var.year==2019)].value.values[0]*12
+# energy cost/kWh
+p_e = cost_var[(cost_var.variable=='p_e')&(cost_var.year==2019)].value.values[0]
+# phi is kWh per acre in per ft
+p_gw = p_e*cost_var[cost_var.variable=='phi'].value.values[0]*12
+p_sw, p_gw*100
+
+# %%
+# df_cost[(df_cost['var']=='profit')]
+# check whether cost captures SW AW
+cost_sw_chk = df_cost[(df_cost.pod_bool==True)&(df_cost['var']=='cost')]
+cost_sw_chk
+df_chk = df_all[df_all.pod_bool==True].groupby(['crop','year','var','dtw_ft'])[['value']].sum().reset_index()
+df_sw_chk = df_chk[(df_chk['var']=='SW_applied_water')].drop(columns=['var']).rename(columns={'value':'SW_AW'})
+df_gw_chk = df_chk[(df_chk['var']=='GW_applied_water')].drop(columns=['var']).rename(columns={'value':'GW_AW'})
+# the rep profiles have an assumed area of 1 acre so just need to convert to AF from m*acre
+# df_sw_chk['SW_cost'] = df_sw_chk.SW_AW*p_sw
+# # this doesn't account for the assumed 5 ft decline during irrigation season but should be minimal
+# # could subtract 2.5 ft to provide more accurate result
+# df_gw_chk['GW_cost'] = df_gw_chk.GW_AW *p_gw * df_gw_chk.dtw_ft
+cost_chk = cost_sw_chk.merge(df_sw_chk.merge(df_gw_chk))
+# cost_chk[cost_chk.value==0]
+# where cost is 0 the AW is 0 for both SW and GW
+# cost_chk['cost_chk'] = cost_chk.SW_cost+cost_chk.GW_cost
+# check that only one water source is used ine ach case comes clean
+cost_chk[cost_chk.SW_AW>0].GW_AW.sum(), cost_chk[cost_chk.GW_AW>0].SW_AW.sum()
+
+cost_chk[cost_chk.SW_AW>0]
 
 # %%
 # plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
