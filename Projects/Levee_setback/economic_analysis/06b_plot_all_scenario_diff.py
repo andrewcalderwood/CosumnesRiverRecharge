@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -62,8 +62,8 @@ import flopy
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
-
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = pd.read_csv('00_model_path.txt',header=None).iloc[0,0]
 
 
 # %% [markdown]

@@ -125,7 +125,8 @@ t_start = time.time()
 # %%
 loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic'
 loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic'
-loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+# loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic'
+loadpth = pd.read_csv('00_model_path.txt',header=None).iloc[0,0]
 
 # update to different modflow models here
 # m_nam = 'input_write_2014_2020'

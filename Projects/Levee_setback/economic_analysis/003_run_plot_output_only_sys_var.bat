@@ -3,8 +3,8 @@ rem conda init activates a conda shell which is what conda.bat does
 
 rem version with no p_o and 2019 variables
 set m_nam=input_write_2014_2025_R300
-rem set m_nam=input_write_2014_2025_R304
-set m_nam=input_write_2014_2025_R303
+set m_nam=input_write_2014_2025_R304
+rem set m_nam=input_write_2014_2025_R303
 
 
 echo %m_nam%

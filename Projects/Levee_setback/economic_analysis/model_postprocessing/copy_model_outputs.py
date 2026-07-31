@@ -14,7 +14,10 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SOURCE_BASE = Path(r"D:/WRDAPP/GWFlowModel/Cosumnes/Economic")
+loadpth = pd.read_csv('00_model_path.txt',header=None).iloc[0,0]
+# SOURCE_BASE = Path(r"D:/WRDAPP/GWFlowModel/Cosumnes/Economic")
+SOURCE_BASE = Path(loadpth)
+
 import os
 usr_dir = os.path.expanduser('~')
 DEST_BASE   = Path(usr_dir+r"/Box/SESYNC_paper1/model_results/2026_7_27")
