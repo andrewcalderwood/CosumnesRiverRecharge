@@ -457,6 +457,12 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
                 t_all[ns] = out.execution_time
             # print final results
             print('Soil ', str(ns),'%.2f' %(-out.fun),'$ ,in %.2f' %(out.execution_time/60),'min')
+            if (water_source =='sw')&(soil_rep):
+                print('Water source is SW so DTW no longer has an impact for representative profiles')
+                print('Skipping remaining DTW profiles and holding constant SW irrigation')
+                irr_all[ns:, :n_irr] = out.x
+                break
+
         t1 = time.time()
         print('Total time was %.2f min' %((t1-t0)/60), 'for', ns+1,'parcels')
 
