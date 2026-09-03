@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -236,25 +236,35 @@ df_cost = add_pod_info(df_cost, dtw_df)
 
 # %%
 var='profit'
-pod_bool=False
-sns.relplot(df_cost[(df_cost['var']==var)&(df_cost.pod_bool==pod_bool)],
-            x='dtw_ft',y='value', hue='year', col='crop',kind='line', facet_kws={'sharey': False})
+pod_bool=True
+for var in ['profit','cost']:
+    for pod_bool in [True, False]:
+        sns.relplot(df_cost[(df_cost['var']==var)&(df_cost.pod_bool==pod_bool)],
+                    x='dtw_ft',y='value', hue='year', col='crop',kind='line', facet_kws={'sharey': False})
 
-plt.savefig(join(out_dir, var+'_by_crop_year_dtw_pod'+str(pod_bool)+'.png'))
+        plt.savefig(join(out_dir, var+'_by_crop_year_dtw_pod'+str(pod_bool)+'.png'))
+        plt.close()
 # out_dir
 # reviewing profit shows that in most cases the profit decreases as expected with dtw, althought there are some exceptoins
 # there is some levelign off or local decreases
 # there is some odd behavior where misc. grain and hay irrig goes off (dry farming) and improves profit (unrealstic break in the line)
 
 # for cost it makes sense for no pod, for pod true there is some odd behavior as if SW cost is not accounted
+# after keeping SW constant once it switches it looks better but still some odd jumps in profit
+
+# %%
+# plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
+plt_chk = plt_df[(plt_df.year==2018)].copy()
+plt_chk = plt_chk[plt_chk.irr==True]
+sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
 
 # %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
-crop = 'Corn'
-var = 'GW_applied_water'
+crop = 'Grape'
+var = 'SW_applied_water'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
-plt_df = plt_df[plt_df['pod_bool']==False]
+plt_df = plt_df[plt_df['pod_bool']==True]
 
 
 
@@ -262,12 +272,6 @@ plt_df = plt_df[plt_df['pod_bool']==False]
 df_annual_sum_long = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
 df_annual_sum = df_annual_sum_long.pivot(columns='year',values='value', index=['dtw_ft'])
 # df_annual_sum
-
-# %%
-# plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
-plt_chk = plt_df[(plt_df.year==2018)].copy()
-plt_chk = plt_chk[plt_chk.irr==True]
-sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
 
 # %%
 # # in addition to grouping by crop, need to group by field on some level to confirm

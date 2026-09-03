@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -102,36 +102,16 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 
 # %%
-# # # # # # testing
-# year = int(2018)
-# crop='Grape'
-# # # # # crop='Corn'
-# # # crop='Alfalfa'
-# # # # crop='Pasture' # will require extra work due to AUM vs hay
-# # # # crop = 'Misc Grain and Hay'
-
-# %%
-# # # # # # # # # testing
 # # # # # loadpth = 'C://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # loadpth = 'D://WRDAPP/GWFlowModel/Cosumnes/Economic/'
 # # loadpth = 'F://WRDAPP/GWFlowModel/Cosumnes/Economic/'
-# # m_nam = 'input_write_2014_2022'
-# m_nam = 'input_write_2014_2025_R203'
-# base_model_ws = join(loadpth, m_nam )
-# swb_ws = join(base_model_ws, 'crop_soilbudget')
-# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
-# # add in the crops from previous years
-# for year_previous in np.arange(2015, year):
-#     crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
-#     # to avoid conflict, add previous years as new columns with convention name_year
-#     crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
-#     crop_in = crop_in.merge(crop_in_previous)
-        
 
+# %%
+# # # # # # # # # testing
 # soil_rep = True # True is for the complex dtw_df case
 # run_opt=True
-# soil_rep = False # True is for the complex dtw_df case
-# run_opt=False
+# # soil_rep = False # True is for the complex dtw_df case
+# # run_opt=False
 # field_id = 'parcels'
 
 # sw_con=100
@@ -140,6 +120,34 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 # # # # load parcel data for soil_rep=False
 # # # # soil_rep=False
 
+# %%
+# # # # # # testing
+# year = int(2020)
+# crop='Grape'
+# # # # # crop='Corn'
+# # # crop='Alfalfa'
+# # # # crop='Pasture' # will require extra work due to AUM vs hay
+# # # # crop = 'Misc Grain and Hay'
+# year_load_var = 2019
+
+
+# %%
+
+# m_nam = 'input_write_2014_2025_R203'
+# base_model_ws = join(loadpth, m_nam )
+# swb_ws = join(base_model_ws, 'crop_soilbudget')
+
+# crop_in = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year)+'.csv'), index_col=0)
+
+# add in the crops from previous years
+# is the crop previous needed here?
+# going to leave commented out to see if it causes an error
+# for year_previous in np.arange(2015, year):
+#     crop_in_previous = pd.read_csv(join(base_model_ws,'rep_crop_soilbudget', 'field_SWB', 'crop_parcels_'+str(year_previous)+'.csv'), index_col=0)
+#     # to avoid conflict, add previous years as new columns with convention name_year
+#     crop_in_previous = crop_in_previous[['parcel_id','name']].rename(columns={'name':'name_'+str(year_previous)})
+#     crop_in = crop_in.merge(crop_in_previous)
+        
 # if soil_rep:
 #     # dtw_df = pd.read_csv(join(base_model_ws, 'field_SWB', 'dtw','dtw_ft_parcels_'+str(year)+'.csv'), 
 #     #                      index_col=0, parse_dates=['dt'])
@@ -156,6 +164,38 @@ dem_data = np.loadtxt(gwfm_dir+'/DIS_data/dem_52_9_200m_mean.tsv')
 
 # base_model_ws = swb_ws
 
+# %%
+# swb_version = '_no_p_o_2019'
+# swb_ws = join(proj_dir, 'model_inputs', 'swb_rep', 'version'+swb_version)
+# base_model_ws = swb_ws
+
+# # load parcel data for reference as needed
+# parcels = gpd.read_file(join(proj_dir,'Parcels shapefile/parcels.shp'))
+# parcels['area_m2'] = parcels.geometry.area
+# parcels.UniqueID = parcels.UniqueID.astype(int)
+
+# crop_choice_dir = 'parcelchoicemodelupdate'
+# data = pd.read_csv(join(crop_choice_dir, "data_model/parcel_data_test.csv"))
+# # add column to POD that was available in previous dataset
+# pod = data[['parcel_id','pod']].copy().rename(columns={'pod':'pod_bool'})
+# pod['pod'] = 'No Point of Diversion on Parcel'
+# pod.loc[pod.pod_bool==1, 'pod'] = 'Point of Diversion on Parcel'
+# # additional testing for the simple external SWB optimizations
+# # crop_in isn't creatd from prediction so for each step we average properties across all parcels
+# crop_in_parcels = parcels[['UniqueID']].rename(columns={'UniqueID':'parcel_id'})
+# crop_in_parcels = crop_in_parcels.sort_values('parcel_id').reset_index(drop=True)
+# crop_in_parcels = crop_in_parcels.merge(pod)
+
+# crop_in = crop_in_parcels.copy()
+# # will need to add year to swb.load_var(crop, year) if we want to use year specific profit and cost
+# # variables, this would be useful for comparing against baseline while future should use average
+# # within load_run_swb, these variables are called again specified by year
+# var_gen, var_crops, var_yield, season, pred_dict, crop_dict, var_irr = swb.load_var(crop, year = year_load_var, input_name=input_name)
+# crop_in['name'] = pred_dict[crop]
+
+# dtw_df = pd.read_csv(join(swb_ws, 'field_SWB', 'dtw_ft_WY'+str(year)+'.csv'),
+#                     index_col=0, parse_dates=['date'])
+# dtw_df.columns = dtw_df.columns.astype(int)
 
 # %%
 # # simple representative DTW for linear steps 10 ft to 200 ft
@@ -336,9 +376,7 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     # convert dictionary of variables to class for easier referencing, constant over different soil
     gen = cost_variables(gen_dict)
 
-    # a scalar indicates it is applied to all variables
-    # upper bound here based on crop reasonable upper limit
-    bounds = Bounds(lb = 0, ub = (var_irr.depth_max.max()/12)*0.3048)
+
 
 
     # %%
@@ -359,6 +397,17 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     # %%
     # run_opt=True
     min_profit=1000
+    nstart = 0
+
+
+# %%
+n_irr, nfield_crop
+irr_lvl, 
+np.full(len(irr_lvl), (var_irr.depth_max.max()/12)*0.3048)
+# out.x0
+irr_lvl[:] = (2/12)*0.3048 # irrigate with 2 inches (convert to meters)
+irr_lvl.sum(), ((gw_con/gen.irr_eff_mult)/12)*0.3048, (init_irr_rate_max/12)*0.3048, (var_irr.depth_max.max()/12)*0.3048
+
 
     # %%
     if run_opt:
@@ -369,12 +418,15 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
         p_all[:] = min_profit + 1
         t_all = np.zeros(nfield_crop)
         
-        for ns in np.arange(0,nfield_crop):
+        for ns in np.arange(nstart, nfield_crop):
+        # for ns in np.arange(0, nfield_crop):
+
             soil_ag = soil_crop.iloc[[ns]] #keep as dataframe for consistency 
             nfield = soil_ag.shape[0]
         
             dtw_arr = crop_dtw[:,ns]
-    
+            
+
             ## add check for cheaper water source
             # then adjust solver to use only one if significantly cheaper
             water_source = choose_water_source(dtw_arr, gen, mix_fraction=1)
@@ -391,37 +443,52 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
             
             # if no POD then no SW irrig
             if soil_ag.pod.iloc[0]=='No Point of Diversion on Parcel':
-                sw_con = 0
+                sw_con_n = 0
+                gw_con_n = np.copy(gw_con)
                 n_irr_type=1
                 water_source='gw'
             if water_source=='gw':
-                sw_con = 0
+                sw_con_n = 0
+                gw_con_n = np.copy(gw_con)
                 n_irr_type=1
+                init_irr_rate_max = (gw_con*0.9/gen.irr_eff_mult)/n_irr
             elif water_source=='sw':
-                gw_con = 0
+                gw_con_n = 0
+                sw_con_n = np.copy(sw_con)
                 n_irr_type=1
-            
+                init_irr_rate_max = (sw_con*0.9/gen.irr_eff_mult)/n_irr
+
             irr_lvl = np.zeros(n_irr_type*n_irr); # Initial irrigation values for optimization
             # review shows usually it should be 4 inches for most crops with 8 for alfalfa
             # starting at 4 seems to run even slower for quick test in jupyter lab
             # starting at 2 also has issues
             irr_lvl[:] = (2/12)*0.3048 # irrigate with 2 inches (convert to meters)
+            # need to actually lower below constraint to avoid issues
+            irr_lvl[:] = (init_irr_rate_max/12)*0.3048
             irr_lvl_base = np.ones(n_irr_type*n_irr)*(2/12)*0.3048
             # the issue with reusing previous irrigation is if a bad decision
             # is made by the solver then it persists so better to start from defaults each time
-            if ns > 0:
+            # also for switching to SW if it reuses the previous then it will start from 0 and stay near there
+            # to correct for this we might want to use the next irrigation as the sum of GW + SW so that when it switches
+            # from one to the other it starts near the last value, at this point could further simplify to keep it this way
+            if ns > nstart:
                 if water_source=='gw':
-                    irr_lvl[:] = irr_all[ns-1,n_irr:]
+                    irr_lvl[:] = irr_all[ns-1,n_irr:] + irr_all[ns-1,:n_irr] # GW + SW
                 elif water_source=='sw':
-                    irr_lvl[:] = irr_all[ns-1,:n_irr]
+                    irr_lvl[:] = irr_all[ns-1,:n_irr] + irr_all[ns-1,n_irr:] # SW +GW
                 else:
                     irr_lvl[:] = irr_all[ns-1]
-
-            print('Irr length:', len(irr_lvl))
+            
+            print('Irr length:', len(irr_lvl), 'using', water_source)
             # simple linear keeps both SW/GW
             # the constraint should be divided by the irrigation efficiency multiplier
             # to limit based on the actual water that will be applied
-            linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con/gen.irr_eff_mult, sw_con = sw_con/gen.irr_eff_mult) 
+            linear_constraint = mak_irr_con_adj(n_irr, gw_con = gw_con_n/gen.irr_eff_mult, sw_con = sw_con_n/gen.irr_eff_mult) 
+            # a scalar indicates it is applied to all variables
+            # upper bound here based on crop reasonable upper limit
+            bounds = Bounds(lb = np.zeros(len(irr_lvl)), 
+                            ub = np.full(len(irr_lvl), (var_irr.depth_max.max()/12)*0.3048), 
+                           )
             # for the linear dtw the start tol (0.01) was too coarse
             # with representative case it makes to use 0.001 tolerance for all and not force positive values
             tol = 0.001  
@@ -444,8 +511,8 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
                 if out.fun > min_profit:
                     tol /=10
                     irr_lvl[:] = np.copy(irr_lvl_base)
-                if tol < 1E-4:
-                    break # if tolerance gets too small then skip
+                # could reset values to the bounds if needed
+                # out.x = np.clip(out.x, bounds.lb, bounds.ub)
                 # make sure irrigation is saved in the right spot
                 if water_source=='gw':
                     irr_all[ns, n_irr:] = out.x
@@ -455,17 +522,24 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
                     irr_all[ns] = out.x
                 p_all[ns] = out.fun
                 t_all[ns] = out.execution_time
+                if tol < 1E-4:
+                    break # if tolerance gets too small then skip
             # print final results
             print('Soil ', str(ns),'%.2f' %(-out.fun),'$ ,in %.2f' %(out.execution_time/60),'min')
             if (water_source =='sw')&(soil_rep):
                 print('Water source is SW so DTW no longer has an impact for representative profiles')
                 print('Skipping remaining DTW profiles and holding constant SW irrigation')
                 irr_all[ns:, :n_irr] = out.x
+                p_all[ns:] = out.fun
                 break
 
         t1 = time.time()
         print('Total time was %.2f min' %((t1-t0)/60), 'for', ns+1,'parcels')
 
+
+# %% [markdown]
+#
+# The issue is that gw_con and sw_con are permanently changed in linear constraint rather than copied.
 
 # %% [markdown]
 #     #     # # Post-processing

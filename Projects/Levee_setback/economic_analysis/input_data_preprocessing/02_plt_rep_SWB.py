@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -172,14 +172,45 @@ for year in run_years:
 
 
 # %%
-# distinguishing column for rep with and without pod
-df_all['pod_bool'] = False
-df_all['dtw_id'] = df_all['dtw_id_in']
-# it would nice to make the dtw_id part more automatic
-max_dtw_id = dtw_df.columns.astype(int).max()
-print('max dtw id', max_dtw_id)
-df_all.loc[df_all.dtw_id>max_dtw_id, 'pod_bool'] = True
-df_all.loc[df_all.dtw_id>max_dtw_id, 'dtw_id'] -= max_dtw_id
+# # distinguishing column for rep with and without pod
+# df_all['pod_bool'] = False
+# df_all['dtw_id'] = df_all['dtw_id_in']
+# # it would nice to make the dtw_id part more automatic
+# max_dtw_id = dtw_df.columns.astype(int).max()
+# print('max dtw id', max_dtw_id)
+# df_all.loc[df_all.dtw_id>max_dtw_id, 'pod_bool'] = True
+# df_all.loc[df_all.dtw_id>max_dtw_id, 'dtw_id'] -= max_dtw_id
+
+# %%
+# # create dataframe to identify dtw_id to dtw_ft at starting point
+# dtw_by_id = dtw_df.iloc[[0]].transpose().reset_index()
+# dtw_by_id.columns=['dtw_id','dtw_ft']
+# dtw_by_id = dtw_by_id.dtw_id.astype(int)
+# df_all = df_all.merge(dtw_by_id)
+
+# %%
+def add_pod_info(df_all, dtw_df):
+    # distinguishing column for rep with and without pod
+    df_all['pod_bool'] = False
+    df_all['dtw_id'] = df_all['dtw_id_in']
+    # it would nice to make the dtw_id part more automatic
+    max_dtw_id = dtw_df.columns.astype(int).max()
+    print('max dtw id', max_dtw_id)
+    df_all.loc[df_all.dtw_id>max_dtw_id, 'pod_bool'] = True
+    df_all.loc[df_all.dtw_id>max_dtw_id, 'dtw_id'] -= max_dtw_id
+    
+    # create dataframe to identify dtw_id to dtw_ft at starting point
+    dtw_by_id = dtw_df.iloc[[0]].transpose().reset_index()
+    dtw_by_id.columns=['dtw_id','dtw_ft']
+    dtw_by_id.dtw_id = dtw_by_id.dtw_id.astype(int)
+    df_all = df_all.merge(dtw_by_id)
+    return df_all
+
+
+
+# %%
+df_all = add_pod_info(df_all, dtw_df)
+# df_all
 
 # %%
 # rename as econ for plotting reference
@@ -250,13 +281,6 @@ for var in ['GW_applied_water', 'SW_applied_water','percolation']:
 # df_all
 
 # %%
-# create dataframe to identify dtw_id to dtw_ft at starting point
-dtw_by_id = dtw_df.iloc[[0]].transpose().reset_index()
-dtw_by_id.columns=['dtw_id','dtw_ft']
-dtw_by_id = dtw_by_id.dtw_id.astype(int)
-df_all = df_all.merge(dtw_by_id)
-
-# %%
 # check the average budget that it meets constraints
 var = 'GW_applied_water'
 # df_all_plt = df_all['var']==var
@@ -289,23 +313,28 @@ plt.savefig(join(out_dir, var+'_annual_total_m.png'))
 # %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
-crop = 'Corn'
-var = 'GW_applied_water'
+crop = 'Grape'
+var = 'SW_applied_water'
 plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
-plt_df = plt_df[plt_df['pod_bool']==False]
+plt_df = plt_df[plt_df['pod_bool']==True]
 
+# plt_df
 
-
-# %%
-df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
-df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
-# df_annual_sum
 
 # %%
 # plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
-plt_chk = plt_df[(plt_df.year==2018)].copy()
+plt_chk = plt_df[(plt_df.year==2022)].copy()
 plt_chk = plt_chk[plt_chk.irr==True]
+
+plt_chk.groupby('dtw_id_in')['value'].sum()
 sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
+
+# %%
+
+# column dtw_ft doesn't exist?
+df_annual_sum = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
+df_annual_sum = df_annual_sum.pivot(columns='year',values='value', index=['dtw_ft'])
+# df_annual_sum
 
 # %%
 # # in addition to grouping by crop, need to group by field on some level to confirm
