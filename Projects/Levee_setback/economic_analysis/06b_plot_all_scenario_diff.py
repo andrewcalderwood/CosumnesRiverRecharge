@@ -161,6 +161,11 @@ plt.savefig(join(model_out, 'scenario_comparison', 'dtw_ft_spring_line_hist_acre
 plt.close()
 
 # %%
+# calculate the total crop acreage by crop, year, and scenario
+acreage_totals = dtw_all_scenario.groupby(['year','crop','name','scenario','scen_name'])[['acres']].sum().reset_index()
+
+
+# %%
 crops = dtw_all_scenario.crop.unique()
 ny = 3
 nx = int(np.ceil(len(crops)/ny))
@@ -176,9 +181,9 @@ for n,crop in enumerate(crops):
     # df_plt[df_plt.crop==crop]
 
     for sn in scenario_names:
-        df_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].groupby(['year','crop'])[['acres']].sum().reset_index()
-
-        df_plt = df_plt[(df_plt.crop==crop)]
+        # df_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].groupby(['year','crop'])[['acres']].sum().reset_index()
+        # df_plt = df_plt[(df_plt.crop==crop)]
+        df_plt = acreage_totals[(acreage_totals.crop==crop)&(acreage_totals.scen_name==sn)]
         df_plt.plot(x='year',y='acres', label=sn, ax=ax_n, legend=False)
         # df_plt = dtw_count_s[(dtw_count_s.crop==crop)]
         # df_plt.plot(x='year',y='acres', label='Scenario', ax=ax)
@@ -199,9 +204,9 @@ for crop in crops:
     fig,ax = plt.subplots()
 
     for sn in scenario_names:
-        df_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].groupby(['year','crop'])[['acres']].sum().reset_index()
-
-        df_plt = df_plt[(df_plt.crop==crop)]
+        # df_plt = dtw_all_scenario[dtw_all_scenario.scen_name==sn].groupby(['year','crop'])[['acres']].sum().reset_index()
+        # df_plt = df_plt[(df_plt.crop==crop)]
+        df_plt = acreage_totals[(acreage_totals.crop==crop)&(acreage_totals.scen_name==sn)]
         df_plt.plot(x='year',y='acres', label=sn, ax=ax)
         # df_plt = dtw_count_s[(dtw_count_s.crop==crop)]
         # df_plt.plot(x='year',y='acres', label='Scenario', ax=ax)
@@ -213,6 +218,22 @@ for crop in crops:
     plt.savefig(join(model_out, 'scenario_comparison', 'crop_acreage_by_year_'+crop+'.png'))
     plt.close()
 
+
+# %%
+# convert to wide format
+acreage_totals_wide_output = acreage_totals.pivot(index='year', columns=['name','scen_name'], values=['acres'])
+acreage_totals_wide_output.to_csv(join(model_out, 'scenario_comparison', 'annual_acres_crop_scenarios_wide.csv'))
+
+# %%
+# add calculation of percent increase from baseline
+acreage_base = acreage_totals[acreage_totals.scenario=='_R300'].rename(columns={'acres':'acres_base'}).drop(columns=['scenario','scen_name'])
+acreage_totals_perc = acreage_totals.merge(acreage_base)
+acreage_totals_perc['acres_frac'] = acreage_totals_perc.acres/acreage_totals_perc.acres_base
+acreage_totals_perc['acres_frac_increase'] = (acreage_totals_perc.acres-acreage_totals_perc.acres_base)/acreage_totals_perc.acres_base
+acreage_totals_perc['acres_percent_increase'] = acreage_totals_perc['acres_frac_increase']*100
+
+acreage_percent_wide_output = acreage_totals_perc.pivot(index='year', columns=['name','scen_name'], values=['acres_percent_increase'])
+acreage_percent_wide_output.to_csv(join(model_out, 'scenario_comparison', 'annual_acres_percent_icnrease_from_baseline_crop_scenarios_wide.csv'))
 
 # %%
 # dtw_all_scenario.groupby(['year','scen_name']).agg({'acres':'sum','UniqueID':'count'})
@@ -236,6 +257,26 @@ df_econ_scenario = df_econ_scenario.drop(columns='index')
 
 # %%
 df_econ_scenario.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_yield_crop_scenarios.csv'))
+
+# %%
+# index contains duplicates
+df_profit_scenario = df_econ_scenario[df_econ_scenario['var']=='profit'].sort_values(['name','scenario'])
+df_profit_scenario_wide_output = df_profit_scenario.pivot(index='year', columns=['name','scen_name'], values=['value','total_value'])
+# df_profit_scenario_wide_output
+df_profit_scenario_wide_output.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_yield_crop_scenarios_wide.csv'))
+
+# %%
+# sns.catplot(df_profit_scenario[df_profit_scenario.crop=='Alfalfa'], x='year', y='total_value', hue='scenario', col='name', kind='bar')
+
+# %%
+# add calculation of percent increase from baseline
+profit_base = df_profit_scenario[df_profit_scenario.scenario=='_R300'].rename(columns={'total_value':'total_value_base','value':'value_base'}).drop(columns=['scenario','scen_name'])
+df_profit_perc = df_profit_scenario.merge(profit_base).copy()
+df_profit_perc['total_value_perc_increase'] = 100*(df_profit_perc.total_value-df_profit_perc.total_value_base)/df_profit_perc.total_value_base
+df_profit_perc['value_perc_increase'] = 100*(df_profit_perc.value-df_profit_perc.value_base)/df_profit_perc.value_base
+profit_percent_wide_output = df_profit_perc.pivot(index='year', columns=['name','scen_name'], values=['value_perc_increase', 'total_value_perc_increase'])
+profit_percent_wide_output
+profit_percent_wide_output.to_csv(join(model_out, 'scenario_comparison', 'annual_profit_percent_icnrease_from_baseline_crop_scenarios_wide.csv'))
 
 # %%
 var = 'yield'
@@ -317,7 +358,16 @@ df_wb_scenario['year'] = df_wb_scenario.date.dt.year
 wb_ann_sum = df_wb_scenario.groupby(['name','var','scenario', 'scen_name', 'year'])[['value','total_value']].sum()
 wb_ann_sum = wb_ann_sum.reset_index()
 plt_var = 'GW_applied_water'
+# plt_var = 'SW_applied_water'
+
 wb_ann_sum = wb_ann_sum[wb_ann_sum['var']==plt_var]
+
+wb_ann_sum.to_csv(join(model_out, 'scenario_comparison', plt_var+'annual_avg_total_by_crop_scenarios.csv'), index=False)
+# wide version to make it easier for Yusuke to make final tables
+wb_ann_sum_wide_output = wb_ann_sum.pivot(index='year', columns=['name','scen_name'], values=['value','total_value'])
+wb_ann_sum_wide_output.to_csv(join(model_out, 'scenario_comparison', plt_var+'annual_avg_total_by_crop_scenarios_wide.csv'), index=True)
+
+# %%
 
 # %%
 wb_dir = join(model_out, 'scenario_comparison', 'wb_comp')
