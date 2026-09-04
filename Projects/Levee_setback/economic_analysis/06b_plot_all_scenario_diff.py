@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -344,5 +344,13 @@ for nc, col in enumerate(['value','total_value']):
         ax.set_xlabel('Year')
         plt.savefig(join(wb_dir, plt_var+'_by_year_'+col+'_'+crop+'.png'))
         plt.close()
+
+# %%
+for nc, col in enumerate(['value','total_value']):
+    g = sns.relplot(wb_ann_sum, x='year',y=col, col='name', hue='scen_name', kind='line',
+                facet_kws={'sharey': False})
+    g.set_axis_labels("Year", plt_var.replace('_',' ')+units[nc])
+    plt.savefig(join(wb_dir, plt_var+'_by_year_crop_'+col+'.png'))
+    plt.close()
 
 # %%

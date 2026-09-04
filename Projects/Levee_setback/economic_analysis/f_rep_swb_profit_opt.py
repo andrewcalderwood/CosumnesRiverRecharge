@@ -400,15 +400,6 @@ def load_run_swb(crop, year, crop_in, base_model_ws, dtw_df,
     nstart = 0
 
 
-# %%
-n_irr, nfield_crop
-irr_lvl, 
-np.full(len(irr_lvl), (var_irr.depth_max.max()/12)*0.3048)
-# out.x0
-irr_lvl[:] = (2/12)*0.3048 # irrigate with 2 inches (convert to meters)
-irr_lvl.sum(), ((gw_con/gen.irr_eff_mult)/12)*0.3048, (init_irr_rate_max/12)*0.3048, (var_irr.depth_max.max()/12)*0.3048
-
-
     # %%
     if run_opt:
         t0 = time.time()
@@ -451,12 +442,12 @@ irr_lvl.sum(), ((gw_con/gen.irr_eff_mult)/12)*0.3048, (init_irr_rate_max/12)*0.3
                 sw_con_n = 0
                 gw_con_n = np.copy(gw_con)
                 n_irr_type=1
-                init_irr_rate_max = (gw_con*0.9/gen.irr_eff_mult)/n_irr
+                init_irr_rate_max = (gw_con_n*0.9/gen.irr_eff_mult)/n_irr
             elif water_source=='sw':
                 gw_con_n = 0
                 sw_con_n = np.copy(sw_con)
                 n_irr_type=1
-                init_irr_rate_max = (sw_con*0.9/gen.irr_eff_mult)/n_irr
+                init_irr_rate_max = (sw_con_n*0.9/gen.irr_eff_mult)/n_irr
 
             irr_lvl = np.zeros(n_irr_type*n_irr); # Initial irrigation values for optimization
             # review shows usually it should be 4 inches for most crops with 8 for alfalfa

@@ -253,12 +253,6 @@ for var in ['profit','cost']:
 # after keeping SW constant once it switches it looks better but still some odd jumps in profit
 
 # %%
-# plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
-plt_chk = plt_df[(plt_df.year==2018)].copy()
-plt_chk = plt_chk[plt_chk.irr==True]
-sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
-
-# %%
 # check to explore if there is a clear relationsihp between
 # applied water and DTW
 crop = 'Grape'
@@ -267,6 +261,12 @@ plt_df = df_all[(df_all.crop==crop)&(df_all['var']==var)]
 plt_df = plt_df[plt_df['pod_bool']==True]
 
 
+
+# %%
+# plt_df[(plt_df.dtw_id==5)&(plt_df.year==2018)].plot(x='date',y='value')
+plt_chk = plt_df[(plt_df.year==2018)].copy()
+plt_chk = plt_chk[plt_chk.irr==True]
+sns.relplot(plt_chk, x='date',y='value', hue='dtw_id')
 
 # %%
 df_annual_sum_long = plt_df.groupby(['dtw_id','crop','year','var']).agg({'value':'sum','dtw_ft':'mean'}).reset_index()
